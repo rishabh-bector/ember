@@ -1,6 +1,3 @@
-use crate::render::uniform::UniformBuffer;
-use cgmath::SquareMatrix;
-
 pub struct Camera3D {
     pub eye: cgmath::Point3<f32>,
     pub target: cgmath::Point3<f32>,
@@ -9,12 +6,6 @@ pub struct Camera3D {
     pub fov: f32,
     pub z_near: f32,
     pub z_far: f32,
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Camera3DUniforms {
-    pub view_proj: [[f32; 4]; 4],
 }
 
 impl Camera3D {
@@ -37,14 +28,6 @@ impl Camera3D {
     }
 }
 
-impl From<&Camera3D> for Camera3DUniforms {
-    fn from(camera_3d: &Camera3D) -> Self {
-        Self {
-            view_proj: camera_3d.build_matrices().into(),
-        }
-    }
-}
-
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
@@ -59,16 +42,10 @@ pub struct Camera2D {
     pub zoom: f32,
 }
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Camera2DUniforms {
-    pub view: [f32; 4],
-}
-
 impl Camera2D {
     pub fn default(screen_width: f32, screen_height: f32) -> Self {
         Self {
-            pos: (screen_width / 2.0, screen_height / 2.0).into(),
+            pos: (0.0, 0.0).into(),
             size: (screen_width, screen_height).into(),
             zoom: 1.0,
         }

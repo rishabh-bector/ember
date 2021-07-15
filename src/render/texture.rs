@@ -1,5 +1,48 @@
 use anyhow::*;
 
+// User defines GpuStateBuilder, specifying:
+//      - available uniform groups via builders (impl GroupBuilder + ResourceBuilder)
+//      - available texture groups via builders
+//
+// Builders are used to:
+//      - easily create GPU resources with generic type abstractions, without
+//        forcing the user to create boxes themselves
+//          - UniformGroups with custom types
+//
+//      - easily create fully defined (no optional fields) resources which
+//        depend on post-init resources, via the user passing everything
+//        into the top-level builder, GpuStateBuilder (eventually to be EngineBuilder)
+//
+// GpuStateBuilder.build():
+//
+//      - GpuStateBuilder inits device/queue from window
+//
+//      - GpuStateBuilder builds each pipeline builder:
+//
+//        Each PipelineBuilder needs to know all bind group layouts of each layout type:
+//          1. Uniform group layouts (shared by pipelines, one per <Resource>, like a Camera)
+//          2. Texture group layouts (shared by pipelines, one global with a texture + sampler)
+//
+//        Requirements, type 1:
+//          - Users must be able to create custom uniform groups, to pass into their custom pipelines
+//          - These can be of a custom type, and depend on general GPU resources, like wgpu::Device
+//
+//          Therefore, a user-defined builder is passed into GpuStateBuilder, which creates the
+//          uniform group, returns its data to PipelineBuilder and adds itself to legion resources
+//          container, so that the user can modify their uniform sources
+//
+//        Requirements, type 2:
+//          - Users must be able to pass in texture paths (or already-loaded images); and
+//          - Define pipelines which use texture bind group layouts; and
+//          - Access built textures
+//
+//          Textures are passed into GpuStateBuilder via the TextureStore, which is made with a list
+//          of textures (will eventually be an argument to EngineBuilder); TextureStore also creates
+//          the global bind group layout, used by the PipelineBuilders, builds textures, and becomes a
+//          resource.
+
+pub struct TextureUniformGroup {}
+
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
@@ -12,16 +55,18 @@ impl Texture {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         bytes: &[u8],
+        group_layout: &wgpu::BindGroupLayout,
         label: &str,
     ) -> Result<Self> {
         let img = image::load_from_memory(bytes)?;
-        Self::load_image(device, queue, &img.into_rgba8(), Some(label))
+        Self::load_image(device, queue, &img.into_rgba8(), group_layout, Some(label))
     }
 
     pub fn load_image(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         rgba: &image::RgbaImage,
+        group_layout: &wgpu::BindGroupLayout,
         label: Option<&str>,
     ) -> Result<Self> {
         let dimensions = rgba.dimensions();
@@ -69,7 +114,7 @@ impl Texture {
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &Texture::bind_group_layout(&device),
+            layout: group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -88,33 +133,6 @@ impl Texture {
             view,
             sampler,
             bind_group,
-        })
-    }
-
-    pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler {
-                        comparison: false,
-                        filtering: true,
-                    },
-                    count: None,
-                },
-            ],
-            label: Some("texture_bind_group_layout"),
         })
     }
 }

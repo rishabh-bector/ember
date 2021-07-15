@@ -3,28 +3,31 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{
-    render::uniform::UniformBuffer,
-    resources::camera::{Camera2D, Camera2DUniforms},
-};
+use crate::{render::uniform::GenericUniform, resources::camera::Camera2D};
 
 use cgmath::{Matrix2, SquareMatrix};
+
+pub struct Camera2DUniformGroup {}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Camera2DUniforms {
+    pub view: [f32; 4],
+    pub _padding: [f32; 32],
+    pub __padding: [f32; 28],
+}
 
 #[system]
 pub fn camera_2d(
     #[resource] camera: &Arc<Mutex<Camera2D>>,
-    #[resource] camera_uniforms: &Arc<Mutex<UniformBuffer<Camera2DUniforms>>>,
+    #[resource] camera_uniforms: &Arc<Mutex<GenericUniform<Camera2DUniforms>>>,
 ) {
     let camera = camera.lock().unwrap();
     let mut uniforms = camera_uniforms.lock().unwrap();
 
-    let view_matrix = Matrix2::<f32>::from_angle(cgmath::Rad(0.0))
-        * Matrix2::from_cols((camera.size.x, 0.0).into(), (0.0, camera.size.y).into());
-
-    //uniforms.source.view = Matrix2::<f32>::from_value(1.0).into(); //Matrix2::identity().into();
+    uniforms.source.view = [camera.pos.x, camera.pos.y, camera.size.x, camera.size.y];
 }
 
-fn rotate_2x2(mut mat: Matrix2<f32>) -> Matrix2<f32> {
-    mat.y = (mat.y.y, mat.y.x).into();
-    mat
+pub fn flatten(mat: Matrix2<f32>) -> [f32; 4] {
+    [mat.x[0], mat.y[0], mat.x[1], mat.y[1]]
 }

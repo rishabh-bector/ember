@@ -31,7 +31,7 @@ impl VertexBuffer {
     pub fn new_2d(vertices: &[Vertex2D], device: &wgpu::Device) -> Self {
         VertexBuffer {
             buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
+                label: Some("2D Vertex Buffer"),
                 contents: bytemuck::cast_slice(vertices),
                 usage: wgpu::BufferUsage::VERTEX,
             }),
@@ -42,7 +42,7 @@ impl VertexBuffer {
     pub fn new_3d(vertices: &[Vertex3D], device: &wgpu::Device) -> Self {
         VertexBuffer {
             buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
+                label: Some("3D Vertex Buffer"),
                 contents: bytemuck::cast_slice(vertices),
                 usage: wgpu::BufferUsage::VERTEX,
             }),

@@ -1,25 +1,74 @@
-use crate::component::{Base2D, Position2D};
+use crate::component::Position2D;
 use crate::render::{
     buffer::{IndexBuffer, VertexBuffer},
-    uniform::UniformBuffer,
+    uniform::{GenericUniform, Uniform, UniformGroup},
     GpuState,
 };
-use crate::resources::{
-    camera::{Camera2D, Camera2DUniforms},
-    store::TextureStore,
-};
+use crate::resources::{camera::Camera2D, store::TextureStore};
+use crate::systems::{camera_2d::*, lighting_2d::*};
 
 use legion::{world::SubWorld, IntoQuery};
 use std::borrow::BorrowMut;
 use std::{
     cell::RefCell,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
 };
+
+pub const BASE_2D_COMMON_TEXTURE: &str = "test";
+pub const BASE_2D_COMMON_VERTEX_BUFFER: usize = 0;
+pub const BASE_2D_COMMON_INDEX_BUFFER: usize = 0;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Base2D {
+    pub name: String,
+
+    pub color: [f32; 4],
+    pub texture: String,
+    pub mix: f32,
+
+    pub width: f32,
+    pub height: f32,
+    pub common_vertex_buffer: usize,
+    pub common_index_buffer: usize,
+}
+
+impl Base2D {
+    pub fn test(name: &str, width: f32, height: f32) -> Self {
+        Base2D::solid_rect(name, width, height, [1.0, 1.0, 1.0, 1.0])
+    }
+
+    pub fn solid_rect(name: &str, width: f32, height: f32, color: [f32; 4]) -> Self {
+        Base2D {
+            name: name.to_owned(),
+            color,
+            mix: 1.0,
+            width,
+            height,
+            texture: BASE_2D_COMMON_TEXTURE.to_string(),
+            common_vertex_buffer: BASE_2D_COMMON_VERTEX_BUFFER,
+            common_index_buffer: BASE_2D_COMMON_INDEX_BUFFER,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Base2DUniforms {
+    pub model: [f32; 4],
+    pub color: [f32; 4],
+    pub mix: f32,
+    pub _padding: [f32; 32],
+    pub __padding: [f32; 23],
+}
+
+pub struct Base2DUniformGroup {}
 
 pub struct Render2DSystem {
     pub common_vertex_buffers: [VertexBuffer; 1],
     pub common_index_buffers: [IndexBuffer; 1],
 }
+
+// Draw all Base2D components //
 
 #[system]
 #[read_component(Position2D)]
@@ -29,12 +78,25 @@ pub fn render_2d(
     #[state] state: &Render2DSystem,
     #[resource] gpu: &Arc<Mutex<GpuState>>,
     #[resource] texture_store: &Arc<Mutex<TextureStore>>,
-    #[resource] camera_uniforms: &Arc<Mutex<UniformBuffer<Camera2DUniforms>>>,
+    #[resource] base_2d_uniforms_group: &Arc<Mutex<UniformGroup<Base2DUniformGroup>>>,
+    #[resource] camera_2d_uniforms_group: &Arc<Mutex<UniformGroup<Camera2DUniformGroup>>>,
+    #[resource] lighting_2d_uniforms_group: &Arc<Mutex<UniformGroup<Lighting2DUniformGroup>>>,
+    #[resource] base_2d_uniforms: &Arc<Mutex<GenericUniform<Base2DUniforms>>>,
+    #[resource] camera_2d_uniforms: &Arc<Mutex<GenericUniform<Camera2DUniforms>>>,
+    #[resource] lighting_2d_uniforms: &Arc<Mutex<GenericUniform<Lighting2DUniforms>>>,
 ) {
-    // Draw all Pipeline2D components //
     let gpu = gpu.lock().unwrap();
     let texture_store = texture_store.lock().unwrap();
-    let camera_uniforms = camera_uniforms.lock().unwrap();
+
+    let base_2d_uniforms_group: MutexGuard<UniformGroup<Base2DUniformGroup>> =
+        base_2d_uniforms_group.lock().unwrap();
+    let mut base_2d_uniforms = base_2d_uniforms.lock().unwrap();
+
+    let camera_2d_uniforms_group = camera_2d_uniforms_group.lock().unwrap();
+    let camera_2d_uniforms = camera_2d_uniforms.lock().unwrap();
+
+    let mut lighting_2d_uniforms = lighting_2d_uniforms.lock().unwrap();
+    let lighting_2d_uniforms_group = lighting_2d_uniforms_group.lock().unwrap();
 
     // Begin render pass //
 
@@ -61,11 +123,44 @@ pub fn render_2d(
         }],
         depth_stencil_attachment: None,
     });
-    render_pass.set_pipeline(&gpu.render_pipeline);
+    render_pass.set_pipeline(&gpu.pipelines.get("base_2d").unwrap());
+
+    // Per-pass logic //
+
+    let mut b2doffset = 0 as u32;
+    let mut camoffset = 0 as u32;
+
+    lighting_2d_uniforms.load_buffer(&lighting_2d_uniforms_group.buffers[0], &gpu.queue, 0);
+    render_pass.set_bind_group(3, &lighting_2d_uniforms_group.bind_group, &[0]);
+
+    // Per-entity logic //
 
     let mut query = <(&Base2D, &Position2D)>::query();
-    for (base_2d, _pos) in query.iter_mut(world) {
+    for (base_2d, pos) in query.iter_mut(world) {
+        debug!("Loading uniforms for pipeline: Base2D:");
+        base_2d_uniforms.source.model = [pos.x, pos.y, base_2d.width, base_2d.height];
+        debug!("  - model: {:?}", base_2d_uniforms.source.model);
+        base_2d_uniforms.source.color = base_2d.color;
+        debug!("  - color: {:?}", base_2d_uniforms.source.color);
+        base_2d_uniforms.source.mix = base_2d.mix;
+        debug!("  - mix: {:?}", base_2d_uniforms.source.mix);
+
+        debug!("Loading buffer base_2d_uniforms");
+        base_2d_uniforms.load_buffer(
+            &base_2d_uniforms_group.buffers[0],
+            &gpu.queue,
+            b2doffset as u64,
+        );
+
+        debug!("Loading buffer camera_2d_uniforms");
+        camera_2d_uniforms.load_buffer(
+            &camera_2d_uniforms_group.buffers[0],
+            &gpu.queue,
+            camoffset as u64,
+        );
+
         // Set bind groups
+        debug!("Setting bind group texture");
         render_pass.set_bind_group(
             0,
             texture_store.bind_group(&base_2d.texture).expect(&format!(
@@ -74,15 +169,25 @@ pub fn render_2d(
             )),
             &[],
         );
-        camera_uniforms.bind_render_pass(&mut render_pass, 1, &gpu.queue);
+        debug!("Setting bind group base_2d_uniforms_group");
+        render_pass.set_bind_group(1, &base_2d_uniforms_group.bind_group, &[b2doffset]);
+        debug!("Setting bind group camera_2d_uniforms_group");
+        render_pass.set_bind_group(2, &camera_2d_uniforms_group.bind_group, &[camoffset]);
+
+        debug!("Updating offsets");
+        b2doffset += base_2d_uniforms.buffer_size();
+        camoffset += camera_2d_uniforms.buffer_size();
 
         // Set buffers
+        debug!("Setting common vertex buffer");
         render_pass.set_vertex_buffer(
             0,
             state.common_vertex_buffers[base_2d.common_vertex_buffer]
                 .buffer
                 .slice(..),
         );
+
+        debug!("Setting common index buffer");
         render_pass.set_index_buffer(
             state.common_index_buffers[base_2d.common_index_buffer]
                 .buffer
@@ -91,6 +196,7 @@ pub fn render_2d(
         );
 
         // Run pipeline
+        debug!("Recording draw call");
         render_pass.draw_indexed(
             0..state.common_index_buffers[base_2d.common_index_buffer].size,
             0,
@@ -98,7 +204,7 @@ pub fn render_2d(
         );
     }
 
-    // Finish render pass //
+    // Submit render pass //
 
     drop(render_pass);
     gpu.queue.submit(std::iter::once(encoder.finish()));
