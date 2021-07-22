@@ -170,6 +170,10 @@ fn main() -> Result<()> {
             dy: 4.0, //[-1, 1][rng.gen_range(0..=1)] as f32,
             bounce: true,
         },
+        Light2D {
+            linear: 0.007,
+            quadratic: 0.0002,
+        },
     ));
 
     world.push((
@@ -182,6 +186,10 @@ fn main() -> Result<()> {
             dx: -4.0, //[-1, 1][rng.gen_range(0..=1)] as f32,
             dy: -4.0, //[-1, 1][rng.gen_range(0..=1)] as f32,
             bounce: true,
+        },
+        Light2D {
+            linear: 0.007,
+            quadratic: 0.0002,
         },
     ));
 
