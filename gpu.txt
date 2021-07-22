@@ -1,0 +1,79 @@
+Per PIPELINE aka SHADER MODULE (vert + frag):
+
+What needs to be done?
+
+Init:
+
+- User creates builder with all required shader source code and uniform groups
+- Gpu state is build with all uniform groups, and builds all of their buffers
+
+Frame:
+
+1. MULTI: All physics systems are run (2d, 3d)
+2. All game (user) systems are run (could be separated into multiple flushes)
+3. All camera systems are run (2d, 3d)
+4. All lighting systems are run (2d, 3d)
+5. All render systems are run (FOR NOW...) on a SINGLE THREAD
+
+-- BEGIN RENDER PASS --
+
+dependencies:
+  - EACH PIPELINE SHOULD: TODO
+
+ONE render pass consists of:
+  1. get frame from gpu state swap chain (or some source like a texture)
+  2. create a command encoder from gpu_state device
+  3. encoder begin render pass for the frame
+  SYSTEM Per pipeline:
+    4. render pass bind to pipeline
+    5. zero all dynamic uniform group offsets (in pipeline)
+  << BEGIN COMMAND BUFFER RECORDING >>
+    7. set all per-frame uniform bindgroups (into render pass)
+    8. set all per-frame texture bindgroups (into render pass)
+    9. set all per-frame v/i buffers (into render pass)
+    10. begin iteration of dynamic entities
+    Per dynamic entity:
+      Per dynamic uniform group in pipeline:
+        IGNORE: 11. load buffer in RESOURCE uniform group with ENTITY:COMPONENT's data
+        12. set dynamic uniform bindgroup w/ offset (into render pass)
+        13. increase dynamic uniform group offset
+        14. set dynamic v/i buffers (into render pass)
+        15. record draw v/i buffers into render pass
+  << END COMMAND BUFFER RECORDING >>
+  16. drop render pass and submit command encoder to gpu queue
+
+-- END RENDER PASS --
+
+Configurable properties:
+  - target: some TextureView (need one "master" which outputs to screen)
+  - uniform groups: all uniform groups (ordered, per-pass or per-component)
+  - texture groups: all texture groups (ordered, per-pass or per-component)
+  - pipeline: which shader pipeline to use
+  - clear color: sample for undrawn fragments
+
+NOTES: CONCURRENCY
+
+- All items within <<COMMAND BUFFER>> require mutable access to render_pass
+- Therefore, they cannot happen concurrently
+- One exception: loading each dynamic entity's data from their components 
+  into their uniform buffers (within their uniform group resource), step 11
+- This data has offsets, and render_pass needs to set a bind group at each
+  offset; proposed concurrency algorithm:
+
+  ONE system FOR EACH dynamic-uniform-group, which:
+    QUERY per dynamic component:
+      1. Load source offset into corresponding buffer
+
+  - These systems can be scheduled concurrently, as each is self-contained 
+    within a work unit: group (with buffers), n * dynamic components
+
+Afterwards:
+  - Render pass can run, and render pass is no longer responsible for (11.)
+    Note: only entities with unique v/i buffers need to set them into 
+    the render pass each loop.
+
+What about before <<COMMAND BUFFER>>?
+- From wgpu-rs: each render pass should include all pipelines.
+  Thus: all pipelines should complete common setup (concurrently):
+    1. None needed after all buffers are loaded
+- 

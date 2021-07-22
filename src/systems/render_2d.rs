@@ -100,12 +100,20 @@ pub fn render_2d(
 
     // Begin render pass //
 
+    // Per-pass logic //
+
+    let mut b2doffset = 0 as u32;
+    let mut camoffset = 0 as u32;
+
+    lighting_2d_uniforms.load_buffer(&lighting_2d_uniforms_group.buffers[0], &gpu.queue, 0);
+
     let frame = gpu.swap_chain.get_current_frame().unwrap().output;
     let mut encoder = gpu
         .device
         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render2D Encoder"),
         });
+
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Render2D Pass"),
         color_attachments: &[wgpu::RenderPassColorAttachment {
@@ -125,13 +133,17 @@ pub fn render_2d(
     });
     render_pass.set_pipeline(&gpu.pipelines.get("base_2d").unwrap());
 
-    // Per-pass logic //
-
-    let mut b2doffset = 0 as u32;
-    let mut camoffset = 0 as u32;
-
-    lighting_2d_uniforms.load_buffer(&lighting_2d_uniforms_group.buffers[0], &gpu.queue, 0);
     render_pass.set_bind_group(3, &lighting_2d_uniforms_group.bind_group, &[0]);
+
+    // Set buffers
+    debug!("Setting common vertex buffer");
+    render_pass.set_vertex_buffer(0, state.common_vertex_buffers[0].buffer.slice(..));
+
+    debug!("Setting common index buffer");
+    render_pass.set_index_buffer(
+        state.common_index_buffers[0].buffer.slice(..),
+        wgpu::IndexFormat::Uint16,
+    );
 
     // Per-entity logic //
 
@@ -177,23 +189,6 @@ pub fn render_2d(
         debug!("Updating offsets");
         b2doffset += base_2d_uniforms.buffer_size();
         camoffset += camera_2d_uniforms.buffer_size();
-
-        // Set buffers
-        debug!("Setting common vertex buffer");
-        render_pass.set_vertex_buffer(
-            0,
-            state.common_vertex_buffers[base_2d.common_vertex_buffer]
-                .buffer
-                .slice(..),
-        );
-
-        debug!("Setting common index buffer");
-        render_pass.set_index_buffer(
-            state.common_index_buffers[base_2d.common_index_buffer]
-                .buffer
-                .slice(..),
-            wgpu::IndexFormat::Uint16,
-        );
 
         // Run pipeline
         debug!("Recording draw call");
