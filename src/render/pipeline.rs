@@ -1,30 +1,44 @@
-use std::{borrow::Borrow, rc::Rc, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::{anyhow, Result};
+use legion::Resources;
 
-use crate::{render::shader::ShaderSource, resources::store::TextureStore};
-use std::borrow::BorrowMut;
-use super::shader::ShaderBuilder;
+use super::{shader::ShaderBuilder, type_key, uniform::GroupResourceBuilder};
+
+pub enum ShaderSource {
+    WGSL(String),
+    SPIRV(String),
+}
+
+pub struct Pipeline {
+    pipeline: wgpu::RenderPipeline,
+    shader_module: wgpu::ShaderModule,
+}
 
 /// Builder for easily creating flexible wgpu render pipelines
 
-#[derive(Default)]
 pub struct PipelineBuilder {
-    pub shader: Option<ShaderBuilder>,
+    pub shader_source: ShaderSource,
     pub vertex_buffer_layouts: Vec<wgpu::VertexBufferLayout<'static>>,
-    pub uniform_builders: Vec<&'static str>,
+    pub uniform_group_builders: HashMap<&'static str, Arc<Mutex<dyn GroupResourceBuilder>>>,
 }
 
 impl PipelineBuilder {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new(shader: ShaderSource) -> Self {
+        Self {
+            shader_source: shader,
+            vertex_buffer_layouts: vec![],
+            uniform_group_builders: HashMap::new(),
+        }
     }
 
-    // pub fn uniform_group<T>(mut self) -> Self {}
-
-    pub fn shader(mut self, shader: ShaderBuilder) -> Self {
-        self.uniform_builders = shader.groups.clone();
-        self.shader = Some(shader);
+    pub fn uniform_group<T: GroupResourceBuilder + 'static>(mut self, group_builder: T) -> Self {
+        self.uniform_group_builders
+            .insert(type_key::<T>(), Arc::new(Mutex::new(group_builder)));
         self
     }
 
@@ -35,14 +49,11 @@ impl PipelineBuilder {
 
     pub fn build(
         self,
-        group_layouts: Vec<Rc<Option<wgpu::BindGroupLayout>>>,
+        resources: &mut Resources,
         device: &wgpu::Device,
         chain_desc: &wgpu::SwapChainDescriptor,
-    ) -> Result<wgpu::RenderPipeline> {
-        let shader = self
-            .shader
-            .ok_or(anyhow!("PipelineBuilder: at least one shader required"))?
-            .build(device);
+    ) -> Result<Pipeline> {
+        // Validate pipelne
 
         if self.vertex_buffer_layouts.len() == 0 {
             return Err(anyhow!(
@@ -50,7 +61,24 @@ impl PipelineBuilder {
             ));
         }
 
-        let bind_group_layouts: Vec<&wgpu::BindGroupLayout> = group_layouts.iter().map(|rc| rc.as_ref().as_ref().unwrap()).collect();
+        // Build pipeline
+
+        let shader_module = build_shader(self.shader_source, device);
+
+        let bind_group_layouts: Vec<&wgpu::BindGroupLayout> = self
+            .uniform_group_builders
+            .iter()
+            .map(|(name, builder)| {
+                builder.lock().unwrap().build(device, resources)?;
+                Ok(builder
+                    .lock()
+                    .unwrap()
+                    .group_layout()
+                    .as_ref()
+                    .as_ref()
+                    .unwrap())
+            })
+            .collect();
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -59,40 +87,54 @@ impl PipelineBuilder {
                 push_constant_ranges: &[],
             });
 
-        Ok(
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("Render Pipeline"),
-                layout: Some(&render_pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader.module,
-                    entry_point: "main",
-                    buffers: self.vertex_buffer_layouts.as_slice(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader.module,
-                    entry_point: "main",
-                    targets: &[wgpu::ColorTargetState {
-                        format: chain_desc.format,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrite::ALL,
-                    }],
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    clamp_depth: false,
-                    conservative: false,
-                },
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader_module,
+                entry_point: "main",
+                buffers: self.vertex_buffer_layouts.as_slice(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader_module,
+                entry_point: "main",
+                targets: &[wgpu::ColorTargetState {
+                    format: chain_desc.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrite::ALL,
+                }],
             }),
-        )
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                clamp_depth: false,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+        });
+
+        Ok(Pipeline {
+            pipeline,
+            shader_module,
+        })
     }
+}
+
+fn build_shader(source: ShaderSource, device: &wgpu::Device) -> wgpu::ShaderModule {
+    device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+        label: Some("Shader"),
+        flags: wgpu::ShaderFlags::all(),
+        source: match source {
+            ShaderSource::WGSL(src) => wgpu::ShaderSource::Wgsl(src.clone().into()),
+            _ => panic!("ShaderSource: only wgsl shaders are supported currently"),
+        },
+    })
 }

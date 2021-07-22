@@ -17,8 +17,9 @@ Frame:
 5. All render systems are run (FOR NOW...) on a SINGLE THREAD
 
 -- BEGIN RENDER PASS --
+(SINGLE THREAD FOR NOW)
 
-ONE render pass consists of:
+one render pass consists of:
   1. get frame from gpu state swap chain (or some source like a texture)
   2. create a command encoder from gpu_state device
   3. encoder begin render pass for the frame
@@ -48,6 +49,7 @@ RENDER PASS properties:
   - clear color: sample for undrawn fragments
 
 PIPELINE properties:
+  - shader module (via builder)
   - uniform groups: all uniform groups (ordered, per-pass or per-component)
     - accessible bind groups
   - texture groups: all texture groups (ordered, per-pass or per-component)

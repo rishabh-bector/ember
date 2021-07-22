@@ -14,7 +14,7 @@ use pipeline::PipelineBuilder;
 
 use crate::{render::texture::TextureUniformGroup, resources::store::{TextureStoreBuilder}};
 
-use self::uniform::{UniformResourceBuilder};
+use self::uniform::{GroupResourceBuilder};
 
 pub struct GpuState {
     pub surface: wgpu::Surface,
@@ -32,7 +32,7 @@ pub struct GpuStateBuilder {
     pub instance: Option<wgpu::Instance>,
     pub surface: Option<wgpu::Surface>,
 
-    pub uniform_builders: HashMap<&'static str, Arc<Mutex<dyn UniformResourceBuilder>>>,
+    pub group_builders: HashMap<&'static str, Arc<Mutex<dyn GroupResourceBuilder>>>,
     pub pipeline_builders: HashMap<&'static str, PipelineBuilder>,
 }
 
@@ -60,7 +60,7 @@ impl GpuStateBuilder {
         self
     }
 
-    pub fn uniform_builder<T: UniformResourceBuilder + 'static>(
+    pub fn uniform_builder<T: GroupResourceBuilder + 'static>(
         mut self,
         group_builder: T,
     ) -> Self {
@@ -143,12 +143,13 @@ impl GpuStateBuilder {
         uniform_group_builders.iter().for_each(|name| debug!("  - {}", *name.0));
         let texture_group_type = type_key::<TextureUniformGroup>();
         debug!("  - {}", texture_group_type);
+
         let pipelines = self
             .pipeline_builders
             .into_iter()
             .map(
                 |(pipeline_name, builder)| -> Result<(String, wgpu::RenderPipeline)> {
-                    debug!("  Building render pipeline layout '{}' which depends on:", pipeline_name);
+                    debug!("Building render pipeline layout '{}' which depends on:", pipeline_name);
                     let layouts = builder
                         .uniform_builders
                         .iter()

@@ -53,8 +53,8 @@ pub trait GroupBuilder {
     fn group_layout(&self) -> Rc<Option<wgpu::BindGroupLayout>>;
 }
 
-pub trait UniformResourceBuilder: GroupBuilder + ResourceBuilder {}
-impl<N> UniformResourceBuilder for UniformGroupBuilder<N> where N: 'static {}
+pub trait GroupResourceBuilder: GroupBuilder + ResourceBuilder {}
+impl<N> GroupResourceBuilder for UniformGroupBuilder<N> where N: 'static {}
 
 pub struct UniformGroupBuilder<N> {
     pub uniforms: Vec<Arc<Mutex<dyn UniformBuilder>>>,
