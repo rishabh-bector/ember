@@ -17,7 +17,7 @@ use crate::render::{buffer, type_key};
 pub type ShaderStage = wgpu::ShaderStage;
 
 pub const DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS: u32 = 64;
-pub const DEFAULT_DYNAMIC_BUFFER_BINDING_SIZE: u64 = 64;
+pub const DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE: u64 = 128;
 
 pub trait UniformSource:
     Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug + 'static
@@ -112,7 +112,7 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: true,
                     min_binding_size: Some(
-                        NonZeroU64::new(DEFAULT_DYNAMIC_BUFFER_BINDING_SIZE).unwrap(),
+                        NonZeroU64::new(DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE).unwrap(),
                     ),
                 },
                 count: None,
@@ -135,7 +135,7 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
                 .map(|i| {
                     let mut buffer_binding = buffer_states[i].buffer.as_entire_buffer_binding();
                     buffer_binding.size =
-                        Some(NonZeroU64::new(DEFAULT_DYNAMIC_BUFFER_BINDING_SIZE).unwrap());
+                        Some(NonZeroU64::new(DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE).unwrap());
                     wgpu::BindGroupEntry {
                         binding: i as u32,
                         resource: wgpu::BindingResource::Buffer(buffer_binding),

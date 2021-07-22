@@ -100,6 +100,8 @@ fn main() -> Result<()> {
             light_0: Default::default(),
             light_1: Default::default(),
             light_2: Default::default(),
+            light_3: Default::default(),
+            light_4: Default::default(),
         }),
     );
 
@@ -159,56 +161,25 @@ fn main() -> Result<()> {
         },
     ));
 
-    world.push((
-        Base2D::solid_rect("light", 10.0, 10.0, [1.0, 1.0, 1.0, 1.0]),
-        Position2D {
-            x: 0.0, //rng.gen_range(100..500) as f32,
-            y: 0.0, //rng.gen_range(100..500) as f32,
-        },
-        Velocity2D {
-            dx: 4.0, //[-1, 1][rng.gen_range(0..=1)] as f32,
-            dy: 4.0, //[-1, 1][rng.gen_range(0..=1)] as f32,
-            bounce: true,
-        },
-        Light2D {
-            linear: 0.007,
-            quadratic: 0.0002,
-        },
-    ));
-
-    world.push((
-        Base2D::solid_rect("light", 10.0, 10.0, [1.0, 1.0, 1.0, 1.0]),
-        Position2D {
-            x: 400.0, //rng.gen_range(100..500) as f32,
-            y: 400.0, //rng.gen_range(100..500) as f32,
-        },
-        Velocity2D {
-            dx: -4.0, //[-1, 1][rng.gen_range(0..=1)] as f32,
-            dy: -4.0, //[-1, 1][rng.gen_range(0..=1)] as f32,
-            bounce: true,
-        },
-        Light2D {
-            linear: 0.007,
-            quadratic: 0.0002,
-        },
-    ));
-
-    world.push((
-        Base2D::solid_rect("light", 10.0, 10.0, [1.0, 1.0, 1.0, 1.0]),
-        Position2D {
-            x: 800.0, //rng.gen_range(100..500) as f32,
-            y: 100.0, //rng.gen_range(100..500) as f32,
-        },
-        Velocity2D {
-            dx: -8.0, //[-1, 1][rng.gen_range(0..=1)] as f32,
-            dy: -4.0, //[-1, 1][rng.gen_range(0..=1)] as f32,
-            bounce: true,
-        },
-        Light2D {
-            linear: 0.007,
-            quadratic: 0.0002,
-        },
-    ));
+    let mut rng = rand::thread_rng();
+    for i in 0..5 {
+        world.push((
+            Base2D::solid_rect(&format!("light_{}", i), 10.0, 10.0, [1.0, 1.0, 1.0, 1.0]),
+            Position2D {
+                x: rng.gen_range(100.0..500.0),
+                y: rng.gen_range(100.0..500.0),
+            },
+            Velocity2D {
+                dx: rng.gen_range(-15.0..15.0),
+                dy: rng.gen_range(-15.0..15.0),
+                bounce: true,
+            },
+            Light2D {
+                linear: 0.007,
+                quadratic: 0.0002,
+            },
+        ));
+    }
 
     let common_vertex_buffers: [VertexBuffer; 1] = [VertexBuffer::new_2d(
         &[

@@ -24,6 +24,8 @@ struct LightUniforms {
     light_0: vec4<f32>;
     light_1: vec4<f32>;
     light_2: vec4<f32>;
+    light_3: vec4<f32>;
+    light_4: vec4<f32>;
 };
 
 [[group(1), binding(0)]]
@@ -96,7 +98,9 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     var lighting_0: f32 = point_light_2d(world_pos.xy, light_uniforms.light_0);
     var lighting_1: f32 = point_light_2d(world_pos.xy, light_uniforms.light_1);
     var lighting_2: f32 = point_light_2d(world_pos.xy, light_uniforms.light_2);
-    var lighting: f32 = lighting_0 + lighting_1 + lighting_2;
+    var lighting_3: f32 = point_light_2d(world_pos.xy, light_uniforms.light_3);
+    var lighting_4: f32 = point_light_2d(world_pos.xy, light_uniforms.light_4);
+    var lighting: f32 = lighting_0 + lighting_1 + lighting_2 + lighting_3 + lighting_4;
 
     return vec4<f32>(sample_final.rgb * lighting, 1.0);
 }

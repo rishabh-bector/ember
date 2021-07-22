@@ -12,6 +12,8 @@ pub struct Lighting2DUniforms {
     pub light_0: [f32; 4],
     pub light_1: [f32; 4],
     pub light_2: [f32; 4],
+    pub light_3: [f32; 4],
+    pub light_4: [f32; 4],
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -36,10 +38,12 @@ pub fn lighting_2d(
             0 => forms.source.light_0 = flat,
             1 => forms.source.light_1 = flat,
             2 => forms.source.light_2 = flat,
+            3 => forms.source.light_3 = flat,
+            4 => forms.source.light_4 = flat,
             _ => {}
         }
         i += 1;
-        if i == 3 {
+        if i == 5 {
             break;
         }
     }

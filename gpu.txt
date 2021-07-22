@@ -5,20 +5,18 @@ What needs to be done?
 Init:
 
 - User creates builder with all required shader source code and uniform groups
-- Gpu state is build with all uniform groups, and builds all of their buffers
+- Gpu state is built with all uniform groups, and builds all of their buffers
+  (this can and should be done concurrently)
 
 Frame:
 
-1. MULTI: All physics systems are run (2d, 3d)
-2. All game (user) systems are run (could be separated into multiple flushes)
-3. All camera systems are run (2d, 3d)
-4. All lighting systems are run (2d, 3d)
+1. All physics systems are run (2d, 3d), in parallel I guess although who's gonna use both
+2. All game (user) systems are run (could be separated into multiple flushes), parallelized by legion
+3. All camera systems are run (2d, 3d), in parallel although redundant like (1.)
+4. All lighting systems are run (2d, 3d), in parallel although redundant like (1.)
 5. All render systems are run (FOR NOW...) on a SINGLE THREAD
 
 -- BEGIN RENDER PASS --
-
-dependencies:
-  - EACH PIPELINE SHOULD: TODO
 
 ONE render pass consists of:
   1. get frame from gpu state swap chain (or some source like a texture)
@@ -44,12 +42,16 @@ ONE render pass consists of:
 
 -- END RENDER PASS --
 
-Configurable properties:
+RENDER PASS properties:
+  - pipeline: pointer to shader PIPELINE
   - target: some TextureView (need one "master" which outputs to screen)
-  - uniform groups: all uniform groups (ordered, per-pass or per-component)
-  - texture groups: all texture groups (ordered, per-pass or per-component)
-  - pipeline: which shader pipeline to use
   - clear color: sample for undrawn fragments
+
+PIPELINE properties:
+  - uniform groups: all uniform groups (ordered, per-pass or per-component)
+    - accessible bind groups
+  - texture groups: all texture groups (ordered, per-pass or per-component)
+    - accessible bind groups
 
 NOTES: CONCURRENCY
 

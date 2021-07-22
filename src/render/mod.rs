@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Result};
-use core::panic;
-use std::{borrow::{Borrow, BorrowMut}, collections::HashMap, rc::Rc, sync::{Arc, Mutex}};
+use std::{borrow::{Borrow, }, collections::HashMap, rc::Rc, sync::{Arc, Mutex}};
 use wgpu::RenderPipeline;
 use winit::window::Window;
 use regex::Regex;
@@ -11,13 +10,11 @@ pub mod shader;
 pub mod texture;
 pub mod uniform;
 
-use buffer::VertexBuffer;
 use pipeline::PipelineBuilder;
-use uniform::{GroupBuilder, Uniform};
 
-use crate::{render::texture::TextureUniformGroup, resources::store::{TextureStore, TextureStoreBuilder}};
+use crate::{render::texture::TextureUniformGroup, resources::store::{TextureStoreBuilder}};
 
-use self::uniform::{UniformGroupBuilder, UniformResourceBuilder};
+use self::uniform::{UniformResourceBuilder};
 
 pub struct GpuState {
     pub surface: wgpu::Surface,
@@ -106,7 +103,7 @@ impl GpuStateBuilder {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    features: wgpu::Features::BUFFER_BINDING_ARRAY | wgpu::Features::CLEAR_COMMANDS,
+                    features: wgpu::Features::empty(),
                     limits: wgpu::Limits::default(),
                 },
                 None,
