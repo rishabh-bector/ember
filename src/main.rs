@@ -171,6 +171,22 @@ fn main() -> Result<()> {
         ));
     }
 
+    for i in 0..58 {
+        let size = rng.gen_range(5.0..25.0);
+        world.push((
+            Base2D::solid_rect(&format!("block_{}", i), size, size, [1.0, 1.0, 1.0, 1.0]),
+            Position2D {
+                x: rng.gen_range(100.0..500.0),
+                y: rng.gen_range(100.0..500.0),
+            },
+            Velocity2D {
+                dx: rng.gen_range(-15.0..15.0),
+                dy: rng.gen_range(-15.0..15.0),
+                bounce: true,
+            },
+        ));
+    }
+
     let common_vertex_buffers: [VertexBuffer; 1] = [VertexBuffer::new_2d(
         &[
             Vertex2D {
