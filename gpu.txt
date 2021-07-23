@@ -44,7 +44,7 @@ one render pass consists of:
 -- END RENDER PASS --
 
 RENDER PASS properties:
-  - pipeline: pointer to shader PIPELINE
+  - pipeline: pointer to shader PIPELINE (int I guess)
   - target: some TextureView (need one "master" which outputs to screen)
   - clear color: sample for undrawn fragments
 

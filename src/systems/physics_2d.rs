@@ -1,11 +1,19 @@
 use std::sync::{Arc, Mutex};
 
-use crate::{component::{Position2D, Velocity2D}, render::GpuState};
+use crate::{
+    component::{Position2D, Velocity2D},
+    render::GpuState,
+};
 
 #[system(for_each)]
-pub fn physics_2d(pos: &mut Position2D, vel: &mut Velocity2D, #[resource] gpu: &Arc<Mutex<GpuState>>) {
+pub fn physics_2d(
+    pos: &mut Position2D,
+    vel: &mut Velocity2D,
+    #[resource] gpu: &Arc<Mutex<GpuState>>,
+) {
     let (width, height) = gpu.lock().unwrap().screen_size;
 
+    // Todo: replace hardcoding w/ some global config resource
     if vel.bounce {
         if pos.x <= -(1440 as f32) || pos.x >= (1440 as f32) {
             vel.dx *= -1.0;

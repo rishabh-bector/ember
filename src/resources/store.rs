@@ -1,7 +1,13 @@
 use anyhow::{anyhow, Result};
 use image::io::Reader as ImageReader;
 use legion::Resources;
-use std::{borrow::Borrow, cell::RefCell, collections::HashMap, rc::Rc, sync::{Arc, Mutex}};
+use std::{
+    borrow::Borrow,
+    cell::RefCell,
+    collections::HashMap,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use crate::render::{texture::Texture, GpuState};
 
@@ -26,33 +32,35 @@ impl TextureStoreBuilder {
         self
     }
 
-    pub fn build(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<()> {
-        self.bind_group_layout = Rc::new(Some(device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
+    pub fn build(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<wgpu::BindGroupLayout> {
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
                     },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            comparison: false,
-                            filtering: true,
-                        },
-                        count: None,
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler {
+                        comparison: false,
+                        filtering: true,
                     },
-                ],
-                label: Some("texture_bind_group_layout"),
-            },
-        )));
+                    count: None,
+                },
+            ],
+            label: Some("texture_bind_group_layout"),
+        });
 
         let mut textures = HashMap::new();
         for (name, path) in &self.to_load {
@@ -62,23 +70,13 @@ impl TextureStoreBuilder {
                 .into_rgba8();
             textures.insert(
                 name.to_owned(),
-                Texture::load_image(
-                    device,
-                    queue,
-                    &rgba,
-                    &self.bind_group_layout.as_ref().as_ref().unwrap(),
-                    None,
-                )?,
+                Texture::load_image(device, queue, &rgba, &bind_group_layout, None)?,
             );
         }
 
         self.texture_store = Some(Arc::new(Mutex::new(TextureStore { textures })));
 
-        Ok(())
-    }
-
-    pub fn bind_group_layout(&mut self) -> Rc<Option<wgpu::BindGroupLayout>> {
-        Rc::clone(&self.bind_group_layout)
+        Ok(bind_group_layout)
     }
 
     pub fn build_to_resource(&self, resources: &mut Resources) {

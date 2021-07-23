@@ -131,7 +131,7 @@ pub fn render_2d(
         }],
         depth_stencil_attachment: None,
     });
-    render_pass.set_pipeline(&gpu.pipelines.get("base_2d").unwrap());
+    render_pass.set_pipeline(&gpu.pipelines[0].pipeline);
 
     render_pass.set_bind_group(3, &lighting_2d_uniforms_group.bind_group, &[0]);
 

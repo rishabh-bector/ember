@@ -1,44 +1,57 @@
+use anyhow::{anyhow, Result};
+use legion::Resources;
 use std::{
     collections::HashMap,
     rc::Rc,
     sync::{Arc, Mutex},
 };
 
-use anyhow::{anyhow, Result};
-use legion::Resources;
-
-use super::{shader::ShaderBuilder, type_key, uniform::GroupResourceBuilder};
+use super::{type_key, uniform::GroupResourceBuilder};
 
 pub enum ShaderSource {
     WGSL(String),
-    SPIRV(String),
+    _SPIRV(String),
 }
 
 pub struct Pipeline {
-    pipeline: wgpu::RenderPipeline,
-    shader_module: wgpu::ShaderModule,
+    pub pipeline: wgpu::RenderPipeline,
+    pub shader_module: wgpu::ShaderModule,
+}
+
+pub enum BindIndex {
+    Uniform(usize),
+    Texture(usize),
 }
 
 /// Builder for easily creating flexible wgpu render pipelines
 
 pub struct PipelineBuilder {
     pub shader_source: ShaderSource,
+    pub bind_groups: Vec<BindIndex>,
     pub vertex_buffer_layouts: Vec<wgpu::VertexBufferLayout<'static>>,
-    pub uniform_group_builders: HashMap<&'static str, Arc<Mutex<dyn GroupResourceBuilder>>>,
+    pub uniform_group_builders: Vec<Arc<Mutex<dyn GroupResourceBuilder>>>,
 }
 
 impl PipelineBuilder {
     pub fn new(shader: ShaderSource) -> Self {
         Self {
             shader_source: shader,
+            bind_groups: vec![],
             vertex_buffer_layouts: vec![],
-            uniform_group_builders: HashMap::new(),
+            uniform_group_builders: vec![],
         }
     }
 
     pub fn uniform_group<T: GroupResourceBuilder + 'static>(mut self, group_builder: T) -> Self {
+        self.bind_groups
+            .push(BindIndex::Uniform(self.uniform_group_builders.len()));
         self.uniform_group_builders
-            .insert(type_key::<T>(), Arc::new(Mutex::new(group_builder)));
+            .push(Arc::new(Mutex::new(group_builder)));
+        self
+    }
+
+    pub fn texture_group(mut self) -> Self {
+        self.bind_groups.push(BindIndex::Texture(0));
         self
     }
 
@@ -52,38 +65,44 @@ impl PipelineBuilder {
         resources: &mut Resources,
         device: &wgpu::Device,
         chain_desc: &wgpu::SwapChainDescriptor,
+        texture_bind_group_layout: wgpu::BindGroupLayout,
     ) -> Result<Pipeline> {
-        // Validate pipelne
-
         if self.vertex_buffer_layouts.len() == 0 {
             return Err(anyhow!(
                 "PipelineBuilder: at least one vertex buffer required"
             ));
         }
 
-        // Build pipeline
+        let shader_module = build_shader(&self.shader_source, device);
 
-        let shader_module = build_shader(self.shader_source, device);
-
-        let bind_group_layouts: Vec<&wgpu::BindGroupLayout> = self
-            .uniform_group_builders
+        let bind_group_layouts = &self
+            .bind_groups
             .iter()
-            .map(|(name, builder)| {
-                builder.lock().unwrap().build(device, resources)?;
-                Ok(builder
-                    .lock()
-                    .unwrap()
-                    .group_layout()
-                    .as_ref()
-                    .as_ref()
-                    .unwrap())
+            .map(|bind_index| {
+                Ok(match *bind_index {
+                    BindIndex::Texture(_) => None,
+                    BindIndex::Uniform(i) => Some(
+                        self.uniform_group_builders[i]
+                            .lock()
+                            .unwrap()
+                            .build(device, resources)?,
+                    ),
+                })
             })
-            .collect();
+            .collect::<Result<Vec<Option<wgpu::BindGroupLayout>>>>()?;
+
+        let layout_refs = bind_group_layouts
+            .into_iter()
+            .map(|opt_uniform| match opt_uniform {
+                Some(u) => &u,
+                None => &texture_bind_group_layout,
+            })
+            .collect::<Vec<&wgpu::BindGroupLayout>>();
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: bind_group_layouts.as_slice(),
+                bind_group_layouts: layout_refs.as_slice(),
                 push_constant_ranges: &[],
             });
 
@@ -121,6 +140,11 @@ impl PipelineBuilder {
             },
         });
 
+        // Move registered uniform groups and sources into system resources
+        for builder in &self.uniform_group_builders {
+            builder.lock().unwrap().build_to_resource(resources);
+        }
+
         Ok(Pipeline {
             pipeline,
             shader_module,
@@ -128,13 +152,13 @@ impl PipelineBuilder {
     }
 }
 
-fn build_shader(source: ShaderSource, device: &wgpu::Device) -> wgpu::ShaderModule {
+fn build_shader(source: &ShaderSource, device: &wgpu::Device) -> wgpu::ShaderModule {
     device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: Some("Shader"),
         flags: wgpu::ShaderFlags::all(),
         source: match source {
             ShaderSource::WGSL(src) => wgpu::ShaderSource::Wgsl(src.clone().into()),
-            _ => panic!("ShaderSource: only wgsl shaders are supported currently"),
+            _ => panic!("ShaderSource: only WGSL shaders are supported currently"),
         },
     })
 }

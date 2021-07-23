@@ -1,20 +1,27 @@
 use anyhow::{anyhow, Result};
-use std::{borrow::{Borrow, }, collections::HashMap, rc::Rc, sync::{Arc, Mutex}};
+use regex::Regex;
+use std::{
+    borrow::Borrow,
+    collections::HashMap,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 use wgpu::RenderPipeline;
 use winit::window::Window;
-use regex::Regex;
 
 pub mod buffer;
 pub mod pipeline;
-pub mod shader;
 pub mod texture;
 pub mod uniform;
 
 use pipeline::PipelineBuilder;
 
-use crate::{render::texture::TextureUniformGroup, resources::store::{TextureStoreBuilder}};
+use crate::{
+    render::{pipeline::Pipeline, texture::TextureUniformGroup},
+    resources::store::TextureStoreBuilder,
+};
 
-use self::uniform::{GroupResourceBuilder};
+use self::uniform::GroupResourceBuilder;
 
 pub struct GpuState {
     pub surface: wgpu::Surface,
@@ -23,7 +30,7 @@ pub struct GpuState {
     pub chain_descriptor: wgpu::SwapChainDescriptor,
     pub swap_chain: wgpu::SwapChain,
     pub screen_size: (u32, u32),
-    pub pipelines: HashMap<String, wgpu::RenderPipeline>,
+    pub pipelines: Vec<Pipeline>,
 }
 
 #[derive(Default)]
@@ -31,9 +38,7 @@ pub struct GpuStateBuilder {
     pub screen_size: (u32, u32),
     pub instance: Option<wgpu::Instance>,
     pub surface: Option<wgpu::Surface>,
-
-    pub group_builders: HashMap<&'static str, Arc<Mutex<dyn GroupResourceBuilder>>>,
-    pub pipeline_builders: HashMap<&'static str, PipelineBuilder>,
+    pub pipeline_builders: Vec<PipelineBuilder>,
 }
 
 impl GpuStateBuilder {
@@ -55,17 +60,8 @@ impl GpuStateBuilder {
         }
     }
 
-    pub fn pipeline(mut self, name: &'static str, pipeline: PipelineBuilder) -> Self {
-        self.pipeline_builders.insert(name, pipeline);
-        self
-    }
-
-    pub fn uniform_builder<T: GroupResourceBuilder + 'static>(
-        mut self,
-        group_builder: T,
-    ) -> Self {
-        self.uniform_builders
-            .insert(type_key::<T>(), Arc::new(Mutex::new(group_builder)));
+    pub fn pipeline(mut self, pipeline: PipelineBuilder) -> Self {
+        self.pipeline_builders.push(pipeline);
         self
     }
 
@@ -123,66 +119,22 @@ impl GpuStateBuilder {
         };
         let swap_chain = device.create_swap_chain(&surface, &chain_descriptor);
 
-        // Build all uniform bind layouts and groups
-        for (_name, builder) in &self.uniform_builders {
-            builder.lock().unwrap().build(&device, resources)?;
-        }
-
-        for (name, builder) in &self.uniform_builders {
-            if builder.lock().unwrap().group_layout().is_none() {
-                return Err(anyhow!("Failed to build uniform group: {}", name));
-            }
-        }
-
-        store_builder.build(&device, &queue)?;
-        let texture_bind_group_layout = store_builder.bind_group_layout();
-
         // Build all render pipelines
-        let uniform_group_builders = self.uniform_builders.borrow();
-        debug!("Building render pipelines, available layouts:");
-        uniform_group_builders.iter().for_each(|name| debug!("  - {}", *name.0));
-        let texture_group_type = type_key::<TextureUniformGroup>();
-        debug!("  - {}", texture_group_type);
-
+        debug!("Building render pipelines");
         let pipelines = self
             .pipeline_builders
             .into_iter()
-            .map(
-                |(pipeline_name, builder)| -> Result<(String, wgpu::RenderPipeline)> {
-                    debug!("Building render pipeline layout '{}' which depends on:", pipeline_name);
-                    let layouts = builder
-                        .uniform_builders
-                        .iter()
-                        .map(|name| -> Result<Rc<Option<wgpu::BindGroupLayout>>> {
-                            debug!("  - {}", *name);
-                            Ok(if *name == texture_group_type {
-                                Rc::clone(&texture_bind_group_layout)
-                            } else {
-                                uniform_group_builders
-                                    .get(*name)
-                                    .ok_or_else(|| anyhow!(
-                                        "PipelineBuilder: failed to find uniform group '{}' required by pipeline '{}'", 
-                                        *name, 
-                                        pipeline_name,
-                                    ))?
-                                    .lock().unwrap()
-                                    .group_layout()
-                            })
-                        })
-                        .collect::<Result<Vec<Rc<Option<wgpu::BindGroupLayout>>>>>()?;
-                    Ok((
-                        pipeline_name.to_owned(),
-                        builder.build(layouts, &device, &chain_descriptor)?,
-                    ))
-                },
-            )
-            .collect::<Result<HashMap<String, RenderPipeline>>>()?;
+            .map(|builder| {
+                builder.build(
+                    resources,
+                    &device,
+                    &chain_descriptor,
+                    store_builder.build(&device, &queue)?,
+                )
+            })
+            .collect::<Result<Vec<Pipeline>>>()?;
 
-        // Move registered uniform groups and sources into system resources
-        for (_, builder) in self.uniform_builders.iter_mut() {
-            builder.lock().unwrap().build_to_resource(resources);
-        }
-
+        // Add TextureStore to system resources
         store_builder.build_to_resource(resources);
 
         Ok(GpuState {
@@ -211,9 +163,15 @@ impl GpuState {
 pub fn type_key<T>() -> &'static str {
     let re = Regex::new(".*::(.*)>?");
     let type_path = std::any::type_name::<T>();
-    let mut type_key = re.unwrap().captures(type_path).unwrap().get(1).unwrap().as_str();
+    let mut type_key = re
+        .unwrap()
+        .captures(type_path)
+        .unwrap()
+        .get(1)
+        .unwrap()
+        .as_str();
     if type_key.ends_with(">") {
-        type_key = &type_key[..type_key.len()-1];
+        type_key = &type_key[..type_key.len() - 1];
     }
     type_key
 }

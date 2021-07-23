@@ -5,21 +5,19 @@ extern crate log;
 extern crate legion;
 
 use anyhow::Result;
-use cgmath::SquareMatrix;
-use legion::Schedule;
-use legion::{Resources, World};
+use legion::{Resources, Schedule, World};
 use rand::Rng;
-use render::GpuState;
-use std::borrow::Borrow;
-use std::collections::HashMap;
-use std::env;
-use std::path::PathBuf;
-use std::sync::Mutex;
-use std::{cell::RefCell, rc::Rc, sync::Arc};
-use winit::dpi::LogicalSize;
-use winit::event::{Event, VirtualKeyCode};
-use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::WindowBuilder;
+use std::{
+    env,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
+use winit::{
+    dpi::LogicalSize,
+    event::{Event, VirtualKeyCode},
+    event_loop::{ControlFlow, EventLoop},
+    window::WindowBuilder,
+};
 use winit_input_helper::WinitInputHelper;
 
 mod component;
@@ -27,14 +25,12 @@ mod render;
 mod resources;
 mod systems;
 
-use component::{Position2D, Velocity2D};
-use resources::store::TextureStore;
-use systems::{camera_2d::*, lighting_2d::*, physics_2d::*, render_2d::*};
-
-use crate::render::texture::TextureUniformGroup;
-use crate::render::{buffer::*, pipeline::*, shader::*, uniform::*, *};
-use crate::resources::camera::Camera2D;
-use crate::resources::store::TextureStoreBuilder;
+use crate::{
+    component::{Position2D, Velocity2D},
+    render::{buffer::*, pipeline::*, uniform::*, *},
+    resources::{camera::Camera2D, store::TextureStoreBuilder},
+    systems::{camera_2d::*, lighting_2d::*, physics_2d::*, render_2d::*},
+};
 
 // NEXT TODO: FIGURE OUT HOW TO GENERALIZE WHAT I CURRENTLY HAVE HARDCODED, WHICH IS:
 //      - Multiple uniform groups in one render pass, via a dynamic offset system.
@@ -76,7 +72,7 @@ fn main() -> Result<()> {
     };
 
     let base_2d_uniforms = UniformGroup::<Base2DUniformGroup>::builder().uniform(
-        GenericUniformBuilder::new().source(Base2DUniforms {
+        GenericUniformBuilder::source(Base2DUniforms {
             model: [0.0, 0.0, 1.0, 1.0],
             color: [1.0, 1.0, 1.0, 1.0],
             mix: 1.0,
@@ -86,7 +82,7 @@ fn main() -> Result<()> {
     );
 
     let camera_2d_uniforms = UniformGroup::<Camera2DUniformGroup>::builder().uniform(
-        GenericUniformBuilder::new().source(Camera2DUniforms {
+        GenericUniformBuilder::source(Camera2DUniforms {
             //view: [-(SCREEN_WIDTH as f32), -(SCREEN_HEIGHT as f32), 1.0/(SCREEN_WIDTH as f32), 1.0/(SCREEN_HEIGHT as f32)],
             // view: [(SCREEN_WIDTH as f32)/2.0, (SCREEN_HEIGHT as f32)/2.0, 1.0/(SCREEN_WIDTH as f32), 1.0/(SCREEN_HEIGHT as f32)],
             view: [1.0, 1.0, 1.0, 1.0],
@@ -96,7 +92,7 @@ fn main() -> Result<()> {
     );
 
     let lighting_2d_uniforms = UniformGroup::<Lighting2DUniformGroup>::builder().uniform(
-        GenericUniformBuilder::new().source(Lighting2DUniforms {
+        GenericUniformBuilder::source(Lighting2DUniforms {
             light_0: Default::default(),
             light_1: Default::default(),
             light_2: Default::default(),
@@ -105,26 +101,20 @@ fn main() -> Result<()> {
         }),
     );
 
-    let base_2d_pipeline = PipelineBuilder::new()
-        .shader(
-            ShaderBuilder::source(ShaderSource::WGSL(
-                include_str!("render/shaders/base2D.wgsl").to_owned(),
-            ))
-            .group::<TextureUniformGroup>()
-            .group::<Base2DUniformGroup>()
-            .group::<Camera2DUniformGroup>()
-            .group::<Lighting2DUniformGroup>(),
-        )
-        .vertex_buffer_layout(VertexBuffer::layout_2d());
+    let base_2d_pipeline = PipelineBuilder::new(ShaderSource::WGSL(
+        include_str!("render/shaders/base2D.wgsl").to_owned(),
+    ))
+    .texture_group()
+    .uniform_group(base_2d_uniforms)
+    .uniform_group(camera_2d_uniforms)
+    .uniform_group(lighting_2d_uniforms)
+    .vertex_buffer_layout(VertexBuffer::layout_2d());
 
     let mut resources = Resources::default();
 
     let gpu_state = Arc::new(Mutex::new(futures::executor::block_on(
         GpuStateBuilder::winit(&window)
-            .uniform_builder(base_2d_uniforms)
-            .uniform_builder(camera_2d_uniforms)
-            .uniform_builder(lighting_2d_uniforms)
-            .pipeline("base_2d", base_2d_pipeline)
+            .pipeline(base_2d_pipeline)
             .build(
                 &mut TextureStoreBuilder::new().load(
                     "test",

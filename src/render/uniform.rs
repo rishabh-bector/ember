@@ -45,12 +45,16 @@ impl<N> UniformGroup<N> {
 }
 
 pub trait ResourceBuilder {
-    fn build_to_resource(&mut self, resources: &mut Resources);
+    fn build_to_resource(&self, resources: &mut Resources);
 }
 
 pub trait GroupBuilder {
-    fn build(&mut self, device: &wgpu::Device, resources: &mut Resources) -> Result<()>;
-    fn group_layout(&self) -> Rc<Option<wgpu::BindGroupLayout>>;
+    fn build(
+        &mut self,
+        device: &wgpu::Device,
+        resources: &mut Resources,
+    ) -> Result<wgpu::BindGroupLayout>;
+    // fn group_layout(&self) -> &wgpu::BindGroupLayout;
 }
 
 pub trait GroupResourceBuilder: GroupBuilder + ResourceBuilder {}
@@ -59,7 +63,7 @@ impl<N> GroupResourceBuilder for UniformGroupBuilder<N> where N: 'static {}
 pub struct UniformGroupBuilder<N> {
     pub uniforms: Vec<Arc<Mutex<dyn UniformBuilder>>>,
 
-    pub bind_group_layout: Rc<Option<wgpu::BindGroupLayout>>,
+    pub bind_group_layout: Option<wgpu::BindGroupLayout>,
     pub bind_group: Option<wgpu::BindGroup>,
 
     pub state: Option<N>,
@@ -70,7 +74,7 @@ impl<N> UniformGroupBuilder<N> {
     pub fn new() -> Self {
         Self {
             uniforms: vec![],
-            bind_group_layout: Rc::new(None),
+            bind_group_layout: None,
             bind_group: None,
             state: None,
             dest: None,
@@ -89,7 +93,11 @@ impl<N> UniformGroupBuilder<N> {
 }
 
 impl<N> GroupBuilder for UniformGroupBuilder<N> {
-    fn build(&mut self, device: &wgpu::Device, resources: &mut Resources) -> Result<()> {
+    fn build(
+        &mut self,
+        device: &wgpu::Device,
+        resources: &mut Resources,
+    ) -> Result<wgpu::BindGroupLayout> {
         debug!("UniformGroupBuilder: building {}", type_key::<N>());
 
         if self.uniforms.len() == 0 {
@@ -119,18 +127,13 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
             })
             .collect();
 
-        self.bind_group_layout = Rc::new(Some(device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
-                entries: &entries,
-                label: Some(&format!("uniform_bind_group_layout: {}", type_key::<N>())),
-            },
-        )));
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &entries,
+            label: Some(&format!("uniform_bind_group_layout: {}", type_key::<N>())),
+        });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: Rc::clone(&self.bind_group_layout)
-                .as_ref()
-                .as_ref()
-                .unwrap(),
+            layout: &bind_group_layout,
             entries: &(0..buffer_states.len())
                 .map(|i| {
                     let mut buffer_binding = buffer_states[i].buffer.as_entire_buffer_binding();
@@ -157,11 +160,7 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
             builder.lock().unwrap().build_to_resource(resources);
         }
 
-        Ok(())
-    }
-
-    fn group_layout(&self) -> Rc<Option<wgpu::BindGroupLayout>> {
-        Rc::clone(&self.bind_group_layout)
+        Ok(bind_group_layout)
     }
 }
 
@@ -169,7 +168,7 @@ impl<N> ResourceBuilder for UniformGroupBuilder<N>
 where
     N: 'static,
 {
-    fn build_to_resource(&mut self, resources: &mut Resources) {
+    fn build_to_resource(&self, resources: &mut Resources) {
         for uniform in &self.uniforms {
             resources.insert(Arc::clone(uniform));
         }
@@ -203,19 +202,14 @@ impl<U> GenericUniformBuilder<U>
 where
     U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug,
 {
-    pub fn new() -> Self {
+    pub fn source(source: U) -> Self {
         Self {
-            source: None,
+            source: Some(source),
             buffer: None,
             max_size: DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS,
             size: size_of::<U>() as u32,
-            dest: None,
+            dest: Some(Arc::new(Mutex::new(GenericUniform { source }))),
         }
-    }
-
-    pub fn source(mut self, source: U) -> Self {
-        self.source = Some(source);
-        self
     }
 
     pub fn max_dynamic_entities(mut self, max: u32) -> Self {
@@ -228,10 +222,7 @@ impl<U> ResourceBuilder for GenericUniformBuilder<U>
 where
     U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug + 'static,
 {
-    fn build_to_resource(&mut self, resources: &mut Resources) {
-        self.dest = Some(Arc::new(Mutex::new(GenericUniform {
-            source: self.source.clone().unwrap(),
-        })));
+    fn build_to_resource(&self, resources: &mut Resources) {
         resources.insert(Arc::clone(&self.dest.as_ref().as_ref().unwrap()));
     }
 }
@@ -269,8 +260,6 @@ where
 {
     fn load_buffer(&self, buffer: &wgpu::Buffer, queue: &wgpu::Queue, offset: wgpu::BufferAddress) {
         queue.write_buffer(buffer, offset, bytemuck::cast_slice(&[self.source]));
-        // queue.bu
-        //bytemuck::cast_slice(&[self.source])
     }
 }
 
@@ -287,19 +276,3 @@ where
         size_of::<U>() as u32
     }
 }
-
-// impl<U> BufferBuilder for UniformBuffer<U>
-// where
-//     U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug,
-// {
-
-//     // fn boxed_source(self) -> Box<dyn BufferBuilder> {
-//     //     Box::new(self)
-//     // }
-
-//     // fn from_boxed_
-
-//     // // fn queue(&mut self, queue: &wgpu::Queue) {
-//     // //     queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.source]));
-//     // // }
-// }
