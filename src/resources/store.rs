@@ -2,14 +2,12 @@ use anyhow::{anyhow, Result};
 use image::io::Reader as ImageReader;
 use legion::Resources;
 use std::{
-    borrow::Borrow,
-    cell::RefCell,
     collections::HashMap,
     rc::Rc,
     sync::{Arc, Mutex},
 };
 
-use crate::render::{texture::Texture, GpuState};
+use crate::render::texture::Texture;
 
 pub struct TextureStore {
     pub textures: HashMap<String, Texture>,

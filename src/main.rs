@@ -78,7 +78,8 @@ fn main() -> Result<()> {
             mix: 1.0,
             _padding: [0.0; 32],
             __padding: [0.0; 23],
-        }),
+        })
+        .max_dynamic_entities(96),
     );
 
     let camera_2d_uniforms = UniformGroup::<Camera2DUniformGroup>::builder().uniform(
@@ -171,7 +172,7 @@ fn main() -> Result<()> {
         ));
     }
 
-    for i in 0..58 {
+    for i in 0..64 {
         let size = rng.gen_range(5.0..25.0);
         world.push((
             Base2D::solid_rect(&format!("block_{}", i), size, size, [1.0, 1.0, 1.0, 1.0]),

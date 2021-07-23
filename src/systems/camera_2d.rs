@@ -1,11 +1,7 @@
-use std::{
-    borrow::BorrowMut,
-    sync::{Arc, Mutex},
-};
+use cgmath::Matrix2;
+use std::sync::{Arc, Mutex};
 
 use crate::{render::uniform::GenericUniform, resources::camera::Camera2D};
-
-use cgmath::{Matrix2, SquareMatrix};
 
 pub struct Camera2DUniformGroup {}
 
@@ -28,6 +24,6 @@ pub fn camera_2d(
     uniforms.source.view = [camera.pos.x, camera.pos.y, camera.size.x, camera.size.y];
 }
 
-pub fn flatten(mat: Matrix2<f32>) -> [f32; 4] {
+pub fn _flatten(mat: Matrix2<f32>) -> [f32; 4] {
     [mat.x[0], mat.y[0], mat.x[1], mat.y[1]]
 }

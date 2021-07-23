@@ -39,7 +39,7 @@ impl VertexBuffer {
         }
     }
 
-    pub fn new_3d(vertices: &[Vertex3D], device: &wgpu::Device) -> Self {
+    pub fn _new_3d(vertices: &[Vertex3D], device: &wgpu::Device) -> Self {
         VertexBuffer {
             buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("3D Vertex Buffer"),
@@ -68,7 +68,7 @@ impl VertexBuffer {
         }
     }
 
-    pub fn layout_3d<'a>() -> wgpu::VertexBufferLayout<'a> {
+    pub fn _layout_3d<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex3D>() as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,

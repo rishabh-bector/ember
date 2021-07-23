@@ -41,8 +41,6 @@ use anyhow::*;
 //          the global bind group layout, used by the PipelineBuilders, builds textures, and becomes a
 //          resource.
 
-pub struct TextureUniformGroup {}
-
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,

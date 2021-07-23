@@ -1,12 +1,8 @@
 use anyhow::{anyhow, Result};
 use legion::Resources;
-use std::{
-    collections::HashMap,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
-use super::{type_key, uniform::GroupResourceBuilder};
+use super::uniform::GroupResourceBuilder;
 
 pub enum ShaderSource {
     WGSL(String),

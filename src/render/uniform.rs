@@ -1,20 +1,14 @@
 use anyhow::{anyhow, Result};
-use legion::{systems::Resource, Resources};
+use legion::Resources;
 use std::{
-    collections::HashMap,
+    any::type_name,
     fmt::Debug,
-    iter,
     marker::PhantomData,
     mem::size_of,
-    num::{NonZeroU32, NonZeroU64},
-    rc::Rc,
-    sync::{Arc, Mutex, MutexGuard},
+    num::NonZeroU64,
+    sync::{Arc, Mutex},
 };
 use wgpu::{util::DeviceExt, BindGroupEntry};
-
-use crate::render::{buffer, type_key};
-
-pub type ShaderStage = wgpu::ShaderStage;
 
 pub const DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS: u32 = 64;
 pub const DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE: u64 = 128;
@@ -54,7 +48,6 @@ pub trait GroupBuilder {
         device: &wgpu::Device,
         resources: &mut Resources,
     ) -> Result<wgpu::BindGroupLayout>;
-    // fn group_layout(&self) -> &wgpu::BindGroupLayout;
 }
 
 pub trait GroupResourceBuilder: GroupBuilder + ResourceBuilder {}
@@ -86,7 +79,7 @@ impl<N> UniformGroupBuilder<N> {
         self
     }
 
-    pub fn state(mut self, state: N) -> Self {
+    pub fn _state(mut self, state: N) -> Self {
         self.state = Some(state);
         self
     }
@@ -98,7 +91,7 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
         device: &wgpu::Device,
         resources: &mut Resources,
     ) -> Result<wgpu::BindGroupLayout> {
-        debug!("UniformGroupBuilder: building {}", type_key::<N>());
+        debug!("UniformGroupBuilder: building {}", type_name::<N>());
 
         if self.uniforms.len() == 0 {
             return Err(anyhow!(
@@ -129,7 +122,7 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &entries,
-            label: Some(&format!("uniform_bind_group_layout: {}", type_key::<N>())),
+            label: Some(&format!("uniform_bind_group_layout: {}", type_name::<N>())),
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -145,7 +138,7 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
                     }
                 })
                 .collect::<Vec<BindGroupEntry>>(),
-            label: Some(&format!("uniform_bind_group: {}", type_key::<N>())),
+            label: Some(&format!("uniform_bind_group: {}", type_name::<N>())),
         });
 
         self.dest = Some(Arc::new(Mutex::new(UniformGroup {
@@ -190,7 +183,7 @@ pub struct GenericUniformBuilder<U: Copy + Clone + bytemuck::Pod + bytemuck::Zer
     pub buffer: Option<wgpu::Buffer>,
 
     // Max sources to fit in one buffer
-    pub max_size: u32,
+    pub max_size: Option<u32>,
 
     // Size of one U
     pub size: u32,
@@ -206,14 +199,14 @@ where
         Self {
             source: Some(source),
             buffer: None,
-            max_size: DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS,
+            max_size: None,
             size: size_of::<U>() as u32,
             dest: Some(Arc::new(Mutex::new(GenericUniform { source }))),
         }
     }
 
     pub fn max_dynamic_entities(mut self, max: u32) -> Self {
-        self.max_size = max;
+        self.max_size = Some(max);
         self
     }
 }
@@ -239,17 +232,23 @@ where
 {
     fn build_buffer(&mut self, device: &wgpu::Device) -> BufferState {
         let source = &[self.source.unwrap()];
-        let this = bytemuck::cast_slice(source);
-        let source_size = this.len();
-        let this = this.repeat(DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS as usize);
+
+        let max_elements = self
+            .max_size
+            .unwrap_or(DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS);
+
+        let source_bytes = bytemuck::cast_slice(source);
+        let source_size = source_bytes.len();
+        let source_bytes = source_bytes.repeat(max_elements as usize);
+
         BufferState {
             buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("Uniform Buffer: {}", type_key::<U>())),
-                contents: &this,
+                label: Some(&format!("Uniform Buffer: {}", type_name::<U>())),
+                contents: &source_bytes,
                 usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
             }),
             element_size: source_size as u32,
-            max_elements: DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS,
+            max_elements,
         }
     }
 }

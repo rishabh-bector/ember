@@ -1,12 +1,4 @@
 use anyhow::{anyhow, Result};
-use regex::Regex;
-use std::{
-    borrow::Borrow,
-    collections::HashMap,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
-use wgpu::RenderPipeline;
 use winit::window::Window;
 
 pub mod buffer;
@@ -14,14 +6,10 @@ pub mod pipeline;
 pub mod texture;
 pub mod uniform;
 
-use pipeline::PipelineBuilder;
-
 use crate::{
-    render::{pipeline::Pipeline, texture::TextureUniformGroup},
+    render::pipeline::{Pipeline, PipelineBuilder},
     resources::store::TextureStoreBuilder,
 };
-
-use self::uniform::GroupResourceBuilder;
 
 pub struct GpuState {
     pub surface: wgpu::Surface,
@@ -67,7 +55,7 @@ impl GpuStateBuilder {
 
     // Depends on TextureStore being in resources
     pub async fn build(
-        mut self,
+        self,
         store_builder: &mut TextureStoreBuilder,
         resources: &mut legion::Resources,
     ) -> Result<GpuState> {
@@ -158,20 +146,4 @@ impl GpuState {
             .device
             .create_swap_chain(&self.surface, &self.chain_descriptor);
     }
-}
-
-pub fn type_key<T>() -> &'static str {
-    let re = Regex::new(".*::(.*)>?");
-    let type_path = std::any::type_name::<T>();
-    let mut type_key = re
-        .unwrap()
-        .captures(type_path)
-        .unwrap()
-        .get(1)
-        .unwrap()
-        .as_str();
-    if type_key.ends_with(">") {
-        type_key = &type_key[..type_key.len() - 1];
-    }
-    type_key
 }

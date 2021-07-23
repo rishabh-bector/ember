@@ -1,18 +1,16 @@
-use crate::component::Position2D;
-use crate::render::{
-    buffer::{IndexBuffer, VertexBuffer},
-    uniform::{GenericUniform, Uniform, UniformGroup},
-    GpuState,
+use crate::{
+    component::Position2D,
+    render::{
+        buffer::{IndexBuffer, VertexBuffer},
+        uniform::{GenericUniform, Uniform, UniformGroup},
+        GpuState,
+    },
+    resources::store::TextureStore,
+    systems::{camera_2d::*, lighting_2d::*},
 };
-use crate::resources::{camera::Camera2D, store::TextureStore};
-use crate::systems::{camera_2d::*, lighting_2d::*};
 
 use legion::{world::SubWorld, IntoQuery};
-use std::borrow::BorrowMut;
-use std::{
-    cell::RefCell,
-    sync::{Arc, Mutex, MutexGuard},
-};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 pub const BASE_2D_COMMON_TEXTURE: &str = "test";
 pub const BASE_2D_COMMON_VERTEX_BUFFER: usize = 0;
@@ -33,7 +31,7 @@ pub struct Base2D {
 }
 
 impl Base2D {
-    pub fn test(name: &str, width: f32, height: f32) -> Self {
+    pub fn _test(name: &str, width: f32, height: f32) -> Self {
         Base2D::solid_rect(name, width, height, [1.0, 1.0, 1.0, 1.0])
     }
 
@@ -95,7 +93,7 @@ pub fn render_2d(
     let camera_2d_uniforms_group = camera_2d_uniforms_group.lock().unwrap();
     let camera_2d_uniforms = camera_2d_uniforms.lock().unwrap();
 
-    let mut lighting_2d_uniforms = lighting_2d_uniforms.lock().unwrap();
+    let lighting_2d_uniforms = lighting_2d_uniforms.lock().unwrap();
     let lighting_2d_uniforms_group = lighting_2d_uniforms_group.lock().unwrap();
 
     // Begin render pass //

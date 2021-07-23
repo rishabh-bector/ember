@@ -10,6 +10,9 @@ anyhow = "1.0"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 cgmath = "0.18"
 image = "*"
+imgui = "0.7"
+imgui-wgpu = "0.16"
+imgui-winit-support = { version = "0.7.1", default-features = false, features = ["winit-25"] }
 legion = "0.4.0"
 log = "0.4"
 futures = "0.3"

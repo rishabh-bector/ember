@@ -11,7 +11,7 @@ pub fn physics_2d(
     vel: &mut Velocity2D,
     #[resource] gpu: &Arc<Mutex<GpuState>>,
 ) {
-    let (width, height) = gpu.lock().unwrap().screen_size;
+    let (_width, _height) = gpu.lock().unwrap().screen_size;
 
     // Todo: replace hardcoding w/ some global config resource
     if vel.bounce {
