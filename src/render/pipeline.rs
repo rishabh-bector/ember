@@ -62,7 +62,7 @@ impl PipelineBuilder {
         device: &wgpu::Device,
         queue: Arc<wgpu::Queue>,
         chain_desc: &wgpu::SwapChainDescriptor,
-        texture_bind_group_layout: wgpu::BindGroupLayout,
+        texture_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Result<Pipeline> {
         if self.vertex_buffer_layouts.len() == 0 {
             return Err(anyhow!(
@@ -93,7 +93,7 @@ impl PipelineBuilder {
             .into_iter()
             .map(|opt_uniform| match opt_uniform {
                 Some(u) => &u,
-                None => &texture_bind_group_layout,
+                None => texture_bind_group_layout,
             })
             .collect::<Vec<&wgpu::BindGroupLayout>>();
 

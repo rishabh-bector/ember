@@ -26,7 +26,84 @@ pass {
 
 - each render pass can and should be recorded concurrently
 - therefore, it makes sense to keep the logic in a system, like render_2d
-- 
+
+SO:
+
+Before:
+    - ensure one texture target exists for each source channel pass
+    - AND one for each assembly channel pass
+    - add these targets to INDIVIDUAL RESOURCES
+
+-- BEGIN FRAME --
+  All source pass systems record and submit command buffers
+-FLUSH-
+  All channel and assembly pass systems are scheduled together;
+    legion will make everything concurrently while maintaining
+    individual perspectives as relative!
+-FLUSH-
+At this point, all resource texture targets are in their final state
+One pass will have been marked as the "master" pass, which nothing
+is allowed to depend on. Also, add the UI pass here.;
+  these are now run with the final target as the swap chain
+-- END FRAME --
+
+Concurrency notes:
+- In order to actually be run in parallel, no render pass system
+  should have to wait for locks on shared resources.
+- Currently, systems based on forward_render_2d would compete for:
+    - gpu_state, texture_store, camera_2d_uniforms_group and lighting_2d_uniforms_group
+- Solutions:
+    - gpu_state: this is used for three tasks:
+        1. Obtain a frame view from the swap chain
+        2. Create a new command encoder for this pass
+        3. Submit the command encoder to the queue (at the end)
+      solutions:
+        1. frame views will be created on init, and made as resources
+           by design, only views should only be accessible to one pass at a time
+        2. command encoders will be created at the beginning of each frame,
+           by a begin_render_graph() system
+        3. This needs to be done in multiple places:
+            1. After all source pass systems record their command buffers
+            2. Unfortunately, in order to keep the gpu queue in sync with
+               the render graph, pass encoders must somehow be submitted before
+               their dependants. This action requires a GPU lock. So, it seems
+               that the next best thing is to have one "pass submission" system for
+               each channel and assembly pass. This will be scheduled directly after the
+               system. The submission systems depend on:
+                - their encoder being released from the corresponding main pass system
+                - the gpu command buffers... hold on
+               perhaps each system can obtain a read lock on the queue (simultaneously), as it seems
+               that queue submission does not need mutability!
+    - texture_store: this is used to lookup the bind groups of texture IDs needed by the pipeline
+        solution:
+        - texture bind groups are just references
+        - we should separate "texture_store" into one of several "texture groups"
+          (which should eventually be created using the planned EngineBuilder)
+        - each texture group has a type and should be its own resource
+        ...this is looking a lot like uniform groups...
+        just like uniform groups, texture groups:
+          - need a unique type identifier, to be used as system resources
+          - need to be bound (into a bind group index) by dependant render passes
+        unlike uniform groups, texture groups:
+          - don't need long, complicated entry or dynamic buffer builders
+        proposal:
+          - screw the phantom types for this, since creating a new type for
+            every texture group is annoying af
+          - instead: a unique texture group resource is created by texture store
+            for each item in a predefined list 
+          - this resource has a &str -> Rc<bindgroup> mapping for all its textures,
+            which users have added using a hardcoded bucket in the builder
+          - certain pipelines only access certain texture groups by default.
+            (can expand on this system more in the future)
+            (e.g. custom or generic texture groups)
+    - camera_2d_uniforms_group and lighting_2d_uniforms_group: similar to texture_store,
+      in that these are RC<BINDGROUP> dependencies defined per pipeline
+        ...this means that each pipeline should have its own state with all 
+           needed bindgroups predefined...
+        this way, bindgroups can be shared via Arc<> without locks.
+        of course, we still have to make the uniform_group its own resource;
+        we just copy an Arc with its bind group for each pipeline that needs it.
+
 
 
 Figure out format later:

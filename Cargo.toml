@@ -15,6 +15,7 @@ imgui-wgpu = "0.16"
 imgui-winit-support = { version = "0.7.1", default-features = false, features = ["winit-25"] }
 legion = "0.4.0"
 log = "0.4"
+uuid = "0.8"
 futures = "0.3"
 pretty_env_logger = "0.3"
 rand = "0.8.4"

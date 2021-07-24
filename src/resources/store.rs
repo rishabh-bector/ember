@@ -6,16 +6,19 @@ use std::{
     rc::Rc,
     sync::{Arc, Mutex},
 };
+use uuid::Uuid;
 
 use crate::render::texture::Texture;
 
 pub struct TextureStore {
-    pub textures: HashMap<String, Texture>,
+    pub textures: HashMap<TextureGroup, HashMap<Uuid, Texture>>,
+    pub groups: Vec<Arc<BindMap>>,
 }
 
 #[derive(Default)]
 pub struct TextureStoreBuilder {
-    pub to_load: Vec<(String, String)>,
+    pub to_load: HashMap<TextureGroup, Vec<String>>,
+    pub load_group: TextureGroup,
     pub bind_group_layout: Rc<Option<wgpu::BindGroupLayout>>,
     pub texture_store: Option<Arc<Mutex<TextureStore>>>,
 }
@@ -25,8 +28,16 @@ impl TextureStoreBuilder {
         Default::default()
     }
 
-    pub fn load(mut self, name: &str, path: &str) -> Self {
-        self.to_load.push((name.to_owned(), path.to_owned()));
+    pub fn begin_group(mut self, group: TextureGroup) -> Self {
+        self.load_group = group;
+        self
+    }
+
+    pub fn load(mut self, path: &str) -> Self {
+        self.to_load
+            .get_mut(&self.load_group)
+            .unwrap()
+            .push(path.to_owned());
         self
     }
 
@@ -60,19 +71,31 @@ impl TextureStoreBuilder {
             label: Some("texture_bind_group_layout"),
         });
 
-        let mut textures = HashMap::new();
-        for (name, path) in &self.to_load {
-            let rgba = ImageReader::open(&path)
-                .map_err(|err| anyhow!("error loading texture {}: - {}", path, err))?
-                .decode()?
-                .into_rgba8();
-            textures.insert(
-                name.to_owned(),
-                Texture::load_image(device, queue, &rgba, &bind_group_layout, None)?,
-            );
+        let mut textures: HashMap<TextureGroup, HashMap<Uuid, Texture>> = HashMap::new();
+        for (group, tex) in &self.to_load {
+            let group_textures = tex
+                .into_iter()
+                .map(|path| {
+                    let rgba = ImageReader::open(&path)
+                        .map_err(|err| anyhow!("error loading texture {}: - {}", path, err))?
+                        .decode()?
+                        .into_rgba8();
+                    Ok((
+                        Uuid::new_v4(),
+                        Texture::load_image(device, queue, &rgba, &bind_group_layout, None)?,
+                    ))
+                })
+                .collect::<Result<HashMap<Uuid, Texture>>>()?;
+            textures.insert(*group, group_textures);
         }
 
-        self.texture_store = Some(Arc::new(Mutex::new(TextureStore { textures })));
+        let groups: Vec<Arc<BindMap>> = textures
+            .iter()
+            .map(BindMap::from)
+            .map(|bm| Arc::new(bm))
+            .collect();
+
+        self.texture_store = Some(Arc::new(Mutex::new(TextureStore { textures, groups })));
 
         Ok(bind_group_layout)
     }
@@ -84,7 +107,37 @@ impl TextureStoreBuilder {
 }
 
 impl TextureStore {
-    pub fn bind_group(&self, name: &str) -> Option<&wgpu::BindGroup> {
-        self.textures.get(name).map(|t| &t.bind_group)
+    // pub fn bind_group(&self,  name: &str) -> Option<&wgpu::BindGroup> {
+    //     self.textures.get(name).map(|t| &t.bind_group)
+    // }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TextureGroup {
+    Base2D,
+    _Base3D,
+}
+
+impl Default for TextureGroup {
+    fn default() -> Self {
+        Self::Base2D
+    }
+}
+
+pub struct BindMap {
+    texture_group: TextureGroup,
+    bind_groups: HashMap<Uuid, Arc<wgpu::BindGroup>>,
+}
+
+impl From<(&TextureGroup, &HashMap<Uuid, Texture>)> for BindMap {
+    fn from(info: (&TextureGroup, &HashMap<Uuid, Texture>)) -> Self {
+        Self {
+            texture_group: *info.0,
+            bind_groups: info
+                .1
+                .into_iter()
+                .map(|(id, tex)| (*id, Arc::clone(&tex.bind_group)))
+                .collect::<HashMap<Uuid, Arc<wgpu::BindGroup>>>(),
+        }
     }
 }

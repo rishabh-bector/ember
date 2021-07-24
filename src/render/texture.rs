@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::*;
 
 // User defines GpuStateBuilder, specifying:
@@ -45,7 +47,7 @@ pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
-    pub bind_group: wgpu::BindGroup,
+    pub bind_group: Arc<wgpu::BindGroup>,
 }
 
 impl Texture {
@@ -130,7 +132,7 @@ impl Texture {
             texture,
             view,
             sampler,
-            bind_group,
+            bind_group: Arc::new(bind_group),
         })
     }
 }

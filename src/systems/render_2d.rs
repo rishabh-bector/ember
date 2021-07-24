@@ -15,6 +15,7 @@ use crate::{
 pub struct Render2DSystem {
     pub common_vertex_buffers: [VertexBuffer; 1],
     pub common_index_buffers: [IndexBuffer; 1],
+    pub bind_map: 
 }
 
 // Draw all Base2D components //
@@ -67,14 +68,14 @@ pub fn forward_render_2d(
     // Common bindings
     render_pass.set_pipeline(&gpu.pipelines[0].pipeline);
 
-    render_pass.set_bind_group(
-        0,
-        texture_store.bind_group("test").expect(&format!(
-            "failed to find referenced texture: {}",
-            "test" // base_2d.texture
-        )),
-        &[],
-    );
+    // render_pass.set_bind_group(
+    //     0,
+    //     texture_store.bind_group("test").expect(&format!(
+    //         "failed to find referenced texture: {}",
+    //         "test" // base_2d.texture
+    //     )),
+    //     &[],
+    // );
     render_pass.set_bind_group(2, &camera_2d_uniforms_group.bind_group, &[]);
     render_pass.set_bind_group(3, &lighting_2d_uniforms_group.bind_group, &[]);
 

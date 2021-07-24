@@ -106,20 +106,18 @@ fn main() -> Result<()> {
 
     let mut resources = Resources::default();
 
+    let mut texture_store_builder = TextureStoreBuilder::new().load(
+        &base_dir
+            .join("src/static/test.png")
+            .into_os_string()
+            .into_string()
+            .unwrap(),
+    );
+
     let gpu_state = Arc::new(Mutex::new(futures::executor::block_on(
         GpuStateBuilder::winit(Rc::clone(&window))
             .pipeline(base_2d_pipeline)
-            .build(
-                &mut TextureStoreBuilder::new().load(
-                    "test",
-                    &base_dir
-                        .join("src/static/test.png")
-                        .into_os_string()
-                        .into_string()
-                        .unwrap(),
-                ),
-                &mut resources,
-            ),
+            .build(&mut texture_store_builder, &mut resources),
     )?));
 
     let camera = Arc::new(Mutex::new(Camera2D::default(
@@ -219,7 +217,7 @@ fn main() -> Result<()> {
         .add_system(lighting_2d_uniform_system())
         // Renderer
         .flush()
-        .add_thread_local(forward_render_2d_system(Render2DSystem {
+        .add_system(forward_render_2d_system(Render2DSystem {
             common_vertex_buffers,
             common_index_buffers,
         }))

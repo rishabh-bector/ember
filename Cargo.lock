@@ -567,6 +567,7 @@ dependencies = [
  "pretty_env_logger",
  "rand",
  "regex",
+ "uuid",
  "wgpu",
  "winit",
  "winit_input_helper",

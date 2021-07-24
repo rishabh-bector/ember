@@ -112,6 +112,7 @@ impl GpuStateBuilder {
 
         // Build all render pipelines
         debug!("Building render pipelines");
+        let texture_bind_group_layout = store_builder.build(&device, &queue)?;
         let queue = Arc::new(queue);
         let pipelines = self
             .pipeline_builders
@@ -122,7 +123,7 @@ impl GpuStateBuilder {
                     &device,
                     Arc::clone(&queue),
                     &chain_descriptor,
-                    store_builder.build(&device, &queue)?,
+                    &texture_bind_group_layout,
                 )
             })
             .collect::<Result<Vec<Pipeline>>>()?;
