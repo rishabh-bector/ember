@@ -71,7 +71,7 @@ pub fn base_2d_uniform(
 
     let mut query = <(&Base2D, &Position2D)>::query();
 
-    base_uniforms_group.begin_dynamic_loading(0);
+    base_uniforms_group.begin_dynamic_loading();
     for (base_2d, pos) in query.iter_mut(world) {
         base_uniforms.mut_ref().model = [pos.x, pos.y, base_2d.width, base_2d.height];
         base_uniforms.mut_ref().color = base_2d.color;

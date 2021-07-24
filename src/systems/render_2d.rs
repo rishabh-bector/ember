@@ -1,16 +1,16 @@
+use legion::{world::SubWorld, IntoQuery};
+use std::sync::{Arc, Mutex};
+
 use crate::{
     component::Position2D,
     render::{
         buffer::{IndexBuffer, VertexBuffer},
-        uniform::{GenericUniform, Uniform, UniformGroup},
+        uniform::UniformGroup,
         GpuState,
     },
     resources::store::TextureStore,
     systems::{base_2d::*, camera_2d::*, lighting_2d::*},
 };
-
-use legion::{world::SubWorld, IntoQuery};
-use std::sync::{Arc, Mutex, MutexGuard};
 
 pub struct Render2DSystem {
     pub common_vertex_buffers: [VertexBuffer; 1],
@@ -18,141 +18,6 @@ pub struct Render2DSystem {
 }
 
 // Draw all Base2D components //
-
-#[system]
-#[read_component(Position2D)]
-#[read_component(Base2D)]
-pub fn render_2d(
-    world: &mut SubWorld,
-    #[state] state: &Render2DSystem,
-    #[resource] gpu: &Arc<Mutex<GpuState>>,
-    #[resource] texture_store: &Arc<Mutex<TextureStore>>,
-    #[resource] base_2d_uniforms_group: &Arc<Mutex<UniformGroup<Base2DUniformGroup>>>,
-    #[resource] camera_2d_uniforms_group: &Arc<Mutex<UniformGroup<Camera2DUniformGroup>>>,
-    #[resource] lighting_2d_uniforms_group: &Arc<Mutex<UniformGroup<Lighting2DUniformGroup>>>,
-    #[resource] base_2d_uniforms: &Arc<Mutex<GenericUniform<Base2DUniforms>>>,
-    #[resource] camera_2d_uniforms: &Arc<Mutex<GenericUniform<Camera2DUniforms>>>,
-    #[resource] lighting_2d_uniforms: &Arc<Mutex<GenericUniform<Lighting2DUniforms>>>,
-) {
-    let gpu = gpu.lock().unwrap();
-    let texture_store = texture_store.lock().unwrap();
-
-    let base_2d_uniforms_group: MutexGuard<UniformGroup<Base2DUniformGroup>> =
-        base_2d_uniforms_group.lock().unwrap();
-    let mut base_2d_uniforms = base_2d_uniforms.lock().unwrap();
-
-    let camera_2d_uniforms_group = camera_2d_uniforms_group.lock().unwrap();
-    let camera_2d_uniforms = camera_2d_uniforms.lock().unwrap();
-
-    let lighting_2d_uniforms = lighting_2d_uniforms.lock().unwrap();
-    let lighting_2d_uniforms_group = lighting_2d_uniforms_group.lock().unwrap();
-
-    // Begin render pass //
-
-    // Per-pass logic //
-
-    let mut b2doffset = 0 as u32;
-    let mut camoffset = 0 as u32;
-
-    // lighting_2d_uniforms.load_buffer(&lighting_2d_uniforms_group.buffers[0], &gpu.queue, 0);
-
-    let frame = gpu.swap_chain.get_current_frame().unwrap().output;
-    let mut encoder = gpu
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render2D Encoder"),
-        });
-
-    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Render2D Pass"),
-        color_attachments: &[wgpu::RenderPassColorAttachment {
-            view: &frame.view,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: 0.0,
-                    g: 0.0,
-                    b: 0.0,
-                    a: 0.0,
-                }),
-                store: true,
-            },
-        }],
-        depth_stencil_attachment: None,
-    });
-    render_pass.set_pipeline(&gpu.pipelines[0].pipeline);
-
-    render_pass.set_bind_group(3, &lighting_2d_uniforms_group.bind_group, &[0]);
-
-    // Set buffers
-    debug!("Setting common vertex buffer");
-    render_pass.set_vertex_buffer(0, state.common_vertex_buffers[0].buffer.slice(..));
-
-    debug!("Setting common index buffer");
-    render_pass.set_index_buffer(
-        state.common_index_buffers[0].buffer.slice(..),
-        wgpu::IndexFormat::Uint16,
-    );
-
-    // Per-entity logic //
-
-    let mut query = <(&Base2D, &Position2D)>::query();
-    for (base_2d, pos) in query.iter_mut(world) {
-        debug!("Loading uniforms for pipeline: Base2D:");
-        base_2d_uniforms.mut_ref().model = [pos.x, pos.y, base_2d.width, base_2d.height];
-        debug!("  - model: {:?}", base_2d_uniforms.mut_ref().model);
-        base_2d_uniforms.mut_ref().color = base_2d.color;
-        debug!("  - color: {:?}", base_2d_uniforms.mut_ref().color);
-        base_2d_uniforms.mut_ref().mix = base_2d.mix;
-        debug!("  - mix: {:?}", base_2d_uniforms.mut_ref().mix);
-
-        debug!("Loading buffer base_2d_uniforms");
-        // base_2d_uniforms.load_buffer(
-        //     &base_2d_uniforms_group.buffers[0],
-        //     &gpu.queue,
-        //     b2doffset as u64,
-        // );
-
-        // debug!("Loading buffer camera_2d_uniforms");
-        // camera_2d_uniforms.load_buffer(
-        //     &camera_2d_uniforms_group.buffers[0],
-        //     &gpu.queue,
-        //     camoffset as u64,
-        // );
-
-        // Set bind groups
-        debug!("Setting bind group texture");
-        render_pass.set_bind_group(
-            0,
-            texture_store.bind_group(&base_2d.texture).expect(&format!(
-                "failed to find referenced texture: {}",
-                base_2d.texture
-            )),
-            &[],
-        );
-        debug!("Setting bind group base_2d_uniforms_group");
-        render_pass.set_bind_group(1, &base_2d_uniforms_group.bind_group, &[b2doffset]);
-        debug!("Setting bind group camera_2d_uniforms_group");
-        render_pass.set_bind_group(2, &camera_2d_uniforms_group.bind_group, &[camoffset]);
-
-        debug!("Updating offsets");
-        b2doffset += base_2d_uniforms.buffer_size();
-        camoffset += camera_2d_uniforms.buffer_size();
-
-        // Run pipeline
-        debug!("Recording draw call");
-        render_pass.draw_indexed(
-            0..state.common_index_buffers[base_2d.common_index_buffer].size,
-            0,
-            0..1,
-        );
-    }
-
-    // Submit render pass //
-
-    drop(render_pass);
-    gpu.queue.submit(std::iter::once(encoder.finish()));
-}
 
 #[system]
 #[read_component(Base2D)]
@@ -168,9 +33,11 @@ pub fn forward_render_2d(
 ) {
     let gpu = gpu.lock().unwrap();
     let texture_store = texture_store.lock().unwrap();
-    let base_2d_uniforms_group = base_2d_uniforms_group.lock().unwrap();
+    let mut base_2d_uniforms_group = base_2d_uniforms_group.lock().unwrap();
     let camera_2d_uniforms_group = camera_2d_uniforms_group.lock().unwrap();
     let lighting_2d_uniforms_group = lighting_2d_uniforms_group.lock().unwrap();
+
+    let base_2d_bind_group = base_2d_uniforms_group.bind_group();
 
     let frame = gpu.swap_chain.get_current_frame().unwrap().output;
     let mut encoder = gpu
@@ -200,6 +67,14 @@ pub fn forward_render_2d(
     // Common bindings
     render_pass.set_pipeline(&gpu.pipelines[0].pipeline);
 
+    render_pass.set_bind_group(
+        0,
+        texture_store.bind_group("test").expect(&format!(
+            "failed to find referenced texture: {}",
+            "test" // base_2d.texture
+        )),
+        &[],
+    );
     render_pass.set_bind_group(2, &camera_2d_uniforms_group.bind_group, &[]);
     render_pass.set_bind_group(3, &lighting_2d_uniforms_group.bind_group, &[]);
 
@@ -210,28 +85,16 @@ pub fn forward_render_2d(
     );
 
     // Dynamic bindings
-
-    let mut b2doffset = 0 as u32;
+    base_2d_uniforms_group.begin_dynamic_loading();
 
     let mut query = <(&Base2D, &Position2D)>::query();
     for (base_2d, _pos) in query.iter_mut(world) {
-        // Set bind groups
-        debug!("Setting bind group texture");
         render_pass.set_bind_group(
-            0,
-            texture_store.bind_group(&base_2d.texture).expect(&format!(
-                "failed to find referenced texture: {}",
-                base_2d.texture
-            )),
-            &[],
+            1,
+            &base_2d_bind_group,
+            &[base_2d_uniforms_group.increase_offset(0)],
         );
-        debug!("Setting bind group base_2d_uniforms_group");
-        render_pass.set_bind_group(1, &base_2d_uniforms_group.bind_group, &[b2doffset]);
 
-        debug!("Updating offsets");
-        b2doffset += base_2d_uniforms_group.dynamic_offset_sizes[0] as u32;
-
-        // Run pipeline
         debug!("Recording draw call");
         render_pass.draw_indexed(
             0..state.common_index_buffers[base_2d.common_index_buffer].size,

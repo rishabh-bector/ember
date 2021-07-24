@@ -24,7 +24,7 @@ pub trait Group {
 
 pub struct UniformGroup<N> {
     pub buffers: Vec<wgpu::Buffer>,
-    pub bind_group: wgpu::BindGroup,
+    pub bind_group: Arc<wgpu::BindGroup>,
 
     pub dynamic_offset_limits: Vec<u64>,
     pub dynamic_offset_sizes: Vec<u64>,
@@ -44,17 +44,26 @@ impl<N> UniformGroup<N> {
             .write_buffer(&self.buffers[index], 0, source_bytes)
     }
 
-    pub fn begin_dynamic_loading(&mut self, index: usize) {
-        self.dynamic_offset_state[index] = 0;
+    pub fn begin_dynamic_loading(&mut self) {
+        self.dynamic_offset_state.iter_mut().for_each(|i| *i = 0);
     }
 
     pub fn load_dynamic_uniform(&mut self, index: usize, source_bytes: &[u8]) {
-        self.queue.write_buffer(
-            &self.buffers[index],
-            self.dynamic_offset_state[index],
-            source_bytes,
-        );
+        for i in 0..self.buffers.len() {
+            self.queue
+                .write_buffer(&self.buffers[i], self.dynamic_offset_state[i], source_bytes);
+            self.increase_offset(i);
+        }
+    }
+
+    pub fn increase_offset(&mut self, index: usize) -> u32 {
+        let old = self.dynamic_offset_state[index];
         self.dynamic_offset_state[index] += self.dynamic_offset_sizes[index];
+        old as u32
+    }
+
+    pub fn bind_group(&self) -> Arc<wgpu::BindGroup> {
+        Arc::clone(&self.bind_group)
     }
 }
 
@@ -183,7 +192,7 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
             dynamic_offset_sizes: buffer_states.iter().map(|s| s.element_size).collect(),
             dynamic_offset_limits: buffer_states.iter().map(|s| s.max_elements).collect(),
             buffers: buffer_states.into_iter().map(|s| s.buffer).collect(),
-            bind_group,
+            bind_group: Arc::new(bind_group),
             queue,
             _marker: PhantomData,
         })));
