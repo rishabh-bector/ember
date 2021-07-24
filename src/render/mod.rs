@@ -1,3 +1,5 @@
+use std::{rc::Rc, sync::Arc};
+
 use anyhow::{anyhow, Result};
 use winit::window::Window;
 
@@ -8,21 +10,21 @@ pub mod uniform;
 
 use crate::{
     render::pipeline::{Pipeline, PipelineBuilder},
-    resources::store::TextureStoreBuilder,
+    resources::{store::TextureStoreBuilder, ui::UI},
 };
 
 pub struct GpuState {
     pub surface: wgpu::Surface,
     pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
+    pub queue: Arc<wgpu::Queue>,
     pub chain_descriptor: wgpu::SwapChainDescriptor,
     pub swap_chain: wgpu::SwapChain,
     pub screen_size: (u32, u32),
     pub pipelines: Vec<Pipeline>,
 }
 
-#[derive(Default)]
 pub struct GpuStateBuilder {
+    pub window: Rc<Window>,
     pub screen_size: (u32, u32),
     pub instance: Option<wgpu::Instance>,
     pub surface: Option<wgpu::Surface>,
@@ -30,7 +32,7 @@ pub struct GpuStateBuilder {
 }
 
 impl GpuStateBuilder {
-    pub fn winit(window: &Window) -> Self {
+    pub fn winit(window: Rc<Window>) -> Self {
         let size = window.inner_size();
 
         // Instance is a handle to the GPU
@@ -38,13 +40,14 @@ impl GpuStateBuilder {
         let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
 
         // Surface is used to create a swap chain
-        let surface = unsafe { instance.create_surface(window) };
+        let surface = unsafe { instance.create_surface(window.as_ref()) };
 
         Self {
+            window,
             screen_size: (size.width, size.height),
             instance: Some(instance),
             surface: Some(surface),
-            ..Default::default()
+            pipeline_builders: vec![],
         }
     }
 
@@ -109,6 +112,7 @@ impl GpuStateBuilder {
 
         // Build all render pipelines
         debug!("Building render pipelines");
+        let queue = Arc::new(queue);
         let pipelines = self
             .pipeline_builders
             .into_iter()
@@ -116,6 +120,7 @@ impl GpuStateBuilder {
                 builder.build(
                     resources,
                     &device,
+                    Arc::clone(&queue),
                     &chain_descriptor,
                     store_builder.build(&device, &queue)?,
                 )
@@ -124,6 +129,9 @@ impl GpuStateBuilder {
 
         // Add TextureStore to system resources
         store_builder.build_to_resource(resources);
+
+        // Build UI
+        let ui = UI::new(self.window.as_ref(), &device, &queue);
 
         Ok(GpuState {
             screen_size: self.screen_size,
@@ -147,3 +155,5 @@ impl GpuState {
             .create_swap_chain(&self.surface, &self.chain_descriptor);
     }
 }
+
+// -----------------------------------------------------------

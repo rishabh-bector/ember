@@ -60,6 +60,7 @@ impl PipelineBuilder {
         self,
         resources: &mut Resources,
         device: &wgpu::Device,
+        queue: Arc<wgpu::Queue>,
         chain_desc: &wgpu::SwapChainDescriptor,
         texture_bind_group_layout: wgpu::BindGroupLayout,
     ) -> Result<Pipeline> {
@@ -77,12 +78,13 @@ impl PipelineBuilder {
             .map(|bind_index| {
                 Ok(match *bind_index {
                     BindIndex::Texture(_) => None,
-                    BindIndex::Uniform(i) => Some(
-                        self.uniform_group_builders[i]
-                            .lock()
-                            .unwrap()
-                            .build(device, resources)?,
-                    ),
+                    BindIndex::Uniform(i) => {
+                        Some(self.uniform_group_builders[i].lock().unwrap().build(
+                            device,
+                            resources,
+                            Arc::clone(&queue),
+                        )?)
+                    }
                 })
             })
             .collect::<Result<Vec<Option<wgpu::BindGroupLayout>>>>()?;

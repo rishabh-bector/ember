@@ -2,7 +2,10 @@ use std::sync::{Arc, Mutex};
 
 use legion::{world::SubWorld, IntoQuery};
 
-use crate::{component::Position2D, render::uniform::GenericUniform};
+use crate::{
+    component::Position2D,
+    render::uniform::{GenericUniform, Uniform, UniformGroup},
+};
 
 pub struct Lighting2DUniformGroup {}
 
@@ -35,11 +38,11 @@ pub fn lighting_2d(
     for (light, pos) in query.iter_mut(world) {
         let flat = [pos.x, pos.y, light.linear, light.quadratic];
         match i {
-            0 => forms.source.light_0 = flat,
-            1 => forms.source.light_1 = flat,
-            2 => forms.source.light_2 = flat,
-            3 => forms.source.light_3 = flat,
-            4 => forms.source.light_4 = flat,
+            0 => forms.mut_ref().light_0 = flat,
+            1 => forms.mut_ref().light_1 = flat,
+            2 => forms.mut_ref().light_2 = flat,
+            3 => forms.mut_ref().light_3 = flat,
+            4 => forms.mut_ref().light_4 = flat,
             _ => {}
         }
         i += 1;
@@ -47,4 +50,15 @@ pub fn lighting_2d(
             break;
         }
     }
+}
+
+#[system]
+pub fn lighting_2d_uniform(
+    #[resource] lighting_uniforms: &Arc<Mutex<GenericUniform<Lighting2DUniforms>>>,
+    #[resource] lighting_uniforms_group: &Arc<Mutex<UniformGroup<Lighting2DUniformGroup>>>,
+) {
+    lighting_uniforms_group
+        .lock()
+        .unwrap()
+        .load_uniform(0, lighting_uniforms.lock().unwrap().as_bytes());
 }

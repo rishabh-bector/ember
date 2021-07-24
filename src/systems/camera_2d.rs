@@ -1,7 +1,10 @@
 use cgmath::Matrix2;
 use std::sync::{Arc, Mutex};
 
-use crate::{render::uniform::GenericUniform, resources::camera::Camera2D};
+use crate::{
+    render::uniform::{GenericUniform, Uniform, UniformGroup},
+    resources::camera::Camera2D,
+};
 
 pub struct Camera2DUniformGroup {}
 
@@ -16,12 +19,24 @@ pub struct Camera2DUniforms {
 #[system]
 pub fn camera_2d(
     #[resource] camera: &Arc<Mutex<Camera2D>>,
-    #[resource] camera_uniforms: &Arc<Mutex<GenericUniform<Camera2DUniforms>>>,
+    #[resource] camera_uniform: &Arc<Mutex<GenericUniform<Camera2DUniforms>>>,
 ) {
     let camera = camera.lock().unwrap();
-    let mut uniforms = camera_uniforms.lock().unwrap();
+    let mut camera_uniform = camera_uniform.lock().unwrap();
 
-    uniforms.source.view = [camera.pos.x, camera.pos.y, camera.size.x, camera.size.y];
+    camera_uniform.mut_ref().view = [camera.pos.x, camera.pos.y, camera.size.x, camera.size.y];
+}
+
+// TODO: Make this a macro?
+#[system]
+pub fn camera_2d_uniform(
+    #[resource] camera_uniform: &Arc<Mutex<GenericUniform<Camera2DUniforms>>>,
+    #[resource] camera_uniform_group: &Arc<Mutex<UniformGroup<Camera2DUniformGroup>>>,
+) {
+    camera_uniform_group
+        .lock()
+        .unwrap()
+        .load_uniform(0, camera_uniform.lock().unwrap().as_bytes());
 }
 
 pub fn _flatten(mat: Matrix2<f32>) -> [f32; 4] {

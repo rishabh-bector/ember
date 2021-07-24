@@ -6,7 +6,7 @@ use std::{
     marker::PhantomData,
     mem::size_of,
     num::NonZeroU64,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
 };
 use wgpu::{util::DeviceExt, BindGroupEntry};
 
@@ -26,15 +26,35 @@ pub struct UniformGroup<N> {
     pub buffers: Vec<wgpu::Buffer>,
     pub bind_group: wgpu::BindGroup,
 
-    pub dynamic_offset_limits: Vec<u32>,
-    pub dynamic_offset_sizes: Vec<u32>,
+    pub dynamic_offset_limits: Vec<u64>,
+    pub dynamic_offset_sizes: Vec<u64>,
+    pub dynamic_offset_state: Vec<u64>,
 
+    pub queue: Arc<wgpu::Queue>,
     _marker: PhantomData<N>,
 }
 
 impl<N> UniformGroup<N> {
     pub fn builder() -> UniformGroupBuilder<N> {
         UniformGroupBuilder::new()
+    }
+
+    pub fn load_uniform(&self, index: usize, source_bytes: &[u8]) {
+        self.queue
+            .write_buffer(&self.buffers[index], 0, source_bytes)
+    }
+
+    pub fn begin_dynamic_loading(&mut self, index: usize) {
+        self.dynamic_offset_state[index] = 0;
+    }
+
+    pub fn load_dynamic_uniform(&mut self, index: usize, source_bytes: &[u8]) {
+        self.queue.write_buffer(
+            &self.buffers[index],
+            self.dynamic_offset_state[index],
+            source_bytes,
+        );
+        self.dynamic_offset_state[index] += self.dynamic_offset_sizes[index];
     }
 }
 
@@ -47,6 +67,7 @@ pub trait GroupBuilder {
         &mut self,
         device: &wgpu::Device,
         resources: &mut Resources,
+        queue: Arc<wgpu::Queue>,
     ) -> Result<wgpu::BindGroupLayout>;
 }
 
@@ -90,6 +111,7 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
         &mut self,
         device: &wgpu::Device,
         resources: &mut Resources,
+        queue: Arc<wgpu::Queue>,
     ) -> Result<wgpu::BindGroupLayout> {
         debug!("UniformGroupBuilder: building {}", type_name::<N>());
 
@@ -106,17 +128,24 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
             .collect();
 
         let entries: Vec<wgpu::BindGroupLayoutEntry> = (0..buffer_states.len())
-            .map(|i| wgpu::BindGroupLayoutEntry {
-                binding: i as u32,
-                visibility: wgpu::ShaderStage::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: true,
-                    min_binding_size: Some(
-                        NonZeroU64::new(DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE).unwrap(),
-                    ),
-                },
-                count: None,
+            .map(|i| {
+                let has_dynamic_offset = buffer_states[i].max_elements != 1;
+                let min_binding_size = NonZeroU64::new(match has_dynamic_offset {
+                    false => buffer_states[i].element_size as u64,
+                    true => DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE,
+                })
+                .unwrap();
+
+                wgpu::BindGroupLayoutEntry {
+                    binding: i as u32,
+                    visibility: wgpu::ShaderStage::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset,
+                        min_binding_size: Some(min_binding_size),
+                    },
+                    count: None,
+                }
             })
             .collect();
 
@@ -130,8 +159,16 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
             entries: &(0..buffer_states.len())
                 .map(|i| {
                     let mut buffer_binding = buffer_states[i].buffer.as_entire_buffer_binding();
-                    buffer_binding.size =
-                        Some(NonZeroU64::new(DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE).unwrap());
+                    let has_dynamic_offset = buffer_states[i].max_elements != 1;
+
+                    buffer_binding.size = Some(
+                        NonZeroU64::new(match has_dynamic_offset {
+                            false => buffer_states[i].element_size as u64,
+                            true => DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE,
+                        })
+                        .unwrap(),
+                    );
+
                     wgpu::BindGroupEntry {
                         binding: i as u32,
                         resource: wgpu::BindingResource::Buffer(buffer_binding),
@@ -142,10 +179,12 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
         });
 
         self.dest = Some(Arc::new(Mutex::new(UniformGroup {
+            dynamic_offset_state: std::iter::repeat(0).take(buffer_states.len()).collect(),
             dynamic_offset_sizes: buffer_states.iter().map(|s| s.element_size).collect(),
             dynamic_offset_limits: buffer_states.iter().map(|s| s.max_elements).collect(),
             buffers: buffer_states.into_iter().map(|s| s.buffer).collect(),
             bind_group,
+            queue,
             _marker: PhantomData,
         })));
 
@@ -174,15 +213,12 @@ pub trait UniformBuilder: ResourceBuilder {
     fn build_buffer(&mut self, device: &wgpu::Device) -> BufferState;
 }
 
-pub trait Uniform {
-    fn load_buffer(&self, buffer: &wgpu::Buffer, queue: &wgpu::Queue, offset: wgpu::BufferAddress);
-}
-
 pub struct GenericUniformBuilder<U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug> {
     pub source: Option<U>,
     pub buffer: Option<wgpu::Buffer>,
 
     // Max sources to fit in one buffer
+    pub dynamic: bool,
     pub max_size: Option<u32>,
 
     // Size of one U
@@ -195,17 +231,23 @@ impl<U> GenericUniformBuilder<U>
 where
     U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug,
 {
-    pub fn source(source: U) -> Self {
+    pub fn from_source(source: U) -> Self {
         Self {
             source: Some(source),
             buffer: None,
             max_size: None,
             size: size_of::<U>() as u32,
-            dest: Some(Arc::new(Mutex::new(GenericUniform { source }))),
+            dest: None,
+            dynamic: false,
         }
     }
 
-    pub fn max_dynamic_entities(mut self, max: u32) -> Self {
+    pub fn enable_dynamic_buffering(mut self) -> Self {
+        self.dynamic = true;
+        self
+    }
+
+    pub fn with_dynamic_entity_limit(mut self, max: u32) -> Self {
         self.max_size = Some(max);
         self
     }
@@ -222,8 +264,8 @@ where
 
 pub struct BufferState {
     buffer: wgpu::Buffer,
-    element_size: u32,
-    max_elements: u32,
+    element_size: u64,
+    max_elements: u64,
 }
 
 impl<U> UniformBuilder for GenericUniformBuilder<U>
@@ -233,13 +275,21 @@ where
     fn build_buffer(&mut self, device: &wgpu::Device) -> BufferState {
         let source = &[self.source.unwrap()];
 
-        let max_elements = self
-            .max_size
-            .unwrap_or(DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS);
+        let max_elements = match self.dynamic {
+            false => 1,
+            true => self
+                .max_size
+                .unwrap_or(DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS),
+        };
 
         let source_bytes = bytemuck::cast_slice(source);
         let source_size = source_bytes.len();
         let source_bytes = source_bytes.repeat(max_elements as usize);
+
+        self.dest = Some(Arc::new(Mutex::new(GenericUniform {
+            source: [self.source.unwrap()],
+            dynamic: self.dynamic,
+        })));
 
         BufferState {
             buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -247,31 +297,44 @@ where
                 contents: &source_bytes,
                 usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
             }),
-            element_size: source_size as u32,
-            max_elements,
+            element_size: source_size as u64,
+            max_elements: max_elements as u64,
         }
     }
 }
 
-impl<U> Uniform for GenericUniform<U>
-where
-    U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug,
-{
-    fn load_buffer(&self, buffer: &wgpu::Buffer, queue: &wgpu::Queue, offset: wgpu::BufferAddress) {
-        queue.write_buffer(buffer, offset, bytemuck::cast_slice(&[self.source]));
-    }
-}
-
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct GenericUniform<U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug> {
-    pub source: U,
+    pub source: [U; 1],
+    pub dynamic: bool,
 }
 
 impl<U> GenericUniform<U>
 where
     U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug,
 {
+    pub fn mut_ref(&mut self) -> &mut U {
+        &mut self.source[0]
+    }
+
     pub fn buffer_size(&self) -> u32 {
         size_of::<U>() as u32
+    }
+
+    pub fn to_bytes(source: &[U]) -> &[u8] {
+        bytemuck::cast_slice(source)
+    }
+}
+
+pub trait Uniform {
+    fn as_bytes(&self) -> &[u8];
+}
+
+impl<U> Uniform for GenericUniform<U>
+where
+    U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug,
+{
+    fn as_bytes(&self) -> &[u8] {
+        bytemuck::cast_slice(&self.source)
     }
 }

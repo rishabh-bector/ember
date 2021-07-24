@@ -1,0 +1,35 @@
+Q:  what is a render graph?
+A:  
+a render graph is a description of every render pass
+that occurs during a frame. A render pass can:
+- draw some objects to a buffer via some pipeline
+  (this is described in gpu.txt; it is the "BEGIN RENDER PASS" section)
+  example: the current render_2d function, which draws all Render2D components; or
+- simply take some existing buffer, and transform it into another
+  example: currently nonexisting but planned post processing passes
+        currently nonexisting but planned deferred render systems 
+            (e.g rename render_2d to forward_render_2d, and make a new
+                deferred_render_2d, which uses an entirely different render graph)
+there can be:
+- many "channel" passes (1 -> 1), which simply operate on and modify an existing texture target
+- many "assembly" passes (* -> 1), which operate on several existing texture targets, and output to
+    an existing target
+
+thus, a render graph can be defined in the following way:
+
+pass {
+    type: channel | assembly,
+    pipeline: Pipeline{},
+
+    fn run(targets: vec<texture>) 
+}
+
+- each render pass can and should be recorded concurrently
+- therefore, it makes sense to keep the logic in a system, like render_2d
+- 
+
+
+Figure out format later:
+    ensure 3 texture buffers exist: T0, T1, and T2
+    (T0 -> channel)  
+
