@@ -2,6 +2,8 @@ use anyhow::{anyhow, Result};
 use legion::Resources;
 use std::sync::{Arc, Mutex};
 
+use crate::resources::store::{BindMap, TextureGroup, TextureStore};
+
 use super::uniform::GroupResourceBuilder;
 
 pub enum ShaderSource {
@@ -12,13 +14,13 @@ pub enum ShaderSource {
 pub struct Pipeline {
     pub pipeline: wgpu::RenderPipeline,
     pub shader_module: wgpu::ShaderModule,
+    pub texture_binds: BindMap,
 }
 
 pub enum BindIndex {
     Uniform(usize),
-    Texture(usize),
+    Texture(TextureGroup),
 }
-
 /// Builder for easily creating flexible wgpu render pipelines
 
 pub struct PipelineBuilder {
@@ -46,8 +48,8 @@ impl PipelineBuilder {
         self
     }
 
-    pub fn texture_group(mut self) -> Self {
-        self.bind_groups.push(BindIndex::Texture(0));
+    pub fn texture_group(mut self, group: TextureGroup) -> Self {
+        self.bind_groups.push(BindIndex::Texture(group));
         self
     }
 
@@ -63,6 +65,7 @@ impl PipelineBuilder {
         queue: Arc<wgpu::Queue>,
         chain_desc: &wgpu::SwapChainDescriptor,
         texture_bind_group_layout: &wgpu::BindGroupLayout,
+        texture_store: Arc<Mutex<TextureStore>>,
     ) -> Result<Pipeline> {
         if self.vertex_buffer_layouts.len() == 0 {
             return Err(anyhow!(
@@ -143,7 +146,22 @@ impl PipelineBuilder {
             builder.lock().unwrap().build_to_resource(resources);
         }
 
+        let texture_groups_needed: Vec<TextureGroup> = self
+            .bind_groups
+            .into_iter()
+            .filter_map(|bind| match bind {
+                BindIndex::Texture(group) => Some(group),
+                _ => None,
+            })
+            .collect();
+
+        let bind_map = texture_store
+            .lock()
+            .unwrap()
+            .build_bind_map(texture_groups_needed.as_slice());
+
         Ok(Pipeline {
+            texture_binds: bind_map,
             pipeline,
             shader_module,
         })

@@ -110,9 +110,11 @@ impl GpuStateBuilder {
         };
         let swap_chain = device.create_swap_chain(&surface, &chain_descriptor);
 
+        // Build textures
+        let (texture_store, texture_bind_group_layout) = store_builder.build(&device, &queue)?;
+
         // Build all render pipelines
         debug!("Building render pipelines");
-        let texture_bind_group_layout = store_builder.build(&device, &queue)?;
         let queue = Arc::new(queue);
         let pipelines = self
             .pipeline_builders
@@ -124,12 +126,13 @@ impl GpuStateBuilder {
                     Arc::clone(&queue),
                     &chain_descriptor,
                     &texture_bind_group_layout,
+                    Arc::clone(&texture_store),
                 )
             })
             .collect::<Result<Vec<Pipeline>>>()?;
 
         // Add TextureStore to system resources
-        store_builder.build_to_resource(resources);
+        store_builder.build_to_resources(resources);
 
         // Build UI
         let ui = UI::new(self.window.as_ref(), &device, &queue);

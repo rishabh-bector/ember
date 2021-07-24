@@ -12,7 +12,6 @@ use crate::render::texture::Texture;
 
 pub struct TextureStore {
     pub textures: HashMap<TextureGroup, HashMap<Uuid, Texture>>,
-    pub groups: Vec<Arc<BindMap>>,
 }
 
 #[derive(Default)]
@@ -45,7 +44,7 @@ impl TextureStoreBuilder {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> Result<wgpu::BindGroupLayout> {
+    ) -> Result<(Arc<Mutex<TextureStore>>, wgpu::BindGroupLayout)> {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
@@ -89,18 +88,14 @@ impl TextureStoreBuilder {
             textures.insert(*group, group_textures);
         }
 
-        let groups: Vec<Arc<BindMap>> = textures
-            .iter()
-            .map(BindMap::from)
-            .map(|bm| Arc::new(bm))
-            .collect();
-
-        self.texture_store = Some(Arc::new(Mutex::new(TextureStore { textures, groups })));
-
-        Ok(bind_group_layout)
+        self.texture_store = Some(Arc::new(Mutex::new(TextureStore { textures })));
+        Ok((
+            Arc::clone(self.texture_store.as_ref().unwrap()),
+            bind_group_layout,
+        ))
     }
 
-    pub fn build_to_resource(&self, resources: &mut Resources) {
+    pub fn build_to_resources(&self, resources: &mut Resources) {
         resources
             .insert::<Arc<Mutex<TextureStore>>>(Arc::clone(self.texture_store.as_ref().unwrap()));
     }
@@ -110,6 +105,14 @@ impl TextureStore {
     // pub fn bind_group(&self,  name: &str) -> Option<&wgpu::BindGroup> {
     //     self.textures.get(name).map(|t| &t.bind_group)
     // }
+
+    pub fn build_bind_map(&self, groups: &[TextureGroup]) -> BindMap {
+        let mut bind_map = BindMap::new();
+        for group in groups {
+            bind_map.add_texture_group(&self.textures[&group])
+        }
+        bind_map
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -124,20 +127,27 @@ impl Default for TextureGroup {
     }
 }
 
+#[derive(Clone)]
 pub struct BindMap {
-    texture_group: TextureGroup,
     bind_groups: HashMap<Uuid, Arc<wgpu::BindGroup>>,
 }
 
-impl From<(&TextureGroup, &HashMap<Uuid, Texture>)> for BindMap {
-    fn from(info: (&TextureGroup, &HashMap<Uuid, Texture>)) -> Self {
+impl BindMap {
+    pub fn new() -> Self {
         Self {
-            texture_group: *info.0,
-            bind_groups: info
-                .1
-                .into_iter()
-                .map(|(id, tex)| (*id, Arc::clone(&tex.bind_group)))
-                .collect::<HashMap<Uuid, Arc<wgpu::BindGroup>>>(),
+            bind_groups: HashMap::new(),
         }
+    }
+
+    pub fn add_texture_group(&mut self, textures: &HashMap<Uuid, Texture>) {
+        self.bind_groups.extend(
+            textures
+                .iter()
+                .map(|(id, tex)| (*id, Arc::clone(&tex.bind_group))),
+        );
+    }
+
+    pub fn add_uniform_group(&mut self, id: Uuid, group: Arc<wgpu::BindGroup>) {
+        self.bind_groups.insert(id, group);
     }
 }

@@ -98,7 +98,7 @@ fn main() -> Result<()> {
     let base_2d_pipeline = PipelineBuilder::new(ShaderSource::WGSL(
         include_str!("render/shaders/base2D.wgsl").to_owned(),
     ))
-    .texture_group()
+    .texture_group(resources::store::TextureGroup::Base2D)
     .uniform_group(base_2d_uniforms)
     .uniform_group(camera_2d_uniforms)
     .uniform_group(lighting_2d_uniforms)
@@ -220,6 +220,7 @@ fn main() -> Result<()> {
         .add_system(forward_render_2d_system(Render2DSystem {
             common_vertex_buffers,
             common_index_buffers,
+            bind_map: gpu_state.lock().unwrap().pipelines[0].texture_binds.clone(),
         }))
         .build();
 

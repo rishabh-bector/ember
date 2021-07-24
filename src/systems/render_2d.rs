@@ -8,14 +8,14 @@ use crate::{
         uniform::UniformGroup,
         GpuState,
     },
-    resources::store::TextureStore,
+    resources::store::{BindMap, TextureStore},
     systems::{base_2d::*, camera_2d::*, lighting_2d::*},
 };
 
 pub struct Render2DSystem {
     pub common_vertex_buffers: [VertexBuffer; 1],
     pub common_index_buffers: [IndexBuffer; 1],
-    pub bind_map: 
+    pub bind_map: BindMap,
 }
 
 // Draw all Base2D components //
@@ -27,13 +27,11 @@ pub fn forward_render_2d(
     world: &mut SubWorld,
     #[state] state: &Render2DSystem,
     #[resource] gpu: &Arc<Mutex<GpuState>>,
-    #[resource] texture_store: &Arc<Mutex<TextureStore>>,
     #[resource] base_2d_uniforms_group: &Arc<Mutex<UniformGroup<Base2DUniformGroup>>>,
     #[resource] camera_2d_uniforms_group: &Arc<Mutex<UniformGroup<Camera2DUniformGroup>>>,
     #[resource] lighting_2d_uniforms_group: &Arc<Mutex<UniformGroup<Lighting2DUniformGroup>>>,
 ) {
     let gpu = gpu.lock().unwrap();
-    let texture_store = texture_store.lock().unwrap();
     let mut base_2d_uniforms_group = base_2d_uniforms_group.lock().unwrap();
     let camera_2d_uniforms_group = camera_2d_uniforms_group.lock().unwrap();
     let lighting_2d_uniforms_group = lighting_2d_uniforms_group.lock().unwrap();
