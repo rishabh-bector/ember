@@ -1,9 +1,16 @@
-use std::{rc::Rc, sync::Arc};
+use std::{
+    collections::HashMap,
+    marker::PhantomData,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::{anyhow, Result};
+use uuid::Uuid;
 use winit::window::Window;
 
 pub mod buffer;
+pub mod graph;
 pub mod pipeline;
 pub mod texture;
 pub mod uniform;
@@ -13,6 +20,8 @@ use crate::{
     resources::{store::TextureStoreBuilder, ui::UI},
 };
 
+use self::{pipeline::PipelineBinder, texture::Texture};
+
 pub struct GpuState {
     pub surface: wgpu::Surface,
     pub device: wgpu::Device,
@@ -20,6 +29,7 @@ pub struct GpuState {
     pub chain_descriptor: wgpu::SwapChainDescriptor,
     pub swap_chain: wgpu::SwapChain,
     pub screen_size: (u32, u32),
+    pub targets: Vec<Arc<Texture>>,
 }
 
 pub struct GpuStateBuilder {
@@ -99,6 +109,24 @@ impl GpuStateBuilder {
         // Build textures
         let (texture_store, texture_bind_group_layout) = store_builder.build(&device, &queue)?;
 
+        // Build render targets
+        // TODO: Set amount to actual amount
+        let targets = (0..5)
+            .map(|_| {
+                Texture::blank(
+                    // TODO: Make actual config (iwllpart of SHIP: EngineBuilder)
+                    (crate::SCREEN_WIDTH as u32, crate::SCREEN_HEIGHT as u32),
+                    &device,
+                    &queue,
+                    &texture_bind_group_layout,
+                    None,
+                )
+            })
+            .collect::<Result<Vec<Texture>>>()?
+            .into_iter()
+            .map(Arc::new)
+            .collect::<Vec<Arc<Texture>>>();
+
         // Add TextureStore to system resources
         store_builder.build_to_resources(resources);
 
@@ -112,6 +140,7 @@ impl GpuStateBuilder {
             queue: Arc::new(queue),
             chain_descriptor,
             swap_chain,
+            targets,
         })
     }
 }
@@ -128,3 +157,38 @@ impl GpuState {
 }
 
 // -----------------------------------------------------------
+
+pub struct RenderPass<N> {
+    pub pipeline: Arc<Pipeline>,
+    pub encoder: wgpu::CommandEncoder,
+    pub _marker: PhantomData<N>,
+}
+
+// impl<N> RenderPass<N> {
+//     pub fn new(gpu: Arc<Mutex<GpuState>>, pipeline: usize) -> Self {
+
+//     }
+
+//     // pub fn new() -> Self {
+//     //     Self {
+//     //         groups: HashMap::new(),
+//     //         pass: vec![],
+//     //     }
+//     // }
+
+//     // pub fn add_texture_group(&mut self, textures: &HashMap<Uuid, Texture>) {
+//     //     self.groups.extend(
+//     //         textures
+//     //             .iter()
+//     //             .map(|(id, tex)| (*id, Arc::clone(&tex.bind_group))),
+//     //     );
+//     // }
+
+//     // pub fn add_uniform_group(&mut self, id: Uuid, group: Arc<wgpu::BindGroup>) {
+//     //     self.groups.insert(id, group);
+//     // }
+
+//     // pub fn configure_pass(&mut self, indices: Vec<Uuid>) {
+//     //     self.pass = indices;
+//     // }
+// }

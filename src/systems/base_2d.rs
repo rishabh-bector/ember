@@ -1,23 +1,26 @@
 use cgmath::Matrix2;
 use legion::world::SubWorld;
 use legion::IntoQuery;
-use std::sync::{Arc, Mutex};
+use std::{
+    str::FromStr,
+    sync::{Arc, Mutex},
+};
+use uuid::Uuid;
 
 use crate::{
-    component::Position2D,
+    components::Position2D,
+    constants::{
+        BASE_2D_COMMON_INDEX_BUFFER, BASE_2D_COMMON_TEXTURE_ID, BASE_2D_COMMON_VERTEX_BUFFER,
+    },
     render::uniform::{GenericUniform, Uniform, UniformGroup},
 };
-
-pub const BASE_2D_COMMON_TEXTURE: &str = "test";
-pub const BASE_2D_COMMON_VERTEX_BUFFER: usize = 0;
-pub const BASE_2D_COMMON_INDEX_BUFFER: usize = 0;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Base2D {
     pub name: String,
 
     pub color: [f32; 4],
-    pub texture: String,
+    pub texture: Uuid,
     pub mix: f32,
 
     pub width: f32,
@@ -38,7 +41,20 @@ impl Base2D {
             mix: 1.0,
             width,
             height,
-            texture: BASE_2D_COMMON_TEXTURE.to_string(),
+            texture: Uuid::from_str(BASE_2D_COMMON_TEXTURE_ID).unwrap(),
+            common_vertex_buffer: BASE_2D_COMMON_VERTEX_BUFFER,
+            common_index_buffer: BASE_2D_COMMON_INDEX_BUFFER,
+        }
+    }
+
+    pub fn texture(name: &str, texture: Uuid, width: f32, height: f32) -> Self {
+        Base2D {
+            name: name.to_owned(),
+            color: [1.0, 1.0, 1.0, 1.0],
+            mix: 0.0,
+            width,
+            height,
+            texture,
             common_vertex_buffer: BASE_2D_COMMON_VERTEX_BUFFER,
             common_index_buffer: BASE_2D_COMMON_INDEX_BUFFER,
         }

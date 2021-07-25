@@ -1,3 +1,5 @@
+use crate::constants::OPENGL_TO_WGPU_MATRIX;
+
 pub struct Camera3D {
     pub eye: cgmath::Point3<f32>,
     pub target: cgmath::Point3<f32>,
@@ -27,14 +29,6 @@ impl Camera3D {
         return OPENGL_TO_WGPU_MATRIX * proj * view;
     }
 }
-
-#[rustfmt::skip]
-pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
-    1.0, 0.0, 0.0, 0.0,
-    0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 0.5, 0.0,
-    0.0, 0.0, 0.5, 1.0,
-);
 
 pub struct Camera2D {
     pub pos: cgmath::Point2<f32>,

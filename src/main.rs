@@ -11,8 +11,10 @@ use std::{
     env,
     path::PathBuf,
     rc::Rc,
+    str::FromStr,
     sync::{Arc, Mutex},
 };
+use uuid::Uuid;
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -21,13 +23,15 @@ use winit::{
 };
 use winit_input_helper::WinitInputHelper;
 
-mod component;
+mod components;
+mod constants;
 mod render;
 mod resources;
 mod systems;
 
 use crate::{
-    component::{Position2D, Velocity2D},
+    components::{Position2D, Velocity2D},
+    constants::{BASE_2D_COMMON_TEXTURE_ID, CAMERA_2D_BIND_GROUP_ID},
     render::{buffer::*, pipeline::*, uniform::*, *},
     resources::{camera::Camera2D, store::TextureStoreBuilder},
     systems::{base_2d::*, camera_2d::*, lighting_2d::*, physics_2d::*, render_2d::*},
@@ -63,37 +67,37 @@ fn main() -> Result<()> {
             .build(&event_loop)?
     });
 
-    let base_2d_uniforms = UniformGroup::<Base2DUniformGroup>::builder().uniform(
-        GenericUniformBuilder::from_source(Base2DUniforms {
-            model: [0.0, 0.0, 1.0, 1.0],
-            color: [1.0, 1.0, 1.0, 1.0],
-            mix: 1.0,
-            _padding: [0.0; 32],
-            __padding: [0.0; 23],
-        })
-        .enable_dynamic_buffering()
-        .with_dynamic_entity_limit(96),
-    );
+    let base_2d_uniforms = UniformGroup::<Base2DUniformGroup>::builder()
+        .with_uniform(
+            GenericUniformBuilder::from_source(Base2DUniforms {
+                model: [0.0, 0.0, 1.0, 1.0],
+                color: [1.0, 1.0, 1.0, 1.0],
+                mix: 1.0,
+                _padding: [0.0; 32],
+                __padding: [0.0; 23],
+            })
+            .enable_dynamic_buffering()
+            .with_dynamic_entity_limit(96),
+        )
+        .with_id(Uuid::from_str(CAMERA_2D_BIND_GROUP_ID).unwrap());
 
-    let camera_2d_uniforms = UniformGroup::<Camera2DUniformGroup>::builder().uniform(
-        GenericUniformBuilder::from_source(Camera2DUniforms {
-            //view: [-(SCREEN_WIDTH as f32), -(SCREEN_HEIGHT as f32), 1.0/(SCREEN_WIDTH as f32), 1.0/(SCREEN_HEIGHT as f32)],
-            // view: [(SCREEN_WIDTH as f32)/2.0, (SCREEN_HEIGHT as f32)/2.0, 1.0/(SCREEN_WIDTH as f32), 1.0/(SCREEN_HEIGHT as f32)],
+    let camera_2d_uniforms = UniformGroup::<Camera2DUniformGroup>::builder()
+        .with_uniform(GenericUniformBuilder::from_source(Camera2DUniforms {
             view: [1.0, 1.0, 1.0, 1.0],
             _padding: [0.0; 32],
             __padding: [0.0; 28],
-        }),
-    );
+        }))
+        .with_id(Uuid::from_str(CAMERA_2D_BIND_GROUP_ID).unwrap());
 
-    let lighting_2d_uniforms = UniformGroup::<Lighting2DUniformGroup>::builder().uniform(
-        GenericUniformBuilder::from_source(Lighting2DUniforms {
+    let lighting_2d_uniforms = UniformGroup::<Lighting2DUniformGroup>::builder()
+        .with_uniform(GenericUniformBuilder::from_source(Lighting2DUniforms {
             light_0: Default::default(),
             light_1: Default::default(),
             light_2: Default::default(),
             light_3: Default::default(),
             light_4: Default::default(),
-        }),
-    );
+        }))
+        .with_id(Uuid::from_str(CAMERA_2D_BIND_GROUP_ID).unwrap());
 
     let base_2d_pipeline = NodeBuilder::new(ShaderSource::WGSL(
         include_str!("render/shaders/base2D.wgsl").to_owned(),
@@ -106,7 +110,9 @@ fn main() -> Result<()> {
 
     let mut resources = Resources::default();
 
-    let mut texture_store_builder = TextureStoreBuilder::new().load(
+    let mut texture_store_builder = TextureStoreBuilder::new();
+    texture_store_builder.load_id(
+        Uuid::from_str(BASE_2D_COMMON_TEXTURE_ID).unwrap(),
         &base_dir
             .join("src/static/test.png")
             .into_os_string()
@@ -220,7 +226,7 @@ fn main() -> Result<()> {
         // .add_system(forward_render_2d_system(Render2DSystem {
         //     common_vertex_buffers,
         //     common_index_buffers,
-        //     bind_map: gpu_state.lock().unwrap().pipelines[0].texture_binds.clone(),
+        //     bindings: gpu_state.lock().unwrap().pipelines[0].bindings.clone(),
         // }))
         .build();
 

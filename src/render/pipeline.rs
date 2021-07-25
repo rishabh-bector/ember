@@ -1,20 +1,35 @@
 use anyhow::{anyhow, Result};
 use legion::Resources;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    marker::PhantomData,
+    sync::{Arc, Mutex},
+};
+use uuid::Uuid;
 
-use crate::resources::store::{BindMap, TextureGroup, TextureStore};
+use crate::resources::store::{TextureGroup, TextureStore};
 
-use super::uniform::GroupResourceBuilder;
-
-pub enum ShaderSource {
-    WGSL(String),
-    _SPIRV(String),
-}
+use super::{texture::Texture, uniform::GroupResourceBuilder};
 
 pub struct RenderNode {
     pub pipeline: wgpu::RenderPipeline,
     pub shader_module: wgpu::ShaderModule,
-    pub texture_binds: BindMap,
+    pub binder: PipelineBinder,
+
+    // How many render targets this pipeline
+    // requires
+    // MAYBE: MAKE PIPELINE -> RenderNode???
+    pub graph_inputs: u32,
+}
+
+pub struct PipelineBinder {
+    pub texture_groups: HashMap<Uuid, Arc<wgpu::BindGroup>>,
+    pub uniform_groups: Vec<Arc<wgpu::BindGroup>>,
+}
+
+pub enum ShaderSource {
+    WGSL(String),
+    _SPIRV(String),
 }
 
 pub enum BindIndex {
@@ -148,20 +163,40 @@ impl NodeBuilder {
 
         let texture_groups_needed: Vec<TextureGroup> = self
             .bind_groups
-            .into_iter()
+            .iter()
             .filter_map(|bind| match bind {
-                BindIndex::Texture(group) => Some(group),
+                &BindIndex::Texture(group) => Some(group),
                 _ => None,
             })
             .collect();
 
-        let bind_map = texture_store
-            .lock()
-            .unwrap()
-            .build_bind_map(texture_groups_needed.as_slice());
+        let uniform_groups_needed: Vec<usize> = self
+            .bind_groups
+            .iter()
+            .filter_map(|bind| match bind {
+                &BindIndex::Uniform(i) => Some(i),
+                _ => None,
+            })
+            .collect();
+
+        let mut texture_groups: HashMap<Uuid, Arc<wgpu::BindGroup>> = HashMap::new();
+        for group in &texture_groups_needed {
+            texture_groups.extend(texture_store.lock().unwrap().bind_group(group));
+        }
+
+        let mut uniform_groups: Vec<Arc<wgpu::BindGroup>> = vec![];
+        for group in uniform_groups_needed {
+            let (id, bind_group) = self.uniform_group_builders[group].lock().unwrap().binding();
+            uniform_groups.push(bind_group);
+        }
+
+        let binder = PipelineBinder {
+            texture_groups,
+            uniform_groups,
+        };
 
         Ok(RenderNode {
-            texture_binds: bind_map,
+            binder,
             pipeline,
             shader_module,
         })

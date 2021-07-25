@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use legion::{world::SubWorld, IntoQuery};
 
 use crate::{
-    component::Position2D,
+    components::Position2D,
     render::uniform::{GenericUniform, Uniform, UniformGroup},
 };
 

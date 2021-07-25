@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    component::{Position2D, Velocity2D},
+    components::{Position2D, Velocity2D},
     render::GpuState,
 };
 

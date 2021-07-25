@@ -6,12 +6,14 @@ use std::{
     marker::PhantomData,
     mem::size_of,
     num::NonZeroU64,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{Arc, Mutex},
 };
+use uuid::Uuid;
 use wgpu::{util::DeviceExt, BindGroupEntry};
 
-pub const DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS: u32 = 64;
-pub const DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE: u64 = 128;
+use crate::constants::{
+    DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE, DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS,
+};
 
 pub trait UniformSource:
     Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug + 'static
@@ -30,6 +32,7 @@ pub struct UniformGroup<N> {
     pub dynamic_offset_sizes: Vec<u64>,
     pub dynamic_offset_state: Vec<u64>,
 
+    pub id: Uuid,
     pub queue: Arc<wgpu::Queue>,
     _marker: PhantomData<N>,
 }
@@ -78,6 +81,8 @@ pub trait GroupBuilder {
         resources: &mut Resources,
         queue: Arc<wgpu::Queue>,
     ) -> Result<wgpu::BindGroupLayout>;
+
+    fn binding(&self) -> (Uuid, Arc<wgpu::BindGroup>);
 }
 
 pub trait GroupResourceBuilder: GroupBuilder + ResourceBuilder {}
@@ -87,8 +92,9 @@ pub struct UniformGroupBuilder<N> {
     pub uniforms: Vec<Arc<Mutex<dyn UniformBuilder>>>,
 
     pub bind_group_layout: Option<wgpu::BindGroupLayout>,
-    pub bind_group: Option<wgpu::BindGroup>,
+    pub bind_group: Option<Arc<wgpu::BindGroup>>,
 
+    pub id: Uuid,
     pub state: Option<N>,
     pub dest: Option<Arc<Mutex<UniformGroup<N>>>>,
 }
@@ -101,11 +107,17 @@ impl<N> UniformGroupBuilder<N> {
             bind_group: None,
             state: None,
             dest: None,
+            id: Uuid::new_v4(),
         }
     }
 
-    pub fn uniform<T: UniformBuilder + 'static>(mut self, uniform: T) -> Self {
+    pub fn with_uniform<T: UniformBuilder + 'static>(mut self, uniform: T) -> Self {
         self.uniforms.push(Arc::new(Mutex::new(uniform)));
+        self
+    }
+
+    pub fn with_id(mut self, id: Uuid) -> Self {
+        self.id = id;
         self
     }
 
@@ -163,37 +175,40 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
             label: Some(&format!("uniform_bind_group_layout: {}", type_name::<N>())),
         });
 
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &bind_group_layout,
-            entries: &(0..buffer_states.len())
-                .map(|i| {
-                    let mut buffer_binding = buffer_states[i].buffer.as_entire_buffer_binding();
-                    let has_dynamic_offset = buffer_states[i].max_elements != 1;
+        self.bind_group = Some(Arc::new(
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &bind_group_layout,
+                entries: &(0..buffer_states.len())
+                    .map(|i| {
+                        let mut buffer_binding = buffer_states[i].buffer.as_entire_buffer_binding();
+                        let has_dynamic_offset = buffer_states[i].max_elements != 1;
 
-                    buffer_binding.size = Some(
-                        NonZeroU64::new(match has_dynamic_offset {
-                            false => buffer_states[i].element_size as u64,
-                            true => DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE,
-                        })
-                        .unwrap(),
-                    );
+                        buffer_binding.size = Some(
+                            NonZeroU64::new(match has_dynamic_offset {
+                                false => buffer_states[i].element_size as u64,
+                                true => DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE,
+                            })
+                            .unwrap(),
+                        );
 
-                    wgpu::BindGroupEntry {
-                        binding: i as u32,
-                        resource: wgpu::BindingResource::Buffer(buffer_binding),
-                    }
-                })
-                .collect::<Vec<BindGroupEntry>>(),
-            label: Some(&format!("uniform_bind_group: {}", type_name::<N>())),
-        });
+                        wgpu::BindGroupEntry {
+                            binding: i as u32,
+                            resource: wgpu::BindingResource::Buffer(buffer_binding),
+                        }
+                    })
+                    .collect::<Vec<BindGroupEntry>>(),
+                label: Some(&format!("uniform_bind_group: {}", type_name::<N>())),
+            }),
+        ));
 
         self.dest = Some(Arc::new(Mutex::new(UniformGroup {
+            queue,
+            id: self.id,
+            bind_group: Arc::clone(&self.bind_group.as_ref().unwrap()),
             dynamic_offset_state: std::iter::repeat(0).take(buffer_states.len()).collect(),
             dynamic_offset_sizes: buffer_states.iter().map(|s| s.element_size).collect(),
             dynamic_offset_limits: buffer_states.iter().map(|s| s.max_elements).collect(),
             buffers: buffer_states.into_iter().map(|s| s.buffer).collect(),
-            bind_group: Arc::new(bind_group),
-            queue,
             _marker: PhantomData,
         })));
 
@@ -202,6 +217,10 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
         }
 
         Ok(bind_group_layout)
+    }
+
+    fn binding(&self) -> (Uuid, Arc<wgpu::BindGroup>) {
+        (self.id, Arc::clone(&self.bind_group.as_ref().unwrap()))
     }
 }
 

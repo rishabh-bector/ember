@@ -59,7 +59,7 @@ Concurrency notes:
         3. Submit the command encoder to the queue (at the end)
       solutions:
         1. frame views will be created on init, and made as resources
-           by design, only views should only be accessible to one pass at a time
+           by design, views should only be accessible to one pass at a time
         2. command encoders will be created at the beginning of each frame,
            by a begin_render_graph() system
         3. This needs to be done in multiple places:

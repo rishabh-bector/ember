@@ -70,7 +70,38 @@ impl Texture {
         label: Option<&str>,
     ) -> Result<Self> {
         let dimensions = rgba.dimensions();
+        let size = wgpu::Extent3d {
+            width: dimensions.0,
+            height: dimensions.1,
+            depth_or_array_layers: 1,
+        };
 
+        let texture = Self::blank(dimensions, device, queue, group_layout, label)?;
+
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &texture.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            rgba,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: std::num::NonZeroU32::new(4 * dimensions.0),
+                rows_per_image: std::num::NonZeroU32::new(dimensions.1),
+            },
+            size,
+        );
+        Ok(texture)
+    }
+
+    pub fn blank(
+        dimensions: (u32, u32),
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        group_layout: &wgpu::BindGroupLayout,
+        label: Option<&str>,
+    ) -> Result<Texture> {
         let size = wgpu::Extent3d {
             width: dimensions.0,
             height: dimensions.1,
@@ -86,21 +117,6 @@ impl Texture {
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
             usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
         });
-
-        queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-            },
-            rgba,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * dimensions.0),
-                rows_per_image: std::num::NonZeroU32::new(dimensions.1),
-            },
-            size,
-        );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
