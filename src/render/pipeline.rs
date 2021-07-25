@@ -11,7 +11,7 @@ pub enum ShaderSource {
     _SPIRV(String),
 }
 
-pub struct Pipeline {
+pub struct RenderNode {
     pub pipeline: wgpu::RenderPipeline,
     pub shader_module: wgpu::ShaderModule,
     pub texture_binds: BindMap,
@@ -23,14 +23,14 @@ pub enum BindIndex {
 }
 /// Builder for easily creating flexible wgpu render pipelines
 
-pub struct PipelineBuilder {
+pub struct NodeBuilder {
     pub shader_source: ShaderSource,
     pub bind_groups: Vec<BindIndex>,
     pub vertex_buffer_layouts: Vec<wgpu::VertexBufferLayout<'static>>,
     pub uniform_group_builders: Vec<Arc<Mutex<dyn GroupResourceBuilder>>>,
 }
 
-impl PipelineBuilder {
+impl NodeBuilder {
     pub fn new(shader: ShaderSource) -> Self {
         Self {
             shader_source: shader,
@@ -66,7 +66,7 @@ impl PipelineBuilder {
         chain_desc: &wgpu::SwapChainDescriptor,
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         texture_store: Arc<Mutex<TextureStore>>,
-    ) -> Result<Pipeline> {
+    ) -> Result<RenderNode> {
         if self.vertex_buffer_layouts.len() == 0 {
             return Err(anyhow!(
                 "PipelineBuilder: at least one vertex buffer required"
@@ -160,7 +160,7 @@ impl PipelineBuilder {
             .unwrap()
             .build_bind_map(texture_groups_needed.as_slice());
 
-        Ok(Pipeline {
+        Ok(RenderNode {
             texture_binds: bind_map,
             pipeline,
             shader_module,

@@ -95,7 +95,7 @@ fn main() -> Result<()> {
         }),
     );
 
-    let base_2d_pipeline = PipelineBuilder::new(ShaderSource::WGSL(
+    let base_2d_pipeline = NodeBuilder::new(ShaderSource::WGSL(
         include_str!("render/shaders/base2D.wgsl").to_owned(),
     ))
     .texture_group(resources::store::TextureGroup::Base2D)
@@ -116,7 +116,7 @@ fn main() -> Result<()> {
 
     let gpu_state = Arc::new(Mutex::new(futures::executor::block_on(
         GpuStateBuilder::winit(Rc::clone(&window))
-            .pipeline(base_2d_pipeline)
+            //.pipeline(base_2d_pipeline)
             .build(&mut texture_store_builder, &mut resources),
     )?));
 
@@ -217,11 +217,11 @@ fn main() -> Result<()> {
         .add_system(lighting_2d_uniform_system())
         // Renderer
         .flush()
-        .add_system(forward_render_2d_system(Render2DSystem {
-            common_vertex_buffers,
-            common_index_buffers,
-            bind_map: gpu_state.lock().unwrap().pipelines[0].texture_binds.clone(),
-        }))
+        // .add_system(forward_render_2d_system(Render2DSystem {
+        //     common_vertex_buffers,
+        //     common_index_buffers,
+        //     bind_map: gpu_state.lock().unwrap().pipelines[0].texture_binds.clone(),
+        // }))
         .build();
 
     event_loop.run(move |event, _, control_flow| {

@@ -9,7 +9,7 @@ pub mod texture;
 pub mod uniform;
 
 use crate::{
-    render::pipeline::{Pipeline, PipelineBuilder},
+    render::pipeline::{NodeBuilder, RenderNode},
     resources::{store::TextureStoreBuilder, ui::UI},
 };
 
@@ -20,7 +20,6 @@ pub struct GpuState {
     pub chain_descriptor: wgpu::SwapChainDescriptor,
     pub swap_chain: wgpu::SwapChain,
     pub screen_size: (u32, u32),
-    pub pipelines: Vec<Pipeline>,
 }
 
 pub struct GpuStateBuilder {
@@ -28,7 +27,6 @@ pub struct GpuStateBuilder {
     pub screen_size: (u32, u32),
     pub instance: Option<wgpu::Instance>,
     pub surface: Option<wgpu::Surface>,
-    pub pipeline_builders: Vec<PipelineBuilder>,
 }
 
 impl GpuStateBuilder {
@@ -47,13 +45,7 @@ impl GpuStateBuilder {
             screen_size: (size.width, size.height),
             instance: Some(instance),
             surface: Some(surface),
-            pipeline_builders: vec![],
         }
-    }
-
-    pub fn pipeline(mut self, pipeline: PipelineBuilder) -> Self {
-        self.pipeline_builders.push(pipeline);
-        self
     }
 
     // Depends on TextureStore being in resources
@@ -62,12 +54,6 @@ impl GpuStateBuilder {
         store_builder: &mut TextureStoreBuilder,
         resources: &mut legion::Resources,
     ) -> Result<GpuState> {
-        if self.pipeline_builders.len() == 0 {
-            return Err(anyhow!(
-                "GpuStateBuilder: must provide at least one pipeline builder"
-            ));
-        }
-
         let surface = self
             .surface
             .ok_or_else(|| anyhow!("GpuStateBuilder: must provide a surface"))?;
@@ -113,24 +99,6 @@ impl GpuStateBuilder {
         // Build textures
         let (texture_store, texture_bind_group_layout) = store_builder.build(&device, &queue)?;
 
-        // Build all render pipelines
-        debug!("Building render pipelines");
-        let queue = Arc::new(queue);
-        let pipelines = self
-            .pipeline_builders
-            .into_iter()
-            .map(|builder| {
-                builder.build(
-                    resources,
-                    &device,
-                    Arc::clone(&queue),
-                    &chain_descriptor,
-                    &texture_bind_group_layout,
-                    Arc::clone(&texture_store),
-                )
-            })
-            .collect::<Result<Vec<Pipeline>>>()?;
-
         // Add TextureStore to system resources
         store_builder.build_to_resources(resources);
 
@@ -141,10 +109,9 @@ impl GpuStateBuilder {
             screen_size: self.screen_size,
             surface,
             device,
-            queue,
+            queue: Arc::new(queue),
             chain_descriptor,
             swap_chain,
-            pipelines: pipelines,
         })
     }
 }

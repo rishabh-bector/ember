@@ -64,7 +64,7 @@ pub fn forward_render_2d(
     });
 
     // Common bindings
-    render_pass.set_pipeline(&gpu.pipelines[0].pipeline);
+    // render_pass.set_pipeline(&gpu.pipelines[0].pipeline);
 
     // render_pass.set_bind_group(
     //     0,
