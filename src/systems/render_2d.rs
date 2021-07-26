@@ -8,6 +8,7 @@ use crate::{
     components::Position2D,
     render::{
         buffer::{IndexBuffer, VertexBuffer},
+        graph::RenderGraph,
         texture::Texture,
         uniform::UniformGroup,
         GpuState, RenderPass,
@@ -29,9 +30,11 @@ pub struct Render2DSystem {
 //  - encoder
 //  - pipeline (including binder w/ uniform and texture bind groups)
 #[system]
-pub fn begin_render_graph(#[resource] gpu: &Arc<Mutex<GpuState>>) {
+pub fn begin_render_graph(
+    #[resource] gpu: &Arc<Mutex<GpuState>>,
+    #[resource] graph: &Arc<RenderGraph>,
+) {
     let gpu = gpu.lock().unwrap();
-
     let frame = gpu.swap_chain.get_current_frame().unwrap().output;
 
     let mut encoder = gpu
@@ -77,9 +80,9 @@ pub fn begin_render_graph(#[resource] gpu: &Arc<Mutex<GpuState>>) {
     //  - these Arc<Texture>(s) will be created beforehand, and RenderGraph will also
     //    assign each node a target
 
-    for pipeline in gpu.pipelines {
+    for (id, node) in &graph.nodes {
         let pass = RenderPass::<Base2DRenderPass> {
-            pipeline: Arc::clone(&pipeline),
+            node: Arc::clone(node),
             encoder: gpu
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -98,143 +101,143 @@ pub type Base2DRenderPass = ();
 pub fn forward_render_2d_NEW(#[resource] render_pass: &Arc<Mutex<RenderPass<Base2DRenderPass>>>) {
     let mut render_pass = render_pass.lock().unwrap();
 
-    let mut pass_handle = render_pass
-        .encoder
-        .begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Render2D Pass"),
-            color_attachments: &[wgpu::RenderPassColorAttachment {
-                view: &frame.view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: 0.0,
-                    }),
-                    store: true,
-                },
-            }],
-            depth_stencil_attachment: None,
-        });
+    // let mut pass_handle = render_pass
+    //     .encoder
+    //     .begin_render_pass(&wgpu::RenderPassDescriptor {
+    //         label: Some("Render2D Pass"),
+    //         color_attachments: &[wgpu::RenderPassColorAttachment {
+    //             view: &frame.view,
+    //             resolve_target: None,
+    //             ops: wgpu::Operations {
+    //                 load: wgpu::LoadOp::Clear(wgpu::Color {
+    //                     r: 0.0,
+    //                     g: 0.0,
+    //                     b: 0.0,
+    //                     a: 0.0,
+    //                 }),
+    //                 store: true,
+    //             },
+    //         }],
+    //         depth_stencil_attachment: None,
+    //     });
 
-    // Common bindings
-    render_pass.set_pipeline(&gpu.pipelines[0].pipeline);
+    // // Common bindings
+    // pass_handle.set_pipeline(&gpu.pipelines[0].pipeline);
 
-    render_pass.set_bind_group(2, &camera_2d_uniforms_group.bind_group, &[]);
-    render_pass.set_bind_group(3, &lighting_2d_uniforms_group.bind_group, &[]);
+    // pass_handle.set_bind_group(2, &camera_2d_uniforms_group.bind_group, &[]);
+    // pass_handle.set_bind_group(3, &lighting_2d_uniforms_group.bind_group, &[]);
 
-    render_pass.set_vertex_buffer(0, state.common_vertex_buffers[0].buffer.slice(..));
-    render_pass.set_index_buffer(
-        state.common_index_buffers[0].buffer.slice(..),
-        wgpu::IndexFormat::Uint16,
-    );
+    // pass_handle.set_vertex_buffer(0, state.common_vertex_buffers[0].buffer.slice(..));
+    // pass_handle.set_index_buffer(
+    //     state.common_index_buffers[0].buffer.slice(..),
+    //     wgpu::IndexFormat::Uint16,
+    // );
 
-    // Dynamic bindings
-    base_2d_uniforms_group.begin_dynamic_loading();
+    // // Dynamic bindings
+    // base_2d_uniforms_group.begin_dynamic_loading();
 
-    let mut query = <(&Base2D, &Position2D)>::query();
-    query.for_each(world, |(base_2d, _pos)| {
-        render_pass.set_bind_group(0, &state.bindings.groups[&base_2d.texture], &[]);
+    // let mut query = <(&Base2D, &Position2D)>::query();
+    // query.for_each(world, |(base_2d, _pos)| {
+    //     pass_handle.set_bind_group(0, &state.bindings.groups[&base_2d.texture], &[]);
 
-        render_pass.set_bind_group(
-            1,
-            &base_2d_bind_group,
-            &[base_2d_uniforms_group.increase_offset(0)],
-        );
+    //     pass_handle.set_bind_group(
+    //         1,
+    //         &base_2d_bind_group,
+    //         &[base_2d_uniforms_group.increase_offset(0)],
+    //     );
 
-        debug!("Recording draw call");
-        render_pass.draw_indexed(
-            0..state.common_index_buffers[base_2d.common_index_buffer].size,
-            0,
-            0..1,
-        );
-    });
+    //     debug!("Recording draw call");
+    //     pass_handle.draw_indexed(
+    //         0..state.common_index_buffers[base_2d.common_index_buffer].size,
+    //         0,
+    //         0..1,
+    //     );
+    // });
 
-    for (base_2d, _pos) in query.iter(world) {}
+    // for (base_2d, _pos) in query.iter(world) {}
 
-    drop(render_pass);
-    gpu.queue.submit(std::iter::once(encoder.finish()));
+    // drop(pass_handle);
+    // gpu.queue.submit(std::iter::once(encoder.finish()));
 }
 
-#[system]
-#[read_component(Base2D)]
-#[read_component(Position2D)]
-pub fn forward_render_2d(
-    world: &SubWorld,
-    #[state] state: &Render2DSystem,
-    #[resource] gpu: &Arc<Mutex<GpuState>>,
-    //#[resource] base_2d_uniforms_group: &Arc<Mutex<UniformGroup<Base2DUniformGroup>>>,
-    //#[resource] camera_2d_uniforms_group: &Arc<Mutex<UniformGroup<Camera2DUniformGroup>>>,
-    //#[resource] lighting_2d_uniforms_group: &Arc<Mutex<UniformGroup<Lighting2DUniformGroup>>>,
-) {
-    let gpu = gpu.lock().unwrap();
-    // let mut base_2d_uniforms_group = base_2d_uniforms_group.lock().unwrap();
-    // let camera_2d_uniforms_group = camera_2d_uniforms_group.lock().unwrap();
-    // let lighting_2d_uniforms_group = lighting_2d_uniforms_group.lock().unwrap();
+// #[system]
+// #[read_component(Base2D)]
+// #[read_component(Position2D)]
+// pub fn forward_render_2d(
+//     world: &SubWorld,
+//     #[state] state: &Render2DSystem,
+//     #[resource] gpu: &Arc<Mutex<GpuState>>,
+//     //#[resource] base_2d_uniforms_group: &Arc<Mutex<UniformGroup<Base2DUniformGroup>>>,
+//     //#[resource] camera_2d_uniforms_group: &Arc<Mutex<UniformGroup<Camera2DUniformGroup>>>,
+//     //#[resource] lighting_2d_uniforms_group: &Arc<Mutex<UniformGroup<Lighting2DUniformGroup>>>,
+// ) {
+//     let gpu = gpu.lock().unwrap();
+//     // let mut base_2d_uniforms_group = base_2d_uniforms_group.lock().unwrap();
+//     // let camera_2d_uniforms_group = camera_2d_uniforms_group.lock().unwrap();
+//     // let lighting_2d_uniforms_group = lighting_2d_uniforms_group.lock().unwrap();
 
-    // let base_2d_bind_group = base_2d_uniforms_group.bind_group();
+//     // let base_2d_bind_group = base_2d_uniforms_group.bind_group();
 
-    let frame = gpu.swap_chain.get_current_frame().unwrap().output;
-    let mut encoder = gpu
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render2D Encoder"),
-        });
+//     let frame = gpu.swap_chain.get_current_frame().unwrap().output;
+//     let mut encoder = gpu
+//         .device
+//         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+//             label: Some("Render2D Encoder"),
+//         });
 
-    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Render2D Pass"),
-        color_attachments: &[wgpu::RenderPassColorAttachment {
-            view: &frame.view,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: 0.0,
-                    g: 0.0,
-                    b: 0.0,
-                    a: 0.0,
-                }),
-                store: true,
-            },
-        }],
-        depth_stencil_attachment: None,
-    });
+//     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+//         label: Some("Render2D Pass"),
+//         color_attachments: &[wgpu::RenderPassColorAttachment {
+//             view: &frame.view,
+//             resolve_target: None,
+//             ops: wgpu::Operations {
+//                 load: wgpu::LoadOp::Clear(wgpu::Color {
+//                     r: 0.0,
+//                     g: 0.0,
+//                     b: 0.0,
+//                     a: 0.0,
+//                 }),
+//                 store: true,
+//             },
+//         }],
+//         depth_stencil_attachment: None,
+//     });
 
-    // Common bindings
-    // render_pass.set_pipeline(&gpu.pipelines[0].pipeline);
+//     // Common bindings
+//     // render_pass.set_pipeline(&gpu.pipelines[0].pipeline);
 
-    render_pass.set_bind_group(2, &camera_2d_uniforms_group.bind_group, &[]);
-    render_pass.set_bind_group(3, &lighting_2d_uniforms_group.bind_group, &[]);
+//     render_pass.set_bind_group(2, &camera_2d_uniforms_group.bind_group, &[]);
+//     render_pass.set_bind_group(3, &lighting_2d_uniforms_group.bind_group, &[]);
 
-    render_pass.set_vertex_buffer(0, state.common_vertex_buffers[0].buffer.slice(..));
-    render_pass.set_index_buffer(
-        state.common_index_buffers[0].buffer.slice(..),
-        wgpu::IndexFormat::Uint16,
-    );
+//     render_pass.set_vertex_buffer(0, state.common_vertex_buffers[0].buffer.slice(..));
+//     render_pass.set_index_buffer(
+//         state.common_index_buffers[0].buffer.slice(..),
+//         wgpu::IndexFormat::Uint16,
+//     );
 
-    // Dynamic bindings
-    base_2d_uniforms_group.begin_dynamic_loading();
+//     // Dynamic bindings
+//     base_2d_uniforms_group.begin_dynamic_loading();
 
-    let mut query = <(&Base2D, &Position2D)>::query();
-    query.for_each(world, |(base_2d, _pos)| {
-        render_pass.set_bind_group(0, &state.bindings.groups[&base_2d.texture], &[]);
+//     let mut query = <(&Base2D, &Position2D)>::query();
+//     query.for_each(world, |(base_2d, _pos)| {
+//         render_pass.set_bind_group(0, &state.bindings.groups[&base_2d.texture], &[]);
 
-        render_pass.set_bind_group(
-            1,
-            &base_2d_bind_group,
-            &[base_2d_uniforms_group.increase_offset(0)],
-        );
+//         render_pass.set_bind_group(
+//             1,
+//             &base_2d_bind_group,
+//             &[base_2d_uniforms_group.increase_offset(0)],
+//         );
 
-        debug!("Recording draw call");
-        render_pass.draw_indexed(
-            0..state.common_index_buffers[base_2d.common_index_buffer].size,
-            0,
-            0..1,
-        );
-    });
+//         debug!("Recording draw call");
+//         render_pass.draw_indexed(
+//             0..state.common_index_buffers[base_2d.common_index_buffer].size,
+//             0,
+//             0..1,
+//         );
+//     });
 
-    for (base_2d, _pos) in query.iter(world) {}
+//     for (base_2d, _pos) in query.iter(world) {}
 
-    drop(render_pass);
-    gpu.queue.submit(std::iter::once(encoder.finish()));
-}
+//     drop(render_pass);
+//     gpu.queue.submit(std::iter::once(encoder.finish()));
+// }

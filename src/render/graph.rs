@@ -1,7 +1,21 @@
-use std::{collections::HashMap, sync::Arc};
+use anyhow::Result;
+use legion::Schedule;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 use uuid::Uuid;
 
-use super::pipeline::Pipeline;
+use crate::{
+    constants,
+    render::{
+        node::{NodeBuilder, RenderNode},
+        GpuState,
+    },
+    resources::store::TextureStore,
+};
+
+use super::texture::Texture;
 
 // Example graph: BASE_2D_FORWARD_RENDERER
 // NODES:
@@ -46,51 +60,156 @@ use super::pipeline::Pipeline;
 //  - type or id of pipeline (need Arc<pipeline> for binding to the render pass)
 //
 
-pub struct RenderGraph {
-    pub nodes: HashMap<Uuid, Arc<RenderNode>>,
-    pub channels: Vec<(Uuid, Uuid)>,
-    pub sources: Vec<Uuid>,
-    pub master: Uuid,
+pub struct NodeState {
+    pub input_channels: Vec<Arc<wgpu::BindGroup>>,
+    pub output_target: Arc<Texture>,
 }
 
-impl RenderGraph {
-    pub fn new() -> Self {
-        Self {
-            nodes: HashMap::new(),
-            channels: vec![],
-            sources: vec![],
-            master: Uuid::new_v4(),
-        }
-    }
-
-    pub fn node(&mut self, node: Arc<RenderNode>) -> Uuid {
-        let id = Uuid::new_v4();
-        self.nodes.insert(id, node);
-        id
-    }
-
-    pub fn build(&mut self) {
-        // Build all render nodes
-        debug!("Building render nodes");
-        let queue = Arc::new(queue);
-        let nodes = self
-            .pipeline_builders
-            .into_iter()
-            .map(|builder| {
-                builder.build(
-                    resources,
-                    &device,
-                    Arc::clone(&queue),
-                    &chain_descriptor,
-                    &texture_bind_group_layout,
-                    Arc::clone(&texture_store),
-                )
-            })
-            .collect::<Result<Vec<RenderNode>>>()?;
-    }
+pub struct RenderGraph {
+    pub targets: HashMap<Uuid, Arc<Texture>>,
+    pub nodes: HashMap<Uuid, Arc<RenderNode>>,
+    pub source_nodes: Vec<Uuid>,
+    pub master_node: Uuid,
+    pub channels: Vec<(Uuid, Uuid)>,
 }
 
 pub struct GraphBuilder {
-    pub node_builders: HashMap<Uuid, NodeBuilder>,
-    pub dest: RenderGraph,
+    pub node_builders: Vec<NodeBuilder>,
+    pub source_nodes: Vec<Uuid>,
+    pub master_node: Option<Uuid>,
+    pub channels: Vec<(Uuid, Uuid)>,
+    pub node_states: HashMap<Uuid, NodeState>,
+    pub dest: Option<Arc<RenderGraph>>,
 }
+
+impl GraphBuilder {
+    pub fn new() -> GraphBuilder {
+        Self {
+            node_builders: Vec::new(),
+            source_nodes: Vec::new(),
+            master_node: None,
+            channels: Vec::new(),
+            node_states: HashMap::new(),
+            dest: None,
+        }
+    }
+
+    pub fn with_node(mut self, node: NodeBuilder) -> Self {
+        self.node_builders.push(node);
+        self
+    }
+
+    pub fn with_source_node(mut self, node: NodeBuilder) -> Self {
+        self.source_nodes.push(node.dest_id.to_owned());
+        self.with_node(node)
+    }
+
+    pub fn with_master_node(mut self, node: NodeBuilder) -> Self {
+        self.master_node = Some(node.dest_id.to_owned());
+        self.with_node(node)
+    }
+
+    pub fn with_channel(mut self, input: Uuid, output: Uuid) -> Self {
+        self.channels.push((input, output));
+        self
+    }
+
+    pub fn build(
+        &mut self,
+        gpu: Arc<Mutex<GpuState>>,
+        resources: &mut legion::Resources,
+        texture_bind_group_layout: &wgpu::BindGroupLayout,
+        texture_store: Arc<Mutex<TextureStore>>,
+    ) -> Result<Arc<RenderGraph>> {
+        let gpu = gpu.lock().unwrap();
+
+        // Build all render nodes; a render node holds data for
+        // running a render pipeline such as bind group refs,
+        // shader modules, uniform group builders, etc.
+        let nodes = self
+            .node_builders
+            .iter_mut()
+            .map(|builder| {
+                debug!("render_graph_builder: running {}", &builder.name);
+                let node = builder.build(
+                    resources,
+                    &gpu.device,
+                    Arc::clone(&gpu.queue),
+                    &gpu.chain_descriptor,
+                    &texture_bind_group_layout,
+                    Arc::clone(&texture_store),
+                )?;
+                Ok((node.id, node))
+            })
+            .collect::<Result<HashMap<Uuid, Arc<RenderNode>>>>()?;
+
+        // Build all render targets; one for each render node (for now)
+        let targets = self
+            .node_builders
+            .iter()
+            .map(|builder| {
+                Ok((
+                    builder.dest_id,
+                    Arc::new(Texture::blank(
+                        // TODO: Make actual config (I will, part of SHIP: EngineBuilder)
+                        (
+                            constants::DEFAULT_SCREEN_WIDTH as u32,
+                            constants::DEFAULT_SCREEN_HEIGHT as u32,
+                        ),
+                        &gpu.device,
+                        &gpu.queue,
+                        texture_bind_group_layout,
+                        Some(&format!("render_target_{}", builder.dest_name)),
+                    )?),
+                ))
+            })
+            .collect::<Result<HashMap<Uuid, Arc<Texture>>>>()?;
+
+        // Build all NodeStates; each render node's system has this internal state,
+        // allowing it to access the target bind groups of its inputs
+        // as well as its own target texture (to bind both in a pass)
+        let node_states: HashMap<Uuid, NodeState> = self
+            .node_builders
+            .iter()
+            .map(|builder| {
+                let node_id = &builder.dest.as_ref().unwrap().id;
+                (
+                    *node_id,
+                    NodeState {
+                        input_channels: self
+                            .input_nodes_for_node(*node_id)
+                            .iter()
+                            .map(|input_id| Arc::clone(&targets.get(input_id).unwrap().bind_group))
+                            .collect::<Vec<Arc<wgpu::BindGroup>>>(),
+                        output_target: Arc::clone(&targets.get(&node_id).unwrap()),
+                    },
+                )
+            })
+            .collect();
+
+        self.dest = Some(Arc::new(RenderGraph {
+            nodes,
+            targets,
+            channels: self.channels.clone(),
+            source_nodes: self.source_nodes.clone(),
+            master_node: self
+                .master_node
+                .expect("RenderGraphBuilder: master node required"),
+        }));
+
+        Ok(Arc::clone(&self.dest.as_ref().unwrap()))
+    }
+
+    fn input_nodes_for_node(&self, node_id: Uuid) -> Vec<Uuid> {
+        self.channels
+            .iter()
+            .filter_map(|(in_id, out_id)| match out_id {
+                node_id => Some(*in_id),
+                _ => None,
+            })
+            .collect::<Vec<Uuid>>()
+    }
+}
+
+#[system]
+pub fn testing() {}

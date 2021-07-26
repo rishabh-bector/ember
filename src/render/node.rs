@@ -12,6 +12,8 @@ use crate::resources::store::{TextureGroup, TextureStore};
 use super::{texture::Texture, uniform::GroupResourceBuilder};
 
 pub struct RenderNode {
+    pub id: Uuid,
+    pub name: String,
     pub pipeline: wgpu::RenderPipeline,
     pub shader_module: wgpu::ShaderModule,
     pub binder: PipelineBinder,
@@ -39,19 +41,31 @@ pub enum BindIndex {
 /// Builder for easily creating flexible wgpu render pipelines
 
 pub struct NodeBuilder {
+    pub name: String,
+    pub graph_inputs: u32,
+
     pub shader_source: ShaderSource,
     pub bind_groups: Vec<BindIndex>,
     pub vertex_buffer_layouts: Vec<wgpu::VertexBufferLayout<'static>>,
     pub uniform_group_builders: Vec<Arc<Mutex<dyn GroupResourceBuilder>>>,
+
+    pub dest: Option<Arc<RenderNode>>,
+    pub dest_name: String,
+    pub dest_id: Uuid,
 }
 
 impl NodeBuilder {
-    pub fn new(shader: ShaderSource) -> Self {
+    pub fn new(name: String, graph_inputs: u32, shader: ShaderSource) -> Self {
         Self {
+            name: format!("{}_builder", &name),
+            graph_inputs,
             shader_source: shader,
             bind_groups: vec![],
             vertex_buffer_layouts: vec![],
             uniform_group_builders: vec![],
+            dest: None,
+            dest_name: name,
+            dest_id: Uuid::new_v4(),
         }
     }
 
@@ -74,21 +88,30 @@ impl NodeBuilder {
     }
 
     pub fn build(
-        self,
+        &mut self,
         resources: &mut Resources,
         device: &wgpu::Device,
         queue: Arc<wgpu::Queue>,
         chain_desc: &wgpu::SwapChainDescriptor,
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         texture_store: Arc<Mutex<TextureStore>>,
-    ) -> Result<RenderNode> {
+    ) -> Result<Arc<RenderNode>> {
+        if let Some(node) = &self.dest {
+            warn!("{}: this node has already been built; it is probably being referenced more than once in the graph; the existing node will be reused", &self.name);
+            return Ok(Arc::clone(&node));
+        }
+
         if self.vertex_buffer_layouts.len() == 0 {
             return Err(anyhow!(
-                "PipelineBuilder: at least one vertex buffer required"
+                "{}: render nodes require at least one vertex buffer"
             ));
         }
 
-        let shader_module = build_shader(&self.shader_source, device);
+        let shader_module = build_shader(
+            &self.shader_source,
+            &format!("shader_{}", &self.name),
+            device,
+        );
 
         let bind_group_layouts = &self
             .bind_groups
@@ -117,13 +140,13 @@ impl NodeBuilder {
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
+                label: Some(&format!("render_pipeline_layout_{}", &self.name)),
                 bind_group_layouts: layout_refs.as_slice(),
                 push_constant_ranges: &[],
             });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
+            label: Some(&format!("render_pipeline_{}", &self.name)),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader_module,
@@ -195,21 +218,29 @@ impl NodeBuilder {
             uniform_groups,
         };
 
-        Ok(RenderNode {
+        self.dest = Some(Arc::new(RenderNode {
+            id: self.dest_id,
+            name: self.dest_name.to_owned(),
+            graph_inputs: self.graph_inputs,
             binder,
             pipeline,
             shader_module,
-        })
+        }));
+
+        Ok(Arc::clone(&self.dest.as_ref().unwrap()))
     }
 }
 
-fn build_shader(source: &ShaderSource, device: &wgpu::Device) -> wgpu::ShaderModule {
+fn build_shader(source: &ShaderSource, label: &str, device: &wgpu::Device) -> wgpu::ShaderModule {
     device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-        label: Some("Shader"),
+        label: Some(label),
         flags: wgpu::ShaderFlags::all(),
         source: match source {
             ShaderSource::WGSL(src) => wgpu::ShaderSource::Wgsl(src.clone().into()),
-            _ => panic!("ShaderSource: only WGSL shaders are supported currently"),
+            _ => panic!(
+                "Error building shader {}: only WGSL shaders are supported currently",
+                label
+            ),
         },
     })
 }

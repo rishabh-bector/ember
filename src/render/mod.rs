@@ -11,16 +11,16 @@ use winit::window::Window;
 
 pub mod buffer;
 pub mod graph;
-pub mod pipeline;
+pub mod node;
 pub mod texture;
 pub mod uniform;
 
 use crate::{
-    render::pipeline::{NodeBuilder, RenderNode},
+    render::node::{NodeBuilder, RenderNode},
     resources::{store::TextureStoreBuilder, ui::UI},
 };
 
-use self::{pipeline::PipelineBinder, texture::Texture};
+use self::{node::PipelineBinder, texture::Texture};
 
 pub struct GpuState {
     pub surface: wgpu::Surface,
@@ -29,7 +29,6 @@ pub struct GpuState {
     pub chain_descriptor: wgpu::SwapChainDescriptor,
     pub swap_chain: wgpu::SwapChain,
     pub screen_size: (u32, u32),
-    pub targets: Vec<Arc<Texture>>,
 }
 
 pub struct GpuStateBuilder {
@@ -59,11 +58,7 @@ impl GpuStateBuilder {
     }
 
     // Depends on TextureStore being in resources
-    pub async fn build(
-        self,
-        store_builder: &mut TextureStoreBuilder,
-        resources: &mut legion::Resources,
-    ) -> Result<GpuState> {
+    pub async fn build(self, resources: &mut legion::Resources) -> Result<GpuState> {
         let surface = self
             .surface
             .ok_or_else(|| anyhow!("GpuStateBuilder: must provide a surface"))?;
@@ -106,33 +101,6 @@ impl GpuStateBuilder {
         };
         let swap_chain = device.create_swap_chain(&surface, &chain_descriptor);
 
-        // Build textures
-        let (texture_store, texture_bind_group_layout) = store_builder.build(&device, &queue)?;
-
-        // Build render targets
-        // TODO: Set amount to actual amount
-        let targets = (0..5)
-            .map(|_| {
-                Texture::blank(
-                    // TODO: Make actual config (iwllpart of SHIP: EngineBuilder)
-                    (crate::SCREEN_WIDTH as u32, crate::SCREEN_HEIGHT as u32),
-                    &device,
-                    &queue,
-                    &texture_bind_group_layout,
-                    None,
-                )
-            })
-            .collect::<Result<Vec<Texture>>>()?
-            .into_iter()
-            .map(Arc::new)
-            .collect::<Vec<Arc<Texture>>>();
-
-        // Add TextureStore to system resources
-        store_builder.build_to_resources(resources);
-
-        // Build UI
-        let ui = UI::new(self.window.as_ref(), &device, &queue);
-
         Ok(GpuState {
             screen_size: self.screen_size,
             surface,
@@ -140,7 +108,6 @@ impl GpuStateBuilder {
             queue: Arc::new(queue),
             chain_descriptor,
             swap_chain,
-            targets,
         })
     }
 }
@@ -159,7 +126,7 @@ impl GpuState {
 // -----------------------------------------------------------
 
 pub struct RenderPass<N> {
-    pub pipeline: Arc<Pipeline>,
+    pub node: Arc<RenderNode>,
     pub encoder: wgpu::CommandEncoder,
     pub _marker: PhantomData<N>,
 }

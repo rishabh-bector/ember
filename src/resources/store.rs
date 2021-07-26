@@ -113,7 +113,7 @@ impl TextureStore {
     pub fn bind_group(&self, group: &TextureGroup) -> HashMap<Uuid, Arc<BindGroup>> {
         self.textures[group]
             .iter()
-            .map(|(id, tex)| (*id, tex.bind_group))
+            .map(|(id, tex)| (*id, Arc::clone(&tex.bind_group)))
             .collect()
     }
 }

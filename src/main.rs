@@ -8,6 +8,7 @@ use anyhow::Result;
 use legion::{Resources, Schedule, World};
 use rand::Rng;
 use std::{
+    any::type_name,
     env,
     path::PathBuf,
     rc::Rc,
@@ -32,7 +33,7 @@ mod systems;
 use crate::{
     components::{Position2D, Velocity2D},
     constants::{BASE_2D_COMMON_TEXTURE_ID, CAMERA_2D_BIND_GROUP_ID},
-    render::{buffer::*, pipeline::*, uniform::*, *},
+    render::{buffer::*, graph::GraphBuilder, node::*, uniform::*, *},
     resources::{camera::Camera2D, store::TextureStoreBuilder},
     systems::{base_2d::*, camera_2d::*, lighting_2d::*, physics_2d::*, render_2d::*},
 };
@@ -42,8 +43,10 @@ const SCREEN_HEIGHT: usize = 900;
 
 fn main() -> Result<()> {
     std::env::set_var("RUST_LOG", "ember=info");
-    pretty_env_logger::init();
-    info!("Starting engine...");
+    // pretty_env_logger::init();
+    // info!("Starting engine...");
+
+    let engine = ember::engine();
 
     let base_dir = option_env!("CARGO_MANIFEST_DIR").map_or_else(
         || {
@@ -66,6 +69,22 @@ fn main() -> Result<()> {
             .with_min_inner_size(size)
             .build(&event_loop)?
     });
+
+    let mut resources = Resources::default();
+
+    let mut texture_store_builder = TextureStoreBuilder::new();
+    texture_store_builder.load_id(
+        Uuid::from_str(BASE_2D_COMMON_TEXTURE_ID).unwrap(),
+        &base_dir
+            .join("src/static/test.png")
+            .into_os_string()
+            .into_string()
+            .unwrap(),
+    );
+
+    let gpu_state = Arc::new(Mutex::new(futures::executor::block_on(
+        GpuStateBuilder::winit(Rc::clone(&window)).build(&mut resources),
+    )?));
 
     let base_2d_uniforms = UniformGroup::<Base2DUniformGroup>::builder()
         .with_uniform(
@@ -99,32 +118,18 @@ fn main() -> Result<()> {
         }))
         .with_id(Uuid::from_str(CAMERA_2D_BIND_GROUP_ID).unwrap());
 
-    let base_2d_pipeline = NodeBuilder::new(ShaderSource::WGSL(
-        include_str!("render/shaders/base2D.wgsl").to_owned(),
-    ))
+    let base_2d_pipeline_node = NodeBuilder::new(
+        "base_2d_node".to_owned(),
+        0,
+        ShaderSource::WGSL(include_str!("render/shaders/base2D.wgsl").to_owned()),
+    )
     .texture_group(resources::store::TextureGroup::Base2D)
     .uniform_group(base_2d_uniforms)
     .uniform_group(camera_2d_uniforms)
     .uniform_group(lighting_2d_uniforms)
     .vertex_buffer_layout(VertexBuffer::layout_2d());
 
-    let mut resources = Resources::default();
-
-    let mut texture_store_builder = TextureStoreBuilder::new();
-    texture_store_builder.load_id(
-        Uuid::from_str(BASE_2D_COMMON_TEXTURE_ID).unwrap(),
-        &base_dir
-            .join("src/static/test.png")
-            .into_os_string()
-            .into_string()
-            .unwrap(),
-    );
-
-    let gpu_state = Arc::new(Mutex::new(futures::executor::block_on(
-        GpuStateBuilder::winit(Rc::clone(&window))
-            //.pipeline(base_2d_pipeline)
-            .build(&mut texture_store_builder, &mut resources),
-    )?));
+    let render_graph = GraphBuilder::new().with_source_node(base_2d_pipeline_node);
 
     let camera = Arc::new(Mutex::new(Camera2D::default(
         SCREEN_WIDTH as f32,
