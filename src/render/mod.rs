@@ -17,7 +17,7 @@ pub mod uniform;
 
 use crate::{
     render::node::{NodeBuilder, RenderNode},
-    resources::{store::TextureStoreBuilder, ui::UI},
+    resource::{store::TextureStoreBuilder, ui::UI},
 };
 
 use self::{node::PipelineBinder, texture::Texture};
@@ -126,8 +126,10 @@ impl GpuState {
 // -----------------------------------------------------------
 
 pub struct RenderPass<N> {
-    pub node: Arc<RenderNode>,
+    pub node: Arc<RenderNode>, // Not modified during pass, should move to NodeState
     pub encoder: wgpu::CommandEncoder,
+    pub master: Arc<Option<wgpu::SwapChainTexture>>,
+    pub num_dynamic: HashMap<Uuid, u32>,
     pub _marker: PhantomData<N>,
 }
 

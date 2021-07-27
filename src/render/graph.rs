@@ -1,21 +1,26 @@
 use anyhow::Result;
-use legion::Schedule;
+use legion::systems::ParallelRunnable;
 use std::{
     collections::HashMap,
+    str::FromStr,
     sync::{Arc, Mutex},
 };
 use uuid::Uuid;
 
 use crate::{
-    constants,
+    buffer::{IndexBuffer, Vertex2D, VertexBuffer},
+    constants::{self, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID},
     render::{
         node::{NodeBuilder, RenderNode},
         GpuState,
     },
-    resources::store::TextureStore,
+    resource::{
+        schedule::{NodeSystem, Schedulable, SubSchedule},
+        store::TextureStore,
+    },
+    system::{physics_2d::*, render_graph::*},
+    texture::Texture,
 };
-
-use super::texture::Texture;
 
 // Example graph: BASE_2D_FORWARD_RENDERER
 // NODES:
@@ -63,6 +68,9 @@ use super::texture::Texture;
 pub struct NodeState {
     pub input_channels: Vec<Arc<wgpu::BindGroup>>,
     pub output_target: Arc<Texture>,
+    // uniform group id -> [(element size, buffer size)]
+    pub dyn_offset_info: HashMap<Uuid, Vec<(u64, u64)>>,
+    pub common_buffers: HashMap<Uuid, Arc<(wgpu::Buffer, u32)>>,
 }
 
 pub struct RenderGraph {
@@ -118,6 +126,7 @@ impl GraphBuilder {
         &mut self,
         gpu: Arc<Mutex<GpuState>>,
         resources: &mut legion::Resources,
+        sub_schedule: &mut SubSchedule,
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         texture_store: Arc<Mutex<TextureStore>>,
     ) -> Result<Arc<RenderGraph>> {
@@ -165,9 +174,44 @@ impl GraphBuilder {
             })
             .collect::<Result<HashMap<Uuid, Arc<Texture>>>>()?;
 
+        let unit_square_buffers = (
+            VertexBuffer::new_2d(
+                &[
+                    Vertex2D {
+                        position: [-1.0, -1.0],
+                        uvs: [0.0, 1.0],
+                    },
+                    Vertex2D {
+                        position: [-1.0, 1.0],
+                        uvs: [0.0, 0.0],
+                    },
+                    Vertex2D {
+                        position: [1.0, 1.0],
+                        uvs: [1.0, 0.0],
+                    },
+                    Vertex2D {
+                        position: [1.0, -1.0],
+                        uvs: [1.0, 1.0],
+                    },
+                ],
+                &gpu.device,
+            ),
+            IndexBuffer::new(&[0, 2, 1, 3, 2, 0], &gpu.device),
+        );
+
+        let mut common_buffers: HashMap<Uuid, Arc<(wgpu::Buffer, u32)>> = HashMap::new();
+        common_buffers.insert(
+            Uuid::from_str(UNIT_SQUARE_VRT_BUFFER_ID).unwrap(),
+            Arc::clone(&unit_square_buffers.0.buffer),
+        );
+        common_buffers.insert(
+            Uuid::from_str(UNIT_SQUARE_IND_BUFFER_ID).unwrap(),
+            Arc::clone(&unit_square_buffers.1.buffer),
+        );
+
         // Build all NodeStates; each render node's system has this internal state,
         // allowing it to access the target bind groups of its inputs
-        // as well as its own target texture (to bind both in a pass)
+        // as well as its own target texture
         let node_states: HashMap<Uuid, NodeState> = self
             .node_builders
             .iter()
@@ -182,10 +226,39 @@ impl GraphBuilder {
                             .map(|input_id| Arc::clone(&targets.get(input_id).unwrap().bind_group))
                             .collect::<Vec<Arc<wgpu::BindGroup>>>(),
                         output_target: Arc::clone(&targets.get(&node_id).unwrap()),
+
+                        // Cloned for now
+                        common_buffers: common_buffers.clone(),
+                        dyn_offset_info: nodes.get(node_id).unwrap().binder.dyn_offset_info.clone(),
                     },
                 )
             })
             .collect();
+
+        // TODO:
+        // receive mutable subschedule from EngineBuilder
+        // add NodeSystem to NodeBuilder, so that each node can have a system builder func
+        // schedule full render graph onto subschedule
+
+        // 1. RUN BEGIN_RENDER_GRAPH, which will:
+        //  - create all RenderPass command encoders
+        sub_schedule.add_boxed(Arc::new(Box::new(NodeSystem::new(
+            begin_render_graph_system,
+        ))));
+
+        sub_schedule.flush();
+
+        // 2. RUN NODE SYSTEMS EXCEPT MASTER
+        // sub_schedule.add_boxed(Arc::clone(
+        //     &nodes.get(&self.node_builders[0].dest_id).unwrap().system,
+        // ));
+
+        sub_schedule.flush();
+
+        // 3. RUN MASTER NODE SYSTEM (should be set to gpu swap chain view)
+        sub_schedule.add_boxed(Arc::clone(
+            &nodes.get(&self.node_builders[0].dest_id).unwrap().system,
+        ));
 
         self.dest = Some(Arc::new(RenderGraph {
             nodes,
@@ -210,6 +283,3 @@ impl GraphBuilder {
             .collect::<Vec<Uuid>>()
     }
 }
-
-#[system]
-pub fn testing() {}

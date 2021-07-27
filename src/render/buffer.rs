@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use wgpu::util::DeviceExt;
 
 // Vertex and index buffers
@@ -23,29 +25,35 @@ unsafe impl bytemuck::Pod for Vertex2D {}
 unsafe impl bytemuck::Zeroable for Vertex2D {}
 
 pub struct VertexBuffer {
-    pub buffer: wgpu::Buffer,
+    pub buffer: Arc<(wgpu::Buffer, u32)>,
     pub size: u32,
 }
 
 impl VertexBuffer {
     pub fn new_2d(vertices: &[Vertex2D], device: &wgpu::Device) -> Self {
         VertexBuffer {
-            buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("2D Vertex Buffer"),
-                contents: bytemuck::cast_slice(vertices),
-                usage: wgpu::BufferUsage::VERTEX,
-            }),
+            buffer: Arc::new((
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("2D Vertex Buffer"),
+                    contents: bytemuck::cast_slice(vertices),
+                    usage: wgpu::BufferUsage::VERTEX,
+                }),
+                vertices.len() as u32,
+            )),
             size: vertices.len() as u32,
         }
     }
 
     pub fn _new_3d(vertices: &[Vertex3D], device: &wgpu::Device) -> Self {
         VertexBuffer {
-            buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("3D Vertex Buffer"),
-                contents: bytemuck::cast_slice(vertices),
-                usage: wgpu::BufferUsage::VERTEX,
-            }),
+            buffer: Arc::new((
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("3D Vertex Buffer"),
+                    contents: bytemuck::cast_slice(vertices),
+                    usage: wgpu::BufferUsage::VERTEX,
+                }),
+                vertices.len() as u32,
+            )),
             size: vertices.len() as u32,
         }
     }
@@ -89,18 +97,21 @@ impl VertexBuffer {
 }
 
 pub struct IndexBuffer {
-    pub buffer: wgpu::Buffer,
+    pub buffer: Arc<(wgpu::Buffer, u32)>,
     pub size: u32,
 }
 
 impl IndexBuffer {
     pub fn new(indices: &[u16], device: &wgpu::Device) -> Self {
         IndexBuffer {
-            buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(indices),
-                usage: wgpu::BufferUsage::INDEX,
-            }),
+            buffer: Arc::new((
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Index Buffer"),
+                    contents: bytemuck::cast_slice(indices),
+                    usage: wgpu::BufferUsage::INDEX,
+                }),
+                indices.len() as u32,
+            )),
             size: indices.len() as u32,
         }
     }

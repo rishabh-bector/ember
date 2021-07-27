@@ -15,7 +15,6 @@ pub struct TextureStore {
     pub textures: HashMap<TextureGroup, HashMap<Uuid, Texture>>,
 }
 
-#[derive(Default)]
 pub struct TextureStoreBuilder {
     pub to_load: HashMap<TextureGroup, Vec<(Uuid, String)>>,
     pub load_group: TextureGroup,
@@ -25,7 +24,15 @@ pub struct TextureStoreBuilder {
 
 impl TextureStoreBuilder {
     pub fn new() -> Self {
-        Default::default()
+        let mut to_load: HashMap<TextureGroup, Vec<(Uuid, String)>> = HashMap::new();
+        to_load.insert(TextureGroup::Base2D, vec![]);
+        to_load.insert(TextureGroup::_Base3D, vec![]);
+        Self {
+            to_load,
+            load_group: TextureGroup::Base2D,
+            bind_group_layout: Rc::new(None),
+            texture_store: None,
+        }
     }
 
     pub fn begin_group(&mut self, group: TextureGroup) {
@@ -122,10 +129,4 @@ impl TextureStore {
 pub enum TextureGroup {
     Base2D,
     _Base3D,
-}
-
-impl Default for TextureGroup {
-    fn default() -> Self {
-        Self::Base2D
-    }
 }

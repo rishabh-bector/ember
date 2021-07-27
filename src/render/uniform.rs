@@ -82,6 +82,7 @@ pub trait GroupBuilder {
         queue: Arc<wgpu::Queue>,
     ) -> Result<wgpu::BindGroupLayout>;
 
+    fn dynamic(&self) -> Option<Vec<(u64, u64)>>;
     fn binding(&self) -> (Uuid, Arc<wgpu::BindGroup>);
 }
 
@@ -97,6 +98,8 @@ pub struct UniformGroupBuilder<N> {
     pub id: Uuid,
     pub state: Option<N>,
     pub dest: Option<Arc<Mutex<UniformGroup<N>>>>,
+
+    pub dyn_offset_info: Vec<(u64, u64)>,
 }
 
 impl<N> UniformGroupBuilder<N> {
@@ -108,10 +111,14 @@ impl<N> UniformGroupBuilder<N> {
             state: None,
             dest: None,
             id: Uuid::new_v4(),
+            dyn_offset_info: vec![],
         }
     }
 
     pub fn with_uniform<T: UniformBuilder + 'static>(mut self, uniform: T) -> Self {
+        if let Some(offset_info) = uniform.dynamic() {
+            self.dyn_offset_info.push(offset_info);
+        }
         self.uniforms.push(Arc::new(Mutex::new(uniform)));
         self
     }
@@ -219,6 +226,13 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
         Ok(bind_group_layout)
     }
 
+    fn dynamic(&self) -> Option<Vec<(u64, u64)>> {
+        if self.dyn_offset_info.len() == 0 {
+            return None;
+        }
+        Some(self.dyn_offset_info.clone())
+    }
+
     fn binding(&self) -> (Uuid, Arc<wgpu::BindGroup>) {
         (self.id, Arc::clone(&self.bind_group.as_ref().unwrap()))
     }
@@ -239,6 +253,7 @@ where
 pub trait UniformBuilder: ResourceBuilder {
     // -> (buffer, source size, max dynamic offsets per render pass)
     fn build_buffer(&mut self, device: &wgpu::Device) -> BufferState;
+    fn dynamic(&self) -> Option<(u64, u64)>;
 }
 
 pub struct GenericUniformBuilder<U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug> {
@@ -327,6 +342,17 @@ where
             }),
             element_size: source_size as u64,
             max_elements: max_elements as u64,
+        }
+    }
+
+    fn dynamic(&self) -> Option<(u64, u64)> {
+        match self.dynamic {
+            false => None,
+            true => Some((
+                self.size as u64,
+                self.max_size
+                    .unwrap_or(DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS) as u64,
+            )),
         }
     }
 }

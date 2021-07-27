@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use legion::Resources;
+use legion::{systems::ParallelRunnable, Resources};
 use std::{
     collections::HashMap,
     marker::PhantomData,
@@ -7,26 +7,30 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::resources::store::{TextureGroup, TextureStore};
+use crate::resource::{
+    schedule::{NodeSystem, Schedulable},
+    store::{TextureGroup, TextureStore},
+};
 
 use super::{texture::Texture, uniform::GroupResourceBuilder};
 
 pub struct RenderNode {
     pub id: Uuid,
     pub name: String,
+    pub graph_inputs: u32,
+    pub master: bool,
+
     pub pipeline: wgpu::RenderPipeline,
     pub shader_module: wgpu::ShaderModule,
     pub binder: PipelineBinder,
 
-    // How many render targets this pipeline
-    // requires
-    // MAYBE: MAKE PIPELINE -> RenderNode???
-    pub graph_inputs: u32,
+    pub system: Arc<Box<dyn Schedulable>>,
 }
 
 pub struct PipelineBinder {
     pub texture_groups: HashMap<Uuid, Arc<wgpu::BindGroup>>,
-    pub uniform_groups: Vec<Arc<wgpu::BindGroup>>,
+    pub uniform_groups: HashMap<Uuid, Arc<wgpu::BindGroup>>,
+    pub dyn_offset_info: HashMap<Uuid, Vec<(u64, u64)>>,
 }
 
 pub enum ShaderSource {
@@ -43,6 +47,7 @@ pub enum BindIndex {
 pub struct NodeBuilder {
     pub name: String,
     pub graph_inputs: u32,
+    pub master: bool,
 
     pub shader_source: ShaderSource,
     pub bind_groups: Vec<BindIndex>,
@@ -52,6 +57,8 @@ pub struct NodeBuilder {
     pub dest: Option<Arc<RenderNode>>,
     pub dest_name: String,
     pub dest_id: Uuid,
+
+    pub system: Option<Arc<Box<dyn Schedulable>>>,
 }
 
 impl NodeBuilder {
@@ -59,6 +66,7 @@ impl NodeBuilder {
         Self {
             name: format!("{}_builder", &name),
             graph_inputs,
+            master: false,
             shader_source: shader,
             bind_groups: vec![],
             vertex_buffer_layouts: vec![],
@@ -66,10 +74,14 @@ impl NodeBuilder {
             dest: None,
             dest_name: name,
             dest_id: Uuid::new_v4(),
+            system: None,
         }
     }
 
-    pub fn uniform_group<T: GroupResourceBuilder + 'static>(mut self, group_builder: T) -> Self {
+    pub fn with_uniform_group<T: GroupResourceBuilder + 'static>(
+        mut self,
+        group_builder: T,
+    ) -> Self {
         self.bind_groups
             .push(BindIndex::Uniform(self.uniform_group_builders.len()));
         self.uniform_group_builders
@@ -77,13 +89,21 @@ impl NodeBuilder {
         self
     }
 
-    pub fn texture_group(mut self, group: TextureGroup) -> Self {
+    pub fn with_texture_group(mut self, group: TextureGroup) -> Self {
         self.bind_groups.push(BindIndex::Texture(group));
         self
     }
 
-    pub fn vertex_buffer_layout(mut self, layout: wgpu::VertexBufferLayout<'static>) -> Self {
+    pub fn with_vertex_layout(mut self, layout: wgpu::VertexBufferLayout<'static>) -> Self {
         self.vertex_buffer_layouts.push(layout);
+        self
+    }
+
+    pub fn with_system<S: ParallelRunnable + 'static, F: Fn() -> S + Send + Sync + 'static>(
+        mut self,
+        system: F,
+    ) -> Self {
+        self.system = Some(Arc::new(Box::new(NodeSystem::new(system))));
         self
     }
 
@@ -207,21 +227,29 @@ impl NodeBuilder {
             texture_groups.extend(texture_store.lock().unwrap().bind_group(group));
         }
 
-        let mut uniform_groups: Vec<Arc<wgpu::BindGroup>> = vec![];
+        let mut uniform_groups: HashMap<Uuid, Arc<wgpu::BindGroup>> = HashMap::new();
+        let mut dyn_offset_info: HashMap<Uuid, Vec<(u64, u64)>> = HashMap::new();
         for group in uniform_groups_needed {
-            let (id, bind_group) = self.uniform_group_builders[group].lock().unwrap().binding();
-            uniform_groups.push(bind_group);
+            let needed_group = self.uniform_group_builders[group].lock().unwrap();
+            let (id, bind_group) = needed_group.binding();
+            uniform_groups.insert(id, bind_group);
+            if let Some(dyn_offsets) = needed_group.dynamic() {
+                dyn_offset_info.insert(id, dyn_offsets);
+            }
         }
 
         let binder = PipelineBinder {
             texture_groups,
             uniform_groups,
+            dyn_offset_info,
         };
 
         self.dest = Some(Arc::new(RenderNode {
             id: self.dest_id,
             name: self.dest_name.to_owned(),
             graph_inputs: self.graph_inputs,
+            system: Arc::clone(&self.system.as_ref().unwrap()),
+            master: self.master,
             binder,
             pipeline,
             shader_module,
