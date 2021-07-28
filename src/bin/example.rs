@@ -39,7 +39,7 @@ fn main() {
         ));
     }
 
-    for i in 0..90 {
+    for i in 0..120 {
         let size = rng.gen_range(5.0..25.0);
         engine.world().push((
             Base2D::solid_rect(&format!("block_{}", i), size, size, [1.0, 1.0, 1.0, 1.0]),

@@ -196,8 +196,7 @@ impl EngineBuilder {
                     _padding: [0.0; 32],
                     __padding: [0.0; 23],
                 })
-                .enable_dynamic_buffering()
-                .with_dynamic_entity_limit(96),
+                .enable_dynamic_buffering(),
             )
             .with_id(Uuid::from_str(BASE_2D_BIND_GROUP_ID).unwrap());
 
