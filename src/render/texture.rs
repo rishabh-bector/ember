@@ -76,7 +76,7 @@ impl Texture {
             depth_or_array_layers: 1,
         };
 
-        let texture = Self::blank(dimensions, device, queue, group_layout, label)?;
+        let texture = Self::blank(dimensions, device, queue, group_layout, label, false)?;
 
         queue.write_texture(
             wgpu::ImageCopyTexture {
@@ -101,6 +101,7 @@ impl Texture {
         queue: &wgpu::Queue,
         group_layout: &wgpu::BindGroupLayout,
         label: Option<&str>,
+        is_render_target: bool,
     ) -> Result<Texture> {
         let size = wgpu::Extent3d {
             width: dimensions.0,
@@ -114,8 +115,15 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+            format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            usage: match is_render_target {
+                false => wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+                true => {
+                    wgpu::TextureUsage::SAMPLED
+                        | wgpu::TextureUsage::COPY_DST
+                        | wgpu::TextureUsage::RENDER_ATTACHMENT
+                }
+            },
         });
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());

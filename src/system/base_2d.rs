@@ -82,18 +82,27 @@ pub fn base_2d_uniform(
     #[resource] base_uniforms: &Arc<Mutex<GenericUniform<Base2DUniforms>>>,
     #[resource] base_uniforms_group: &Arc<Mutex<UniformGroup<Base2DUniformGroup>>>,
 ) {
+    debug!("running system base_2d_uniforms");
+
     let mut base_uniforms = base_uniforms.lock().unwrap();
     let mut base_uniforms_group = base_uniforms_group.lock().unwrap();
 
     let mut query = <(&Base2D, &Position2D)>::query();
 
     base_uniforms_group.begin_dynamic_loading();
+    let mut count: u64 = 0;
     for (base_2d, pos) in query.iter_mut(world) {
         base_uniforms.mut_ref().model = [pos.x, pos.y, base_2d.width, base_2d.height];
         base_uniforms.mut_ref().color = base_2d.color;
         base_uniforms.mut_ref().mix = base_2d.mix;
         base_uniforms_group.load_dynamic_uniform(0, base_uniforms.as_bytes());
+        count += 1;
     }
+    *base_uniforms_group.dynamic_entity_count.lock().unwrap() = count;
+    debug!(
+        "done loading base_2d uniforms with {} dynamic entities",
+        count
+    );
 }
 
 pub fn _flatten(mat: Matrix2<f32>) -> [f32; 4] {

@@ -24,7 +24,7 @@ use self::{node::PipelineBinder, texture::Texture};
 
 pub struct GpuState {
     pub surface: wgpu::Surface,
-    pub device: wgpu::Device,
+    pub device: Arc<wgpu::Device>,
     pub queue: Arc<wgpu::Queue>,
     pub chain_descriptor: wgpu::SwapChainDescriptor,
     pub swap_chain: wgpu::SwapChain,
@@ -44,7 +44,7 @@ impl GpuStateBuilder {
 
         // Instance is a handle to the GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
-        let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
+        let instance = wgpu::Instance::new(wgpu::BackendBit::VULKAN);
 
         // Surface is used to create a swap chain
         let surface = unsafe { instance.create_surface(window.as_ref()) };
@@ -88,6 +88,12 @@ impl GpuStateBuilder {
             )
             .await?;
 
+        let device = Arc::new(device);
+        let queue = Arc::new(queue);
+
+        resources.insert(Arc::clone(&device));
+        resources.insert(Arc::clone(&queue));
+
         // Swap chain is used to store rendered textures which
         // are synced with the display
         let chain_descriptor = wgpu::SwapChainDescriptor {
@@ -105,7 +111,7 @@ impl GpuStateBuilder {
             screen_size: self.screen_size,
             surface,
             device,
-            queue: Arc::new(queue),
+            queue,
             chain_descriptor,
             swap_chain,
         })
@@ -125,13 +131,9 @@ impl GpuState {
 
 // -----------------------------------------------------------
 
-pub struct RenderPass<N> {
-    pub node: Arc<RenderNode>, // Not modified during pass, should move to NodeState
-    pub encoder: wgpu::CommandEncoder,
-    pub master: Arc<Option<wgpu::SwapChainTexture>>,
-    pub num_dynamic: HashMap<Uuid, u32>,
-    pub _marker: PhantomData<N>,
-}
+// pub struct RenderPass<N> {
+//     pub _marker: PhantomData<N>,
+// }
 
 // impl<N> RenderPass<N> {
 //     pub fn new(gpu: Arc<Mutex<GpuState>>, pipeline: usize) -> Self {

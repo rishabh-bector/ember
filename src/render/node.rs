@@ -8,11 +8,11 @@ use std::{
 use uuid::Uuid;
 
 use crate::resource::{
-    schedule::{NodeSystem, Schedulable},
+    schedule::{NodeSystem, Schedulable, SubSchedulable},
     store::{TextureGroup, TextureStore},
 };
 
-use super::{texture::Texture, uniform::GroupResourceBuilder};
+use super::{graph::NodeState, texture::Texture, uniform::GroupResourceBuilder};
 
 pub struct RenderNode {
     pub id: Uuid,
@@ -24,13 +24,15 @@ pub struct RenderNode {
     pub shader_module: wgpu::ShaderModule,
     pub binder: PipelineBinder,
 
-    pub system: Arc<Box<dyn Schedulable>>,
+    pub system: Arc<Box<dyn SubSchedulable>>,
 }
 
 pub struct PipelineBinder {
     pub texture_groups: HashMap<Uuid, Arc<wgpu::BindGroup>>,
     pub uniform_groups: HashMap<Uuid, Arc<wgpu::BindGroup>>,
-    pub dyn_offset_info: HashMap<Uuid, Vec<(u64, u64)>>,
+
+    // uniform group id -> (dyn_entity_count, [(dyn uniform size, max count)])
+    pub dyn_offset_state: HashMap<Uuid, (Arc<Mutex<u64>>, Vec<(u64, u64)>)>,
 }
 
 pub enum ShaderSource {
@@ -58,7 +60,7 @@ pub struct NodeBuilder {
     pub dest_name: String,
     pub dest_id: Uuid,
 
-    pub system: Option<Arc<Box<dyn Schedulable>>>,
+    pub system: Option<Arc<Box<dyn SubSchedulable>>>,
 }
 
 impl NodeBuilder {
@@ -99,7 +101,10 @@ impl NodeBuilder {
         self
     }
 
-    pub fn with_system<S: ParallelRunnable + 'static, F: Fn() -> S + Send + Sync + 'static>(
+    pub fn with_system<
+        S: ParallelRunnable + 'static,
+        F: Fn(NodeState) -> S + Send + Sync + 'static,
+    >(
         mut self,
         system: F,
     ) -> Self {
@@ -107,12 +112,23 @@ impl NodeBuilder {
         self
     }
 
-    pub fn build(
+    pub fn with_id(mut self, id: Uuid) -> Self {
+        self.dest_id = id;
+        self
+    }
+}
+
+impl NodeBuilderTrait for NodeBuilder {
+    fn id(&self) -> Uuid {
+        self.dest_id
+    }
+
+    fn build(
         &mut self,
         resources: &mut Resources,
         device: &wgpu::Device,
         queue: Arc<wgpu::Queue>,
-        chain_desc: &wgpu::SwapChainDescriptor,
+        texture_format: wgpu::TextureFormat,
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         texture_store: Arc<Mutex<TextureStore>>,
     ) -> Result<Arc<RenderNode>> {
@@ -177,7 +193,7 @@ impl NodeBuilder {
                 module: &shader_module,
                 entry_point: "main",
                 targets: &[wgpu::ColorTargetState {
-                    format: chain_desc.format,
+                    format: texture_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrite::ALL,
                 }],
@@ -228,20 +244,22 @@ impl NodeBuilder {
         }
 
         let mut uniform_groups: HashMap<Uuid, Arc<wgpu::BindGroup>> = HashMap::new();
-        let mut dyn_offset_info: HashMap<Uuid, Vec<(u64, u64)>> = HashMap::new();
+        let mut dyn_offset_state: HashMap<Uuid, (Arc<Mutex<u64>>, Vec<(u64, u64)>)> =
+            HashMap::new();
+
         for group in uniform_groups_needed {
             let needed_group = self.uniform_group_builders[group].lock().unwrap();
             let (id, bind_group) = needed_group.binding();
             uniform_groups.insert(id, bind_group);
             if let Some(dyn_offsets) = needed_group.dynamic() {
-                dyn_offset_info.insert(id, dyn_offsets);
+                dyn_offset_state.insert(id, dyn_offsets);
             }
         }
 
         let binder = PipelineBinder {
             texture_groups,
             uniform_groups,
-            dyn_offset_info,
+            dyn_offset_state,
         };
 
         self.dest = Some(Arc::new(RenderNode {
@@ -257,6 +275,19 @@ impl NodeBuilder {
 
         Ok(Arc::clone(&self.dest.as_ref().unwrap()))
     }
+}
+
+pub trait NodeBuilderTrait {
+    fn id(&self) -> Uuid;
+    fn build(
+        &mut self,
+        resources: &mut Resources,
+        device: &wgpu::Device,
+        queue: Arc<wgpu::Queue>,
+        texture_format: wgpu::TextureFormat,
+        texture_bind_group_layout: &wgpu::BindGroupLayout,
+        texture_store: Arc<Mutex<TextureStore>>,
+    ) -> Result<Arc<RenderNode>>;
 }
 
 fn build_shader(source: &ShaderSource, label: &str, device: &wgpu::Device) -> wgpu::ShaderModule {

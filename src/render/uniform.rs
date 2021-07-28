@@ -34,6 +34,8 @@ pub struct UniformGroup<N> {
 
     pub id: Uuid,
     pub queue: Arc<wgpu::Queue>,
+    pub dynamic_entity_count: Arc<Mutex<u64>>,
+
     _marker: PhantomData<N>,
 }
 
@@ -82,7 +84,7 @@ pub trait GroupBuilder {
         queue: Arc<wgpu::Queue>,
     ) -> Result<wgpu::BindGroupLayout>;
 
-    fn dynamic(&self) -> Option<Vec<(u64, u64)>>;
+    fn dynamic(&self) -> Option<(Arc<Mutex<u64>>, Vec<(u64, u64)>)>;
     fn binding(&self) -> (Uuid, Arc<wgpu::BindGroup>);
 }
 
@@ -100,6 +102,7 @@ pub struct UniformGroupBuilder<N> {
     pub dest: Option<Arc<Mutex<UniformGroup<N>>>>,
 
     pub dyn_offset_info: Vec<(u64, u64)>,
+    pub dyn_entity_count: Arc<Mutex<u64>>,
 }
 
 impl<N> UniformGroupBuilder<N> {
@@ -112,6 +115,7 @@ impl<N> UniformGroupBuilder<N> {
             dest: None,
             id: Uuid::new_v4(),
             dyn_offset_info: vec![],
+            dyn_entity_count: Arc::new(Mutex::new(0)),
         }
     }
 
@@ -216,6 +220,7 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
             dynamic_offset_sizes: buffer_states.iter().map(|s| s.element_size).collect(),
             dynamic_offset_limits: buffer_states.iter().map(|s| s.max_elements).collect(),
             buffers: buffer_states.into_iter().map(|s| s.buffer).collect(),
+            dynamic_entity_count: Arc::clone(&self.dyn_entity_count),
             _marker: PhantomData,
         })));
 
@@ -226,11 +231,14 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
         Ok(bind_group_layout)
     }
 
-    fn dynamic(&self) -> Option<Vec<(u64, u64)>> {
+    fn dynamic(&self) -> Option<(Arc<Mutex<u64>>, Vec<(u64, u64)>)> {
         if self.dyn_offset_info.len() == 0 {
             return None;
         }
-        Some(self.dyn_offset_info.clone())
+        Some((
+            Arc::clone(&self.dyn_entity_count),
+            self.dyn_offset_info.clone(),
+        ))
     }
 
     fn binding(&self) -> (Uuid, Arc<wgpu::BindGroup>) {
