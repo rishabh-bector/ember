@@ -6,6 +6,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use uuid::Uuid;
+use wgpu::SwapChainTexture;
 
 use crate::{
     buffer::{IndexBuffer, Vertex2D, VertexBuffer},
@@ -18,10 +19,11 @@ use crate::{
         GpuState,
     },
     resource::{
-        schedule::{NodeSystem, PlainSystem, Schedulable, SubSchedule},
+        schedule::{LocalSystem, NodeSystem, Schedulable, StatelessSystem, SubSchedule},
         store::TextureStore,
+        ui::UI,
     },
-    system::{physics_2d::*, render_graph::*},
+    system::{physics_2d::*, render_graph::*, render_ui::*},
     texture::Texture,
 };
 
@@ -70,11 +72,22 @@ use super::node::NodeBuilderTrait;
 //  - type or id of pipeline (need Arc<pipeline> for binding to the render pass)
 //
 
+pub enum RenderTarget {
+    Texture(Texture),
+    Master(Option<wgpu::SwapChainTexture>),
+}
+
+pub enum UIMode {
+    Disabled,
+    Node(Uuid),
+    Master,
+}
+
 #[derive(Clone)]
 pub struct NodeState {
     pub node: Arc<RenderNode>,
     pub input_channels: Vec<Arc<wgpu::BindGroup>>,
-    pub output_target: Arc<Texture>,
+    pub render_target: Arc<Mutex<RenderTarget>>,
     pub master: Arc<Mutex<Option<wgpu::SwapChainTexture>>>,
 
     // uniform group id -> [(element size, buffer size)]
@@ -89,6 +102,7 @@ pub struct RenderGraph {
     pub source_nodes: Vec<Uuid>,
     pub master_node: Uuid,
     pub channels: Vec<(Uuid, Uuid)>,
+    pub ui_target: Option<Arc<Texture>>,
 }
 
 pub struct GraphBuilder {
@@ -98,6 +112,7 @@ pub struct GraphBuilder {
     pub channels: Vec<(Uuid, Uuid)>,
     pub node_states: HashMap<Uuid, NodeState>,
     pub dest: Option<Arc<RenderGraph>>,
+    pub ui_mode: UIMode,
 }
 
 impl GraphBuilder {
@@ -109,6 +124,7 @@ impl GraphBuilder {
             channels: Vec::new(),
             node_states: HashMap::new(),
             dest: None,
+            ui_mode: UIMode::Disabled,
         }
     }
 
@@ -133,6 +149,11 @@ impl GraphBuilder {
         self
     }
 
+    pub fn with_ui_master(mut self) -> Self {
+        self.ui_mode = UIMode::Master;
+        self
+    }
+
     // TODO: distil this into several functions
     pub fn build(
         &mut self,
@@ -143,6 +164,7 @@ impl GraphBuilder {
         texture_format: wgpu::TextureFormat,
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         texture_store: Arc<Mutex<TextureStore>>,
+        window: &winit::window::Window,
     ) -> Result<Arc<RenderGraph>> {
         debug!("building render graph nodes");
         let nodes = self
@@ -167,18 +189,33 @@ impl GraphBuilder {
             .map(|(id, node)| {
                 Ok((
                     *id,
-                    Arc::new(Texture::blank(
+                    RenderTarget::Texture(Texture::blank(
                         // TODO: Make actual config (I will, part of SHIP: EngineBuilder)
                         (DEFAULT_SCREEN_WIDTH as u32, DEFAULT_SCREEN_HEIGHT as u32),
                         &device,
                         &queue,
                         texture_bind_group_layout,
-                        Some(&format!("render_target_{}", node.name)),
+                        Some(&format!("{}_render_target", node.name)),
                         true,
                     )?),
                 ))
             })
-            .collect::<Result<HashMap<Uuid, Arc<Texture>>>>()?;
+            .collect::<Result<HashMap<Uuid, RenderTarget>>>()?;
+
+        // Build UI if enabled
+        let swap_chain_target = Arc::new(Mutex::new(None));
+        let ui_target = match &self.ui_mode {
+            UIMode::Disabled => Arc::new(Mutex::new(None)),
+            UIMode::Master => Arc::clone(&swap_chain_target),
+            UIMode::Node(id) => Arc::clone(targets.get(id).unwrap()),
+        };
+        match self.ui_mode {
+            UIMode::Target(_) | UIMode::Master => {
+                debug!("building ui");
+                resources.insert(UI::new(Arc::clone(&ui_target), window, &device, &queue))
+            }
+            _ => (),
+        }
 
         let unit_square_buffers = (
             VertexBuffer::new_2d(
@@ -220,7 +257,6 @@ impl GraphBuilder {
         // allowing it to access the target bind groups of its inputs
         // as well as its own target texture
         debug!("building node states");
-        let swap_chain_target = Arc::new(Mutex::new(None));
         let node_states: HashMap<Uuid, NodeState> = nodes
             .iter()
             .map(|(node_id, node)| {
@@ -264,7 +300,7 @@ impl GraphBuilder {
         //  - create all RenderPass command encoders
         debug!("scheduling render systems");
 
-        sub_schedule.add_boxed_stateless(Arc::new(Box::new(PlainSystem::new(
+        sub_schedule.add_boxed_stateless(Arc::new(Box::new(StatelessSystem::new(
             begin_render_graph_system,
         ))));
 
@@ -275,9 +311,6 @@ impl GraphBuilder {
         //     &nodes.get(&self.node_builders[0].dest_id).unwrap().system,
         // ));
 
-        sub_schedule.flush();
-
-        // 3. RUN MASTER NODE SYSTEM (should be set to gpu swap chain view)
         sub_schedule.add_boxed(
             Arc::clone(&nodes.get(&ID(BASE_2D_RENDER_NODE_ID)).unwrap().system),
             node_states
@@ -288,7 +321,16 @@ impl GraphBuilder {
 
         sub_schedule.flush();
 
-        sub_schedule.add_boxed_stateless(Arc::new(Box::new(PlainSystem::new(
+        // 3. RUN MASTER NODE SYSTEM (should be set to gpu swap chain view)
+
+        if let UIMode::Master = self.ui_mode {
+            sub_schedule
+                .add_single_threaded(Arc::new(Box::new(LocalSystem::new(render_ui_system))));
+        }
+
+        // Release lock on swap chain, end of frame
+        sub_schedule.flush();
+        sub_schedule.add_boxed_stateless(Arc::new(Box::new(StatelessSystem::new(
             end_render_graph_system,
         ))));
 
@@ -301,6 +343,7 @@ impl GraphBuilder {
             master_node: self
                 .master_node
                 .expect("RenderGraphBuilder: master node required"),
+            ui_target,
         }));
 
         debug!("done building render graph!");

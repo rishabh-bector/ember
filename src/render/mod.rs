@@ -44,7 +44,7 @@ impl GpuStateBuilder {
 
         // Instance is a handle to the GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
-        let instance = wgpu::Instance::new(wgpu::BackendBit::VULKAN);
+        let instance = wgpu::Instance::new(wgpu::BackendBit::VULKAN | wgpu::BackendBit::METAL);
 
         // Surface is used to create a swap chain
         let surface = unsafe { instance.create_surface(window.as_ref()) };

@@ -37,7 +37,7 @@ use crate::{
         CAMERA_2D_BIND_GROUP_ID, DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, ID,
         LIGHTING_2D_BIND_GROUP_ID,
     },
-    render::{buffer::*, graph::GraphBuilder, node::*, uniform::*, *},
+    render::{buffer::*, graph::GraphBuilder, node::*, texture::Texture, uniform::*, *},
     resource::{
         camera::Camera2D,
         schedule::{Schedulable, SubSchedule},
@@ -83,7 +83,6 @@ pub struct Engine {
     window: Rc<Window>,
     input: WinitInputHelper,
     legion: LegionState,
-    ui: UI,
 }
 
 impl Engine {
@@ -183,9 +182,6 @@ impl EngineBuilder {
             texture_store_builder.build(&gpu_mut.device, &gpu_mut.queue)?;
         texture_store_builder.build_to_resources(&mut resources);
 
-        info!("initializing ui");
-        let ui = UI::new(window.as_ref(), &gpu_mut.device, &gpu_mut.queue);
-
         info!("building uniforms");
         let base_2d_uniforms = UniformGroup::<Base2DUniformGroup>::builder()
             .with_uniform(
@@ -248,7 +244,8 @@ impl EngineBuilder {
         info!("building render graph");
         let mut graph_schedule = SubSchedule::new();
         let render_graph = GraphBuilder::new()
-            .with_master_node(base_2d_pipeline_node)
+            .with_node(base_2d_pipeline_node)
+            .with_ui_master()
             .build(
                 Arc::clone(&gpu_mut.device),
                 Arc::clone(&gpu_mut.queue),
@@ -257,6 +254,7 @@ impl EngineBuilder {
                 gpu_mut.chain_descriptor.format,
                 &texture_bind_group_layout,
                 Arc::clone(&texture_store),
+                &window,
             )?;
         drop(gpu_mut);
 
@@ -287,7 +285,6 @@ impl EngineBuilder {
                 graph: render_graph,
                 store: texture_store,
                 gpu,
-                ui,
             },
             event_loop,
         ))

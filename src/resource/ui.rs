@@ -1,17 +1,32 @@
 use anyhow::Result;
-use std::time::Instant;
+use std::{
+    sync::{Arc, Mutex, MutexGuard},
+    time::Instant,
+};
+
+use crate::render::texture::Texture;
 
 pub struct UI {
-    imgui: imgui::Context,
-    platform: imgui_winit_support::WinitPlatform,
-    renderer: imgui_wgpu::Renderer,
-    last_frame: Instant,
-    last_cursor: Option<imgui::MouseCursor>,
-    about_open: bool,
+    pub platform: imgui_winit_support::WinitPlatform,
+    pub render_target: Arc<Mutex<Option<Texture>>>,
+    pub context: Mutex<imgui::Context>,
+    pub renderer: Mutex<imgui_wgpu::Renderer>,
+    pub state: Mutex<UIState>,
+}
+
+pub struct UIState {
+    pub last_frame: Instant,
+    pub last_cursor: Option<imgui::MouseCursor>,
+    pub about_open: bool,
 }
 
 impl UI {
-    pub fn new(window: &winit::window::Window, device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
+    pub fn new(
+        render_target: Arc<Mutex<Option<Texture>>>,
+        window: &winit::window::Window,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Self {
         // Create Dear ImGui context
         let mut imgui = imgui::Context::create();
         imgui.set_ini_filename(None);
@@ -46,55 +61,32 @@ impl UI {
         let renderer = imgui_wgpu::Renderer::new(&mut imgui, device, queue, config);
 
         Self {
-            imgui,
+            context: Mutex::new(imgui),
+            renderer: Mutex::new(renderer),
+            state: Mutex::new(UIState {
+                last_frame: Instant::now(),
+                last_cursor: None,
+                about_open: true,
+            }),
             platform,
-            renderer,
-            last_frame: Instant::now(),
-            last_cursor: None,
-            about_open: true,
+            render_target,
         }
     }
 
     pub fn prepare(
         &mut self,
-        window: &winit::window::Window,
+        // window: &winit::window::Window,
     ) -> Result<(), winit::error::ExternalError> {
+        let mut state = self.state.lock().unwrap();
+        let mut imgui = self.context.lock().unwrap();
+
+        let last_frame = state.last_frame;
         let now = Instant::now();
-        self.imgui.io_mut().update_delta_time(now - self.last_frame);
-        self.last_frame = now;
-        self.platform.prepare_frame(self.imgui.io_mut(), window)
-    }
 
-    pub fn render(
-        &mut self,
-        window: &winit::window::Window,
-        encoder: &mut wgpu::CommandEncoder,
-        render_target: &wgpu::TextureView,
-    ) -> Result<()> {
-        // Start a new Dear ImGui frame and update the cursor
-        let ui = self.imgui.frame();
+        imgui.io_mut().update_delta_time(now - last_frame);
+        state.last_frame = now;
 
-        let mouse_cursor = ui.mouse_cursor();
-        if self.last_cursor != mouse_cursor {
-            self.last_cursor = mouse_cursor;
-            self.platform.prepare_render(&ui, window);
-        }
-
-        // Draw windows and GUI elements here
-        let mut about_open = false;
-        ui.main_menu_bar(|| {
-            ui.menu(imgui::im_str!("Help"), true, || {
-                about_open = imgui::MenuItem::new(imgui::im_str!("About...")).build(&ui);
-            });
-        });
-        if about_open {
-            self.about_open = true;
-        }
-
-        if self.about_open {
-            ui.show_about_window(&mut self.about_open);
-        }
-
+        // self.platform.prepare_frame(imgui.io_mut(), window)
         Ok(())
     }
 }

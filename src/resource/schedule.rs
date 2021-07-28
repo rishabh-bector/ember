@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use legion::systems::{Builder as ScheduleBuilder, ParallelRunnable};
+use legion::systems::{Builder as ScheduleBuilder, ParallelRunnable, Runnable};
 
 use crate::render::graph::NodeState;
 
@@ -11,6 +11,9 @@ pub enum Step {
     System {
         builder: Arc<Box<dyn SubSchedulable>>,
         state: NodeState,
+    },
+    Local {
+        builder: Arc<Box<dyn LocalSchedulable>>,
     },
     Flush,
 }
@@ -49,12 +52,16 @@ impl SubSchedule {
         self.steps.push(Step::Stateless { builder: system });
     }
 
+    pub fn add_single_threaded(&mut self, system: Arc<Box<dyn LocalSchedulable>>) {
+        self.steps.push(Step::Local { builder: system });
+    }
+
     pub fn flush(&mut self) {
         self.steps.push(Step::Flush);
     }
 }
 
-pub trait Schedulable: Send + Sync {
+pub trait Schedulable {
     fn schedule(&self, schedule: &mut ScheduleBuilder);
 }
 
@@ -67,6 +74,7 @@ impl Schedulable for SubSchedule {
                 }
                 Step::System { builder, state } => builder.schedule(schedule, state.clone()),
                 Step::Stateless { builder } => builder.schedule(schedule),
+                Step::Local { builder } => builder.schedule(schedule),
             }
         }
     }
@@ -108,9 +116,9 @@ where
     }
 }
 
-// For systems with no state
+// For async systems with no state
 
-pub struct PlainSystem<F, S>
+pub struct StatelessSystem<F, S>
 where
     F: Fn() -> S + Send + Sync,
     S: ParallelRunnable + 'static,
@@ -119,7 +127,7 @@ where
     _marker: PhantomData<S>,
 }
 
-impl<F, S> PlainSystem<F, S>
+impl<F, S> StatelessSystem<F, S>
 where
     F: Fn() -> S + Send + Sync,
     S: ParallelRunnable + 'static,
@@ -132,12 +140,48 @@ where
     }
 }
 
-impl<F, S> Schedulable for PlainSystem<F, S>
+impl<F, S> Schedulable for StatelessSystem<F, S>
 where
     F: Fn() -> S + Send + Sync,
     S: ParallelRunnable + 'static,
 {
     fn schedule(&self, schedule: &mut ScheduleBuilder) {
         schedule.add_system((self.builder)());
+    }
+}
+
+pub trait LocalSchedulable {
+    fn schedule(&self, schedule: &mut ScheduleBuilder);
+}
+
+pub struct LocalSystem<F, S>
+where
+    F: Fn() -> S,
+    S: Runnable + 'static,
+{
+    builder: F,
+    _marker: PhantomData<S>,
+}
+
+impl<F, S> LocalSystem<F, S>
+where
+    F: Fn() -> S,
+    S: Runnable + 'static,
+{
+    pub fn new(system_builder: F) -> Self {
+        Self {
+            builder: system_builder,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<F, S> LocalSchedulable for LocalSystem<F, S>
+where
+    F: Fn() -> S,
+    S: Runnable + 'static,
+{
+    fn schedule(&self, schedule: &mut ScheduleBuilder) {
+        schedule.add_thread_local((self.builder)());
     }
 }
