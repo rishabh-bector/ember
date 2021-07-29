@@ -244,7 +244,7 @@ impl EngineBuilder {
         info!("building render graph");
         let mut graph_schedule = SubSchedule::new();
         let render_graph = GraphBuilder::new()
-            .with_node(base_2d_pipeline_node)
+            .with_master_node(base_2d_pipeline_node)
             .with_ui_master()
             .build(
                 Arc::clone(&gpu_mut.device),

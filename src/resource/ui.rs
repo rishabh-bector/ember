@@ -8,7 +8,7 @@ use crate::render::{graph::RenderTarget, texture::Texture};
 
 pub struct UI {
     pub platform: imgui_winit_support::WinitPlatform,
-    pub render_target: RenderTarget,
+    pub render_target: Arc<Mutex<RenderTarget>>,
     pub context: Mutex<imgui::Context>,
     pub renderer: Mutex<imgui_wgpu::Renderer>,
     pub state: Mutex<UIState>,
@@ -22,7 +22,7 @@ pub struct UIState {
 
 impl UI {
     pub fn new(
-        render_target: RenderTarget,
+        render_target: Arc<Mutex<RenderTarget>>,
         window: &winit::window::Window,
         device: &wgpu::Device,
         queue: &wgpu::Queue,

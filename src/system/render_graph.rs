@@ -4,7 +4,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::render::{graph::RenderGraph, GpuState};
+use crate::render::{
+    graph::{RenderGraph, RenderTarget},
+    GpuState,
+};
 
 use super::render_2d::Base2DRenderNode;
 
@@ -15,12 +18,8 @@ pub fn begin_render_graph(
 ) {
     debug!("running system begin_render_graph");
     let gpu = gpu.lock().unwrap();
-    *graph
-        .swap_chain_target
-        .borrow_mut_if_master()
-        .unwrap()
-        .lock()
-        .unwrap() = Some(gpu.swap_chain.get_current_frame().unwrap().output);
+    *graph.swap_chain_target.lock().unwrap() =
+        RenderTarget::Master(Arc::new(gpu.swap_chain.get_current_frame().unwrap().output));
 }
 
 #[system]
@@ -28,10 +27,5 @@ pub fn end_render_graph(#[resource] graph: &Arc<RenderGraph>) {
     debug!("running system end_render_graph");
     // release lock on swap chain so that buffer can
     // be drawn to window
-    *graph
-        .swap_chain_target
-        .borrow_mut_if_master()
-        .unwrap()
-        .lock()
-        .unwrap() = None;
+    *graph.swap_chain_target.lock().unwrap() = RenderTarget::Empty;
 }

@@ -9,24 +9,27 @@ pub fn render_ui(
     #[resource] device: &Arc<wgpu::Device>, // read only
     #[resource] queue: &Arc<wgpu::Queue>,   // read only
 ) {
+    debug!("running system render_ui");
     let mut context = ui.context.lock().unwrap();
     let mut renderer = ui.renderer.lock().unwrap();
     let mut state = ui.state.lock().unwrap();
+    let render_target = ui.render_target.lock().unwrap();
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Render2D Encoder"),
     });
 
-    let mut pass_handle = ui.render_target.create_render_pass(&mut encoder).unwrap();
+    let mut pass_handle = render_target.create_render_pass(&mut encoder).unwrap();
     let frame = context.frame();
 
     let mouse_cursor = frame.mouse_cursor();
     if state.last_cursor != mouse_cursor {
         state.last_cursor = mouse_cursor;
-        // self.platform.prepare_render(&ui, window);
+        // ui.platform.prepare_render(&ui);
     }
 
     // Draw UI //
+    debug!("building ui");
 
     let mut about_open = false;
     frame.main_menu_bar(|| {
@@ -43,7 +46,9 @@ pub fn render_ui(
     }
 
     // Render to texture
+    debug!("rendering ui");
     renderer
         .render(frame.render(), queue, device, &mut pass_handle)
         .unwrap();
+    debug!("done with ui");
 }

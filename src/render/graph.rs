@@ -75,7 +75,7 @@ use super::node::NodeBuilderTrait;
 pub enum RenderTarget {
     Empty,
     Texture(Arc<Texture>),
-    Master(Arc<Mutex<Option<wgpu::SwapChainTexture>>>),
+    Master(Arc<wgpu::SwapChainTexture>),
 }
 
 impl RenderTarget {
@@ -87,14 +87,10 @@ impl RenderTarget {
         &'a self,
         encoder: &'a mut wgpu::CommandEncoder,
     ) -> Option<wgpu::RenderPass<'a>> {
-        --match self {
+        match self {
             RenderTarget::Empty => None,
             RenderTarget::Texture(tex) => Some(create_render_pass(&tex.view, encoder)),
-            RenderTarget::Master(opt) => {
-                let a = opt.lock().unwrap();
-                let b = &a.as_ref().unwrap().view;
-                Some(create_render_pass(b, encoder))
-            }
+            RenderTarget::Master(opt) => Some(create_render_pass(&opt.view, encoder)),
         }
     }
 
@@ -102,15 +98,15 @@ impl RenderTarget {
         match self {
             RenderTarget::Empty => None,
             RenderTarget::Texture(tex) => Some(Arc::clone(&tex.bind_group)),
-            RenderTarget::Master(opt) => None, // Master node cannot be used as input
+            RenderTarget::Master(_) => None, // Master node cannot be used as input
         }
     }
 
-    pub fn borrow_mut_if_master(&self) -> Option<Arc<Mutex<Option<wgpu::SwapChainTexture>>>> {
+    pub fn borrow_if_master(&self) -> Option<Arc<wgpu::SwapChainTexture>> {
         match self {
             RenderTarget::Empty => None,
-            RenderTarget::Texture(tex) => None,
-            RenderTarget::Master(opt) => Some(Arc::clone(&opt)),
+            RenderTarget::Texture(_) => None,
+            RenderTarget::Master(opt) => Some(Arc::clone(opt)),
         }
     }
 
@@ -139,7 +135,7 @@ pub enum UIMode {
 pub struct NodeState {
     pub node: Arc<RenderNode>,
     pub input_channels: Vec<Arc<wgpu::BindGroup>>,
-    pub render_target: RenderTarget,
+    pub render_target: Arc<Mutex<RenderTarget>>,
 
     // uniform group id -> [(element size, buffer size)]
     pub dyn_offset_state: HashMap<Uuid, (Arc<Mutex<u64>>, Vec<(u64, u64)>)>,
@@ -153,9 +149,9 @@ pub struct RenderGraph {
     pub source_nodes: Vec<Uuid>,
     pub master_node: Uuid,
 
-    pub swap_chain_target: RenderTarget,
-    pub ui_target: RenderTarget,
-    pub node_targets: HashMap<Uuid, RenderTarget>,
+    pub swap_chain_target: Arc<Mutex<RenderTarget>>,
+    pub ui_target: Arc<Mutex<RenderTarget>>,
+    pub node_targets: HashMap<Uuid, Arc<Mutex<RenderTarget>>>,
 }
 
 pub struct GraphBuilder {
@@ -242,7 +238,7 @@ impl GraphBuilder {
             .map(|(id, node)| {
                 Ok((
                     *id,
-                    RenderTarget::Texture(Arc::new(Texture::blank(
+                    Arc::new(Mutex::new(RenderTarget::Texture(Arc::new(Texture::blank(
                         // TODO: Make actual config (I will, part of SHIP: EngineBuilder)
                         (DEFAULT_SCREEN_WIDTH as u32, DEFAULT_SCREEN_HEIGHT as u32),
                         &device,
@@ -250,24 +246,29 @@ impl GraphBuilder {
                         texture_bind_group_layout,
                         Some(&format!("{}_render_target", node.name)),
                         true,
-                    )?)),
+                    )?)))),
                 ))
             })
-            .collect::<Result<HashMap<Uuid, RenderTarget>>>()?;
+            .collect::<Result<HashMap<Uuid, Arc<Mutex<RenderTarget>>>>>()?;
 
         // Build UI if enabled
-        let swap_chain_target = RenderTarget::Master(Arc::new(Mutex::new(None)));
+        let swap_chain_target = Arc::new(Mutex::new(RenderTarget::Empty));
         let ui_target = match &self.ui_mode {
-            UIMode::Disabled => RenderTarget::Empty,
-            UIMode::Master => swap_chain_target.arc(),
-            UIMode::Node(id) => node_targets.get(id).unwrap().arc(),
+            UIMode::Disabled => Arc::new(Mutex::new(RenderTarget::Empty)),
+            UIMode::Master => Arc::clone(&swap_chain_target),
+            UIMode::Node(id) => Arc::clone(&node_targets.get(id).unwrap()),
         };
         match self.ui_mode {
             UIMode::Node(_) | UIMode::Master => {
                 debug!("building ui");
-                resources.insert(UI::new(ui_target.arc(), window, &device, &queue))
+                resources.insert(Arc::new(UI::new(
+                    Arc::clone(&ui_target),
+                    window,
+                    &device,
+                    &queue,
+                )))
             }
-            _ => (),
+            _ => (debug!("ui is disabled")),
         }
 
         let unit_square_buffers = (
@@ -322,14 +323,20 @@ impl GraphBuilder {
                             .iter()
                             .map(|input_id| {
                                 Arc::clone(
-                                    &node_targets.get(input_id).unwrap().bind_group().unwrap(),
+                                    &node_targets
+                                        .get(input_id)
+                                        .unwrap()
+                                        .lock()
+                                        .unwrap()
+                                        .bind_group()
+                                        .unwrap(),
                                 )
                             })
                             .collect::<Vec<Arc<wgpu::BindGroup>>>(),
                         render_target: if node.master {
-                            swap_chain_target.arc()
+                            Arc::clone(&swap_chain_target)
                         } else {
-                            node_targets.get(&node_id).unwrap().arc()
+                            Arc::clone(&node_targets.get(&node_id).unwrap())
                         },
                         // Cloned for now
                         common_buffers: common_buffers.clone(),
@@ -344,25 +351,15 @@ impl GraphBuilder {
             })
             .collect();
 
-        // Build all render pass resources; these are static containers for the
-        // command encoders which only exist for the lifetime of the pass
-
-        // TODO:
-        // receive mutable subschedule from EngineBuilder
-        // add NodeSystem to NodeBuilder, so that each node can have a system builder func
-        // schedule full render graph onto subschedule
-
-        // 1. RUN BEGIN_RENDER_GRAPH, which will:
-        //  - create all RenderPass command encoders
         debug!("scheduling render systems");
 
+        // Request target from swap chain, store in graph
         sub_schedule.add_boxed_stateless(Arc::new(Box::new(StatelessSystem::new(
             begin_render_graph_system,
         ))));
-
         sub_schedule.flush();
 
-        // 2. RUN NODE SYSTEMS EXCEPT MASTER
+        // Run all node systems except master
         // sub_schedule.add_boxed(Arc::clone(
         //     &nodes.get(&self.node_builders[0].dest_id).unwrap().system,
         // ));
@@ -377,8 +374,7 @@ impl GraphBuilder {
 
         sub_schedule.flush();
 
-        // 3. RUN MASTER NODE SYSTEM (should be set to gpu swap chain view)
-
+        // Run ui system
         if let UIMode::Master = self.ui_mode {
             sub_schedule
                 .add_single_threaded(Arc::new(Box::new(LocalSystem::new(render_ui_system))));

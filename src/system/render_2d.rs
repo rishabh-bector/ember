@@ -39,17 +39,14 @@ pub fn forward_render_2d(
     #[resource] queue: &Arc<wgpu::Queue>,   // read only
 ) {
     debug!("running system forward_render_2d (graph node)");
+    let node = Arc::clone(&state.node);
 
+    let render_target = state.render_target.lock().unwrap();
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Render2D Encoder"),
     });
+    let mut pass_handle = render_target.create_render_pass(&mut encoder).unwrap();
 
-    let mut pass_handle = state
-        .render_target
-        .create_render_pass(&mut encoder)
-        .unwrap();
-
-    let node = Arc::clone(&state.node);
     pass_handle.set_pipeline(&node.pipeline);
     pass_handle.set_bind_group(
         2,
