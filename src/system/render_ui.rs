@@ -17,8 +17,7 @@ pub fn render_ui(
         label: Some("Render2D Encoder"),
     });
 
-    let mut render_pass = create_render_pass(&ui.render_target.view, &mut encoder);
-
+    let mut pass_handle = ui.render_target.create_render_pass(&mut encoder).unwrap();
     let frame = context.frame();
 
     let mouse_cursor = frame.mouse_cursor();
@@ -45,6 +44,6 @@ pub fn render_ui(
 
     // Render to texture
     renderer
-        .render(frame.render(), queue, device, &mut render_pass)
+        .render(frame.render(), queue, device, &mut pass_handle)
         .unwrap();
 }

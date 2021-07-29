@@ -4,11 +4,11 @@ use std::{
     time::Instant,
 };
 
-use crate::render::texture::Texture;
+use crate::render::{graph::RenderTarget, texture::Texture};
 
 pub struct UI {
     pub platform: imgui_winit_support::WinitPlatform,
-    pub render_target: Arc<Mutex<Option<Texture>>>,
+    pub render_target: RenderTarget,
     pub context: Mutex<imgui::Context>,
     pub renderer: Mutex<imgui_wgpu::Renderer>,
     pub state: Mutex<UIState>,
@@ -22,7 +22,7 @@ pub struct UIState {
 
 impl UI {
     pub fn new(
-        render_target: Arc<Mutex<Option<Texture>>>,
+        render_target: RenderTarget,
         window: &winit::window::Window,
         device: &wgpu::Device,
         queue: &wgpu::Queue,

@@ -3,7 +3,7 @@ use legion::systems::ParallelRunnable;
 use std::{
     collections::HashMap,
     str::FromStr,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
 };
 use uuid::Uuid;
 use wgpu::SwapChainTexture;
@@ -23,7 +23,7 @@ use crate::{
         store::TextureStore,
         ui::UI,
     },
-    system::{physics_2d::*, render_graph::*, render_ui::*},
+    system::{physics_2d::*, render_2d::create_render_pass, render_graph::*, render_ui::*},
     texture::Texture,
 };
 
@@ -73,8 +73,60 @@ use super::node::NodeBuilderTrait;
 //
 
 pub enum RenderTarget {
-    Texture(Texture),
-    Master(Option<wgpu::SwapChainTexture>),
+    Empty,
+    Texture(Arc<Texture>),
+    Master(Arc<Mutex<Option<wgpu::SwapChainTexture>>>),
+}
+
+impl RenderTarget {
+    pub fn begin_render_pass(&self) -> Option<&wgpu::TextureView> {
+        None
+    }
+
+    pub fn create_render_pass<'a>(
+        &'a self,
+        encoder: &'a mut wgpu::CommandEncoder,
+    ) -> Option<wgpu::RenderPass<'a>> {
+        --match self {
+            RenderTarget::Empty => None,
+            RenderTarget::Texture(tex) => Some(create_render_pass(&tex.view, encoder)),
+            RenderTarget::Master(opt) => {
+                let a = opt.lock().unwrap();
+                let b = &a.as_ref().unwrap().view;
+                Some(create_render_pass(b, encoder))
+            }
+        }
+    }
+
+    pub fn bind_group(&self) -> Option<Arc<wgpu::BindGroup>> {
+        match self {
+            RenderTarget::Empty => None,
+            RenderTarget::Texture(tex) => Some(Arc::clone(&tex.bind_group)),
+            RenderTarget::Master(opt) => None, // Master node cannot be used as input
+        }
+    }
+
+    pub fn borrow_mut_if_master(&self) -> Option<Arc<Mutex<Option<wgpu::SwapChainTexture>>>> {
+        match self {
+            RenderTarget::Empty => None,
+            RenderTarget::Texture(tex) => None,
+            RenderTarget::Master(opt) => Some(Arc::clone(&opt)),
+        }
+    }
+
+    pub fn arc(&self) -> Self {
+        match self {
+            RenderTarget::Empty => RenderTarget::Empty,
+            RenderTarget::Texture(tex) => RenderTarget::Texture(Arc::clone(&tex)),
+            RenderTarget::Master(opt) => RenderTarget::Master(Arc::clone(&opt)),
+        }
+    }
+}
+
+impl Clone for RenderTarget {
+    fn clone(&self) -> Self {
+        self.arc()
+    }
 }
 
 pub enum UIMode {
@@ -87,8 +139,7 @@ pub enum UIMode {
 pub struct NodeState {
     pub node: Arc<RenderNode>,
     pub input_channels: Vec<Arc<wgpu::BindGroup>>,
-    pub render_target: Arc<Mutex<RenderTarget>>,
-    pub master: Arc<Mutex<Option<wgpu::SwapChainTexture>>>,
+    pub render_target: RenderTarget,
 
     // uniform group id -> [(element size, buffer size)]
     pub dyn_offset_state: HashMap<Uuid, (Arc<Mutex<u64>>, Vec<(u64, u64)>)>,
@@ -96,13 +147,15 @@ pub struct NodeState {
 }
 
 pub struct RenderGraph {
-    pub swap_chain_target: Arc<Mutex<Option<wgpu::SwapChainTexture>>>,
-    pub targets: HashMap<Uuid, Arc<Texture>>,
+    pub channels: Vec<(Uuid, Uuid)>,
+
     pub nodes: HashMap<Uuid, Arc<RenderNode>>,
     pub source_nodes: Vec<Uuid>,
     pub master_node: Uuid,
-    pub channels: Vec<(Uuid, Uuid)>,
-    pub ui_target: Option<Arc<Texture>>,
+
+    pub swap_chain_target: RenderTarget,
+    pub ui_target: RenderTarget,
+    pub node_targets: HashMap<Uuid, RenderTarget>,
 }
 
 pub struct GraphBuilder {
@@ -183,13 +236,13 @@ impl GraphBuilder {
             })
             .collect::<Result<HashMap<Uuid, Arc<RenderNode>>>>()?;
 
-        debug!("creating render graph targets");
-        let targets = nodes
+        debug!("creating render graph node_targets");
+        let node_targets = nodes
             .iter()
             .map(|(id, node)| {
                 Ok((
                     *id,
-                    RenderTarget::Texture(Texture::blank(
+                    RenderTarget::Texture(Arc::new(Texture::blank(
                         // TODO: Make actual config (I will, part of SHIP: EngineBuilder)
                         (DEFAULT_SCREEN_WIDTH as u32, DEFAULT_SCREEN_HEIGHT as u32),
                         &device,
@@ -197,22 +250,22 @@ impl GraphBuilder {
                         texture_bind_group_layout,
                         Some(&format!("{}_render_target", node.name)),
                         true,
-                    )?),
+                    )?)),
                 ))
             })
             .collect::<Result<HashMap<Uuid, RenderTarget>>>()?;
 
         // Build UI if enabled
-        let swap_chain_target = Arc::new(Mutex::new(None));
+        let swap_chain_target = RenderTarget::Master(Arc::new(Mutex::new(None)));
         let ui_target = match &self.ui_mode {
-            UIMode::Disabled => Arc::new(Mutex::new(None)),
-            UIMode::Master => Arc::clone(&swap_chain_target),
-            UIMode::Node(id) => Arc::clone(targets.get(id).unwrap()),
+            UIMode::Disabled => RenderTarget::Empty,
+            UIMode::Master => swap_chain_target.arc(),
+            UIMode::Node(id) => node_targets.get(id).unwrap().arc(),
         };
         match self.ui_mode {
-            UIMode::Target(_) | UIMode::Master => {
+            UIMode::Node(_) | UIMode::Master => {
                 debug!("building ui");
-                resources.insert(UI::new(Arc::clone(&ui_target), window, &device, &queue))
+                resources.insert(UI::new(ui_target.arc(), window, &device, &queue))
             }
             _ => (),
         }
@@ -267,13 +320,16 @@ impl GraphBuilder {
                         input_channels: self
                             .input_nodes_for_node(*node_id)
                             .iter()
-                            .map(|input_id| Arc::clone(&targets.get(input_id).unwrap().bind_group))
+                            .map(|input_id| {
+                                Arc::clone(
+                                    &node_targets.get(input_id).unwrap().bind_group().unwrap(),
+                                )
+                            })
                             .collect::<Vec<Arc<wgpu::BindGroup>>>(),
-                        output_target: Arc::clone(&targets.get(&node_id).unwrap()),
-                        master: if node.master {
-                            Arc::clone(&swap_chain_target)
+                        render_target: if node.master {
+                            swap_chain_target.arc()
                         } else {
-                            Arc::new(Mutex::new(None))
+                            node_targets.get(&node_id).unwrap().arc()
                         },
                         // Cloned for now
                         common_buffers: common_buffers.clone(),
@@ -336,7 +392,7 @@ impl GraphBuilder {
 
         self.dest = Some(Arc::new(RenderGraph {
             nodes,
-            targets,
+            node_targets,
             swap_chain_target,
             channels: self.channels.clone(),
             source_nodes: self.source_nodes.clone(),

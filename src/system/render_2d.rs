@@ -40,36 +40,22 @@ pub fn forward_render_2d(
 ) {
     debug!("running system forward_render_2d (graph node)");
 
-    let node = Arc::clone(&state.node);
-
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Render2D Encoder"),
     });
 
-    let master = Arc::clone(&state.master);
-    let master = master.lock().unwrap();
-    let mut pass_handle = create_render_pass(
-        match master.as_ref() {
-            Some(tex) => {
-                debug!("this is the master node");
-                &tex.view
-            }
-            None => {
-                debug!("this is not the master node");
-                &state.output_target.view
-            }
-        },
-        &mut encoder,
-    );
+    let mut pass_handle = state
+        .render_target
+        .create_render_pass(&mut encoder)
+        .unwrap();
 
+    let node = Arc::clone(&state.node);
     pass_handle.set_pipeline(&node.pipeline);
-
     pass_handle.set_bind_group(
         2,
         &node.binder.uniform_groups[&ID(CAMERA_2D_BIND_GROUP_ID)],
         &[],
     );
-
     pass_handle.set_bind_group(
         3,
         &node.binder.uniform_groups[&ID(LIGHTING_2D_BIND_GROUP_ID)],
