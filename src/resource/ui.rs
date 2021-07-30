@@ -7,7 +7,7 @@ use std::{
 use crate::render::{graph::RenderTarget, texture::Texture};
 
 pub struct UI {
-    pub platform: imgui_winit_support::WinitPlatform,
+    pub platform: Mutex<imgui_winit_support::WinitPlatform>,
     pub render_target: Arc<Mutex<RenderTarget>>,
     pub context: Mutex<imgui::Context>,
     pub renderer: Mutex<imgui_wgpu::Renderer>,
@@ -17,7 +17,6 @@ pub struct UI {
 pub struct UIState {
     pub last_frame: Instant,
     pub last_cursor: Option<imgui::MouseCursor>,
-    pub about_open: bool,
 }
 
 impl UI {
@@ -55,7 +54,7 @@ impl UI {
             }]);
 
         let config = imgui_wgpu::RendererConfig {
-            texture_format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            texture_format: wgpu::TextureFormat::Bgra8UnormSrgb,
             ..Default::default()
         };
         let renderer = imgui_wgpu::Renderer::new(&mut imgui, device, queue, config);
@@ -66,9 +65,8 @@ impl UI {
             state: Mutex::new(UIState {
                 last_frame: Instant::now(),
                 last_cursor: None,
-                about_open: true,
             }),
-            platform,
+            platform: Mutex::new(platform),
             render_target,
         }
     }

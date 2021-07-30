@@ -7,7 +7,7 @@ use rand::Rng;
 // Ember example
 
 fn main() {
-    std::env::set_var("RUST_LOG", "trace");
+    std::env::set_var("RUST_LOG", "ember=info");
 
     let (mut engine, event_loop) = ember::engine().default().unwrap();
 

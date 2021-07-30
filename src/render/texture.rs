@@ -54,17 +54,26 @@ impl Texture {
     pub fn _load_bytes(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        preferred_format: wgpu::TextureFormat,
         bytes: &[u8],
         group_layout: &wgpu::BindGroupLayout,
         label: &str,
     ) -> Result<Self> {
         let img = image::load_from_memory(bytes)?;
-        Self::load_image(device, queue, &img.into_rgba8(), group_layout, Some(label))
+        Self::load_image(
+            device,
+            queue,
+            preferred_format,
+            &img.into_rgba8(),
+            group_layout,
+            Some(label),
+        )
     }
 
     pub fn load_image(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        preferred_format: wgpu::TextureFormat,
         rgba: &image::RgbaImage,
         group_layout: &wgpu::BindGroupLayout,
         label: Option<&str>,
@@ -76,7 +85,14 @@ impl Texture {
             depth_or_array_layers: 1,
         };
 
-        let texture = Self::blank(dimensions, device, queue, group_layout, label, false)?;
+        let texture = Self::blank(
+            dimensions,
+            device,
+            preferred_format,
+            group_layout,
+            label,
+            false,
+        )?;
 
         queue.write_texture(
             wgpu::ImageCopyTexture {
@@ -98,7 +114,7 @@ impl Texture {
     pub fn blank(
         dimensions: (u32, u32),
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
         group_layout: &wgpu::BindGroupLayout,
         label: Option<&str>,
         is_render_target: bool,
@@ -110,12 +126,9 @@ impl Texture {
         };
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label,
-            size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Bgra8UnormSrgb,
             usage: match is_render_target {
                 false => wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
                 true => {
@@ -124,6 +137,9 @@ impl Texture {
                         | wgpu::TextureUsage::RENDER_ATTACHMENT
                 }
             },
+            label,
+            size,
+            format,
         });
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());

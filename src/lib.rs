@@ -34,8 +34,8 @@ use crate::{
     components::{Position2D, Velocity2D},
     constants::{
         BASE_2D_BIND_GROUP_ID, BASE_2D_COMMON_TEXTURE_ID, BASE_2D_RENDER_NODE_ID,
-        CAMERA_2D_BIND_GROUP_ID, DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, ID,
-        LIGHTING_2D_BIND_GROUP_ID,
+        CAMERA_2D_BIND_GROUP_ID, DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH,
+        DEFAULT_TEXTURE_BUFFER_FORMAT, ID, LIGHTING_2D_BIND_GROUP_ID,
     },
     render::{buffer::*, graph::GraphBuilder, node::*, texture::Texture, uniform::*, *},
     resource::{
@@ -80,7 +80,7 @@ pub struct Engine {
     gpu: Arc<Mutex<GpuState>>,
     graph: Arc<RenderGraph>,
     store: Arc<Mutex<TextureStore>>,
-    window: Rc<Window>,
+    window: Arc<Window>,
     input: WinitInputHelper,
     legion: LegionState,
 }
@@ -101,6 +101,13 @@ impl Engine {
                 self.legion.execute();
                 frame_count += 1;
             }
+
+            let ui = self.legion.resources.get_mut::<Arc<UI>>().unwrap();
+            let mut context = ui.context.lock().unwrap();
+            ui.platform
+                .lock()
+                .unwrap()
+                .handle_event(context.io_mut(), &self.window, &event);
 
             if self.input.update(&event) {
                 if self.input.key_pressed(VirtualKeyCode::Escape) || self.input.quit() {
@@ -152,7 +159,7 @@ impl EngineBuilder {
         info!("creating window");
         let event_loop = EventLoop::new();
         let size = LogicalSize::new(DEFAULT_SCREEN_WIDTH as f64, DEFAULT_SCREEN_HEIGHT as f64);
-        let window = Rc::new({
+        let window = Arc::new({
             WindowBuilder::new()
                 .with_title("Hello World")
                 .with_inner_size(size)
@@ -164,7 +171,7 @@ impl EngineBuilder {
 
         info!("building gpu state");
         let gpu = Arc::new(Mutex::new(futures::executor::block_on(
-            GpuStateBuilder::winit(Rc::clone(&window)).build(&mut resources),
+            GpuStateBuilder::winit(Arc::clone(&window)).build(&mut resources),
         )?));
         let gpu_mut = gpu.lock().unwrap();
 
@@ -178,8 +185,16 @@ impl EngineBuilder {
                 .into_string()
                 .unwrap(),
         );
-        let (texture_store, texture_bind_group_layout) =
-            texture_store_builder.build(&gpu_mut.device, &gpu_mut.queue)?;
+        let device_preferred_format = gpu_mut
+            .adapter
+            .get_swap_chain_preferred_format(&gpu_mut.surface)
+            .unwrap_or(DEFAULT_TEXTURE_BUFFER_FORMAT);
+        debug!("texture store format: {:?}", device_preferred_format);
+        let (texture_store, texture_bind_group_layout) = texture_store_builder.build(
+            &gpu_mut.device,
+            &gpu_mut.queue,
+            &device_preferred_format,
+        )?;
         texture_store_builder.build_to_resources(&mut resources);
 
         info!("building uniforms");
@@ -251,7 +266,7 @@ impl EngineBuilder {
                 Arc::clone(&gpu_mut.queue),
                 &mut resources,
                 &mut graph_schedule,
-                gpu_mut.chain_descriptor.format,
+                device_preferred_format,
                 &texture_bind_group_layout,
                 Arc::clone(&texture_store),
                 &window,
@@ -268,6 +283,7 @@ impl EngineBuilder {
             DEFAULT_SCREEN_HEIGHT as f32,
         )));
 
+        resources.insert(Arc::clone(&window));
         resources.insert(Arc::clone(&gpu));
         resources.insert(Arc::clone(&camera));
 

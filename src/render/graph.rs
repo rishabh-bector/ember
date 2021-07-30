@@ -86,11 +86,12 @@ impl RenderTarget {
     pub fn create_render_pass<'a>(
         &'a self,
         encoder: &'a mut wgpu::CommandEncoder,
+        label: &'a str,
     ) -> Option<wgpu::RenderPass<'a>> {
         match self {
             RenderTarget::Empty => None,
-            RenderTarget::Texture(tex) => Some(create_render_pass(&tex.view, encoder)),
-            RenderTarget::Master(opt) => Some(create_render_pass(&opt.view, encoder)),
+            RenderTarget::Texture(tex) => Some(create_render_pass(&tex.view, encoder, label)),
+            RenderTarget::Master(opt) => Some(create_render_pass(&opt.view, encoder, label)),
         }
     }
 
@@ -144,7 +145,6 @@ pub struct NodeState {
 
 pub struct RenderGraph {
     pub channels: Vec<(Uuid, Uuid)>,
-
     pub nodes: HashMap<Uuid, Arc<RenderNode>>,
     pub source_nodes: Vec<Uuid>,
     pub master_node: Uuid,
@@ -242,7 +242,7 @@ impl GraphBuilder {
                         // TODO: Make actual config (I will, part of SHIP: EngineBuilder)
                         (DEFAULT_SCREEN_WIDTH as u32, DEFAULT_SCREEN_HEIGHT as u32),
                         &device,
-                        &queue,
+                        texture_format,
                         texture_bind_group_layout,
                         Some(&format!("{}_render_target", node.name)),
                         true,
@@ -261,12 +261,8 @@ impl GraphBuilder {
         match self.ui_mode {
             UIMode::Node(_) | UIMode::Master => {
                 debug!("building ui");
-                resources.insert(Arc::new(UI::new(
-                    Arc::clone(&ui_target),
-                    window,
-                    &device,
-                    &queue,
-                )))
+                let ui = Arc::new(UI::new(Arc::clone(&ui_target), window, &device, &queue));
+                resources.insert(ui);
             }
             _ => (debug!("ui is disabled")),
         }

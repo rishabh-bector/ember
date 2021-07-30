@@ -5,6 +5,7 @@ use uuid::Uuid;
 pub const DEFAULT_SCREEN_WIDTH: usize = 1440;
 pub const DEFAULT_SCREEN_HEIGHT: usize = 900;
 
+pub const DEFAULT_TEXTURE_BUFFER_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
 pub const DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS: u32 = 128;
 pub const DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE: u64 = 128;
 

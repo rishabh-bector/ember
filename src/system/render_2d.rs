@@ -45,7 +45,9 @@ pub fn forward_render_2d(
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Render2D Encoder"),
     });
-    let mut pass_handle = render_target.create_render_pass(&mut encoder).unwrap();
+    let mut pass_handle = render_target
+        .create_render_pass(&mut encoder, "forward_render_2d")
+        .unwrap();
 
     pass_handle.set_pipeline(&node.pipeline);
     pass_handle.set_bind_group(
@@ -111,25 +113,27 @@ pub fn forward_render_2d(
     debug!("done recording; submitting render pass");
     drop(pass_handle);
     queue.submit(std::iter::once(encoder.finish()));
-    debug!("pass submitted");
+    debug!("forward_render_2d pass submitted");
 }
 
 pub fn create_render_pass<'a>(
     target: &'a wgpu::TextureView,
     encoder: &'a mut wgpu::CommandEncoder,
+    label: &'a str,
 ) -> wgpu::RenderPass<'a> {
     encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Render2D Pass"),
+        label: Some(label),
         color_attachments: &[wgpu::RenderPassColorAttachment {
             view: target,
             resolve_target: None,
             ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: 0.0,
-                    g: 0.0,
-                    b: 0.0,
-                    a: 0.0,
-                }),
+                load: wgpu::LoadOp::Load,
+                // load: wgpu::LoadOp::Clear(wgpu::Color {
+                //     r: 0.0,
+                //     g: 0.0,
+                //     b: 0.0,
+                //     a: 0.0,
+                // }),
                 store: true,
             },
         }],

@@ -26,20 +26,21 @@ pub struct GpuState {
     pub surface: wgpu::Surface,
     pub device: Arc<wgpu::Device>,
     pub queue: Arc<wgpu::Queue>,
+    pub adapter: Arc<wgpu::Adapter>,
     pub chain_descriptor: wgpu::SwapChainDescriptor,
     pub swap_chain: wgpu::SwapChain,
     pub screen_size: (u32, u32),
 }
 
 pub struct GpuStateBuilder {
-    pub window: Rc<Window>,
+    pub window: Arc<Window>,
     pub screen_size: (u32, u32),
     pub instance: Option<wgpu::Instance>,
     pub surface: Option<wgpu::Surface>,
 }
 
 impl GpuStateBuilder {
-    pub fn winit(window: Rc<Window>) -> Self {
+    pub fn winit(window: Arc<Window>) -> Self {
         let size = window.inner_size();
 
         // Instance is a handle to the GPU
@@ -109,6 +110,7 @@ impl GpuStateBuilder {
 
         Ok(GpuState {
             screen_size: self.screen_size,
+            adapter: Arc::new(adapter),
             surface,
             device,
             queue,

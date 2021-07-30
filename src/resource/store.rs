@@ -59,6 +59,7 @@ impl TextureStoreBuilder {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        texture_format: &wgpu::TextureFormat,
     ) -> Result<(Arc<Mutex<TextureStore>>, wgpu::BindGroupLayout)> {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
@@ -96,7 +97,14 @@ impl TextureStoreBuilder {
                         .into_rgba8();
                     Ok((
                         *id,
-                        Texture::load_image(device, queue, &rgba, &bind_group_layout, None)?,
+                        Texture::load_image(
+                            device,
+                            queue,
+                            *texture_format,
+                            &rgba,
+                            &bind_group_layout,
+                            None,
+                        )?,
                     ))
                 })
                 .collect::<Result<HashMap<Uuid, Texture>>>()?;
