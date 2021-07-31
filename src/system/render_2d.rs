@@ -120,7 +120,7 @@ pub fn forward_render_2d(
     queue.submit(std::iter::once(encoder.finish()));
 
     debug!("forward_render_2d pass submitted");
-    metrics.submit_system_run_time(&ID(FORWARD_2D_NODE_ID), start_time.elapsed().as_secs_f64());
+    state.reporter.update(start_time.elapsed().as_secs_f64());
 }
 
 pub fn create_render_pass<'a>(

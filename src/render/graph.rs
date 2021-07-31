@@ -13,6 +13,7 @@ use crate::{
         UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
     },
     resource::{
+        metrics::SystemReporter,
         schedule::{LocalSystem, StatelessSystem, SubSchedule},
         store::TextureStore,
         ui::UIBuilder,
@@ -92,6 +93,8 @@ pub struct NodeState {
     // uniform group id -> [(element size, buffer size)]
     pub dyn_offset_state: HashMap<Uuid, (Arc<Mutex<u64>>, Vec<(u64, u64)>)>,
     pub common_buffers: HashMap<Uuid, Arc<(wgpu::Buffer, u32)>>,
+
+    pub reporter: SystemReporter,
 }
 
 pub struct RenderGraph {

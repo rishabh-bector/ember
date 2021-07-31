@@ -1,7 +1,8 @@
 use imgui::im_str;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use crate::resource::metrics::SystemReporter;
 use crate::{
     constants::{ID, RENDER_UI_SYSTEM_ID},
     resource::{metrics::EngineMetrics, ui::UI},
@@ -9,11 +10,11 @@ use crate::{
 
 #[system]
 pub fn render_ui(
+    #[state] reporter: &mut SystemReporter,
     #[resource] ui: &Arc<UI>,
     #[resource] device: &Arc<wgpu::Device>,
     #[resource] queue: &Arc<wgpu::Queue>,
     #[resource] window: &Arc<winit::window::Window>,
-    #[resource] metrics: &Arc<EngineMetrics>,
 ) {
     let start_time = Instant::now();
     debug!("running system render_ui");
@@ -64,5 +65,5 @@ pub fn render_ui(
     queue.submit(std::iter::once(encoder.finish()));
 
     debug!("ui pass submitted");
-    metrics.submit_system_run_time(&ID(RENDER_UI_SYSTEM_ID), start_time.elapsed().as_secs_f64());
+    reporter.update(start_time.elapsed().as_secs_f64());
 }

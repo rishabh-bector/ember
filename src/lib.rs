@@ -111,6 +111,7 @@ impl Engine {
                 self.window.request_redraw();
             }
 
+            // Metrics are reported every 1 second
             let elapsed = start_time.elapsed();
             if elapsed > Duration::from_millis(1000) {
                 let fps = (1.0 / (elapsed.as_secs_f64() / (frame_count as f64))) as u32 + 1;
