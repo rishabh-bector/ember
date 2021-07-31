@@ -11,13 +11,21 @@ pub const DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE: u64 = 128;
 
 // Engine render nodes
 
-pub const BASE_2D_RENDER_NODE_ID: &str = "0660ca73-c74c-40b0-afee-8cd9128aa190";
+pub const FORWARD_2D_NODE_ID: &str = "0660ca73-c74c-40b0-afee-8cd9128aa190";
+
+// Engine systems (render systems use node id)
+
+pub const RENDER_UI_SYSTEM_ID: &str = "7a370e52-053a-46dc-82d6-4fd8d41c1c19";
 
 // Engine bind groups
 
 pub const BASE_2D_BIND_GROUP_ID: &str = "2fc8e285-38ca-45e2-a910-00f49a7455d1";
 pub const CAMERA_2D_BIND_GROUP_ID: &str = "50cdf623-c003-4c7c-ae56-646339c4f026";
 pub const LIGHTING_2D_BIND_GROUP_ID: &str = "eb964ee1-abc3-435f-ab03-0dceb692661e";
+
+// Engine imgui windows
+
+pub const METRICS_UI_IMGUI_ID: &str = "cb7550b5-e8a7-49b0-954a-c156f69db093";
 
 // 2D render graph base
 

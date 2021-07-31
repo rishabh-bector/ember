@@ -1,8 +1,12 @@
 use anyhow::Result;
+use imgui::im_str;
+use legion::Resources;
 use std::{
+    collections::HashMap,
     sync::{Arc, Mutex, MutexGuard},
-    time::Instant,
+    time::{Duration, Instant},
 };
+use uuid::Uuid;
 
 use crate::render::{graph::RenderTarget, texture::Texture};
 
@@ -12,20 +16,35 @@ pub struct UI {
     pub context: Mutex<imgui::Context>,
     pub renderer: Mutex<imgui_wgpu::Renderer>,
     pub state: Mutex<UIState>,
+    pub imgui_windows: HashMap<Uuid, Arc<dyn ImguiWindow>>,
 }
 
-pub struct UIState {
-    pub last_frame: Instant,
-    pub last_cursor: Option<imgui::MouseCursor>,
+pub struct UIBuilder {
+    pub imgui_windows: HashMap<Uuid, Arc<dyn ImguiWindow>>,
 }
 
-impl UI {
-    pub fn new(
+impl UIBuilder {
+    pub fn new() -> Self {
+        UIBuilder {
+            imgui_windows: HashMap::new(),
+        }
+    }
+
+    pub fn with_imgui_window(mut self, window: Arc<dyn ImguiWindow>, id: Uuid) -> Self {
+        self.imgui_windows.insert(id, window);
+        self
+    }
+
+    pub fn build_to_resources(
+        self,
+        resources: &mut Resources,
         render_target: Arc<Mutex<RenderTarget>>,
         window: &winit::window::Window,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> Self {
+    ) {
+        debug!("building ui");
+
         // Create Dear ImGui context
         let mut imgui = imgui::Context::create();
         imgui.set_ini_filename(None);
@@ -59,7 +78,7 @@ impl UI {
         };
         let renderer = imgui_wgpu::Renderer::new(&mut imgui, device, queue, config);
 
-        Self {
+        resources.insert(Arc::new(UI {
             context: Mutex::new(imgui),
             renderer: Mutex::new(renderer),
             state: Mutex::new(UIState {
@@ -67,14 +86,19 @@ impl UI {
                 last_cursor: None,
             }),
             platform: Mutex::new(platform),
+            imgui_windows: self.imgui_windows,
             render_target,
-        }
+        }));
     }
+}
 
-    pub fn prepare(
-        &mut self,
-        // window: &winit::window::Window,
-    ) -> Result<(), winit::error::ExternalError> {
+pub struct UIState {
+    pub last_frame: Instant,
+    pub last_cursor: Option<imgui::MouseCursor>,
+}
+
+impl UI {
+    pub fn prepare(&mut self) -> Result<(), winit::error::ExternalError> {
         let mut state = self.state.lock().unwrap();
         let mut imgui = self.context.lock().unwrap();
 
@@ -83,8 +107,11 @@ impl UI {
 
         imgui.io_mut().update_delta_time(now - last_frame);
         state.last_frame = now;
-
-        // self.platform.prepare_frame(imgui.io_mut(), window)
         Ok(())
     }
+}
+
+pub trait ImguiWindow {
+    fn build(&self, frame: &imgui::Ui);
+    fn impl_imgui(self: Arc<Self>) -> Arc<dyn ImguiWindow>;
 }

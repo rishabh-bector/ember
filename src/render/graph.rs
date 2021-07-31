@@ -1,76 +1,27 @@
 use anyhow::Result;
-use legion::systems::ParallelRunnable;
 use std::{
     collections::HashMap,
     str::FromStr,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{Arc, Mutex},
 };
 use uuid::Uuid;
-use wgpu::SwapChainTexture;
 
 use crate::{
     buffer::{IndexBuffer, Vertex2D, VertexBuffer},
     constants::{
-        BASE_2D_RENDER_NODE_ID, DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, ID,
+        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, FORWARD_2D_NODE_ID, ID,
         UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
     },
-    render::{
-        node::{NodeBuilder, RenderNode},
-        GpuState,
-    },
     resource::{
-        schedule::{LocalSystem, NodeSystem, Schedulable, StatelessSystem, SubSchedule},
+        schedule::{LocalSystem, StatelessSystem, SubSchedule},
         store::TextureStore,
-        ui::UI,
+        ui::UIBuilder,
     },
-    system::{physics_2d::*, render_2d::create_render_pass, render_graph::*, render_ui::*},
+    system::{render_2d::create_render_pass, render_graph::*, render_ui::*},
     texture::Texture,
 };
 
-use super::node::NodeBuilderTrait;
-
-// Example graph: BASE_2D_FORWARD_RENDERER
-// NODES:
-//      0: Dynamic Draw (source, draws all Base2D components)
-//      1: Post Process (color filter)
-//      2: Post Process (blur or bloom idk)
-//      3: Assembler    (master node, combines 1 and 2)
-// EDGES:
-//      0 -> 1
-//      0 -> 2
-//      1 -> 3
-//      2 -> 3
-// SOURCES:
-//      0
-// MASTER:
-//      3
-//
-// Render graph should:
-//  - For now, create one texture target per node (excluding master, so 3 here: T0, T1, T2)
-//  - Add to the schedule:
-//      1. begin_render_graph: [rsrc] gpu -> creates all encoders and RenderPass resources
-//      2. --flush--
-//      3. forward_render_2d_NEW: [rsrc] encoder -> draws to internal state, which should be T0
-//      4. --flush--
-//      5. post_process_0: [rsrc] encoder -> draws to internal state, should be T1
-//      6. post_process_1: [rsrc] encoder -> draws to internal state, should be T2
-//      7. --flush--
-//      8. assembly_0: [rsrc] encoder -> draws to internal state, should be swap_chain output
-//
-//      Problem: post_process_0 needs the Arc<BindGroup> of T0 (+ the TextureView of T1)
-//      Solution: mutability not required, so set inputs as system state on init.
-//
-//  RenderGraph Configuration
-//  - For now, this should be code, later could look at YAML
-//  Init tasks:
-//  - create one texture target per node (Arc owned by node I guess)
-//  - create one NodeState per node:
-//      NodeState represents the state of a render_pass system (aka a node).
-//      It includes the Arc<target> to draw to, as well as one Arc<BindGroup> for each input.
-//  Therefore, what info is needed per node config?
-//  - number of inputs
-//  - type or id of pipeline (need Arc<pipeline> for binding to the render pass)
-//
+use super::node::{NodeBuilder, NodeBuilderTrait, RenderNode};
 
 pub enum RenderTarget {
     Empty,
@@ -214,6 +165,7 @@ impl GraphBuilder {
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         texture_store: Arc<Mutex<TextureStore>>,
         window: &winit::window::Window,
+        ui_builder: UIBuilder,
     ) -> Result<Arc<RenderGraph>> {
         debug!("building render graph nodes");
         let nodes = self
@@ -260,9 +212,13 @@ impl GraphBuilder {
         };
         match self.ui_mode {
             UIMode::Node(_) | UIMode::Master => {
-                debug!("building ui");
-                let ui = Arc::new(UI::new(Arc::clone(&ui_target), window, &device, &queue));
-                resources.insert(ui);
+                ui_builder.build_to_resources(
+                    resources,
+                    Arc::clone(&ui_target),
+                    window,
+                    &device,
+                    &queue,
+                );
             }
             _ => (debug!("ui is disabled")),
         }
@@ -361,11 +317,8 @@ impl GraphBuilder {
         // ));
 
         sub_schedule.add_boxed(
-            Arc::clone(&nodes.get(&ID(BASE_2D_RENDER_NODE_ID)).unwrap().system),
-            node_states
-                .get(&ID(BASE_2D_RENDER_NODE_ID))
-                .unwrap()
-                .to_owned(),
+            Arc::clone(&nodes.get(&ID(FORWARD_2D_NODE_ID)).unwrap().system),
+            node_states.get(&ID(FORWARD_2D_NODE_ID)).unwrap().to_owned(),
         );
 
         sub_schedule.flush();
@@ -402,9 +355,12 @@ impl GraphBuilder {
     fn input_nodes_for_node(&self, node_id: Uuid) -> Vec<Uuid> {
         self.channels
             .iter()
-            .filter_map(|(in_id, out_id)| match out_id {
-                node_id => Some(*in_id),
-                _ => None,
+            .filter_map(|(in_id, out_id)| {
+                if *out_id == node_id {
+                    Some(*in_id)
+                } else {
+                    None
+                }
             })
             .collect::<Vec<Uuid>>()
     }

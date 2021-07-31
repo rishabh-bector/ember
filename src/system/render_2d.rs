@@ -4,14 +4,16 @@ use std::{
     marker::PhantomData,
     str::FromStr,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 use uuid::Uuid;
 
 use crate::{
     components::Position2D,
     constants::{
-        BASE_2D_BIND_GROUP_ID, BASE_2D_COMMON_TEXTURE_ID, CAMERA_2D_BIND_GROUP_ID, ID,
-        LIGHTING_2D_BIND_GROUP_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
+        BASE_2D_BIND_GROUP_ID, BASE_2D_COMMON_TEXTURE_ID, CAMERA_2D_BIND_GROUP_ID,
+        FORWARD_2D_NODE_ID, ID, LIGHTING_2D_BIND_GROUP_ID, UNIT_SQUARE_IND_BUFFER_ID,
+        UNIT_SQUARE_VRT_BUFFER_ID,
     },
     render::{
         buffer::{IndexBuffer, VertexBuffer},
@@ -20,6 +22,7 @@ use crate::{
         uniform::UniformGroup,
         GpuState,
     },
+    resource::metrics::EngineMetrics,
     system::{base_2d::*, camera_2d::*, lighting_2d::*},
 };
 
@@ -35,9 +38,11 @@ pub type Base2DRenderNode = ();
 #[system]
 pub fn forward_render_2d(
     #[state] state: &NodeState,
-    #[resource] device: &Arc<wgpu::Device>, // read only
-    #[resource] queue: &Arc<wgpu::Queue>,   // read only
+    #[resource] device: &Arc<wgpu::Device>,
+    #[resource] queue: &Arc<wgpu::Queue>,
+    #[resource] metrics: &Arc<EngineMetrics>,
 ) {
+    let start_time = Instant::now();
     debug!("running system forward_render_2d (graph node)");
     let node = Arc::clone(&state.node);
 
@@ -113,7 +118,9 @@ pub fn forward_render_2d(
     debug!("done recording; submitting render pass");
     drop(pass_handle);
     queue.submit(std::iter::once(encoder.finish()));
+
     debug!("forward_render_2d pass submitted");
+    metrics.submit_system_run_time(&ID(FORWARD_2D_NODE_ID), start_time.elapsed().as_secs_f64());
 }
 
 pub fn create_render_pass<'a>(

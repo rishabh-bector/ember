@@ -1,10 +1,11 @@
-use std::sync::{Arc, Mutex};
+use imgui::im_str;
+use std::sync::Arc;
 use std::time::Instant;
 
-use imgui::im_str;
-
-use crate::resource::ui::UI;
-use crate::system::render_2d::create_render_pass;
+use crate::{
+    constants::{ID, RENDER_UI_SYSTEM_ID},
+    resource::{metrics::EngineMetrics, ui::UI},
+};
 
 #[system]
 pub fn render_ui(
@@ -12,8 +13,11 @@ pub fn render_ui(
     #[resource] device: &Arc<wgpu::Device>,
     #[resource] queue: &Arc<wgpu::Queue>,
     #[resource] window: &Arc<winit::window::Window>,
+    #[resource] metrics: &Arc<EngineMetrics>,
 ) {
+    let start_time = Instant::now();
     debug!("running system render_ui");
+
     let mut context = ui.context.lock().unwrap();
     let mut renderer = ui.renderer.lock().unwrap();
     let mut state = ui.state.lock().unwrap();
@@ -37,36 +41,9 @@ pub fn render_ui(
 
     // Draw UI //
     debug!("building ui");
-
-    imgui::Window::new(im_str!("EMBER UI"))
-        .size([300.0, 100.0], imgui::Condition::FirstUseEver)
-        .build(&frame, || {
-            if imgui::CollapsingHeader::new(im_str!("I'm a collapsing header. Click me!"))
-                .build(&frame)
-            {
-                frame.text(
-                    "A collapsing header can be used to toggle rendering of a group of widgets",
-                );
-            }
-
-            frame.spacing();
-            if imgui::CollapsingHeader::new(im_str!("I'm open by default"))
-                .default_open(true)
-                .build(&frame)
-            {
-                frame.text("You can still close me with a click!");
-            }
-
-            frame.text(im_str!("Hello world!"));
-            frame.text(im_str!("こんにちは世界！"));
-            frame.text(im_str!("This...is...imgui-rs!"));
-            frame.separator();
-            let mouse_pos = frame.io().mouse_pos;
-            frame.text(format!(
-                "Mouse Position: ({:.1},{:.1})",
-                mouse_pos[0], mouse_pos[1]
-            ));
-        });
+    for (_id, window) in &ui.imgui_windows {
+        window.build(&frame);
+    }
 
     frame.show_demo_window(&mut true);
 
@@ -85,5 +62,7 @@ pub fn render_ui(
     debug!("done recording; submitting render pass");
     drop(pass_handle);
     queue.submit(std::iter::once(encoder.finish()));
+
     debug!("ui pass submitted");
+    metrics.submit_system_run_time(&ID(RENDER_UI_SYSTEM_ID), start_time.elapsed().as_secs_f64());
 }

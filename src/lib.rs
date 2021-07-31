@@ -5,21 +5,15 @@ extern crate log;
 extern crate legion;
 
 use anyhow::Result;
-use legion::{
-    systems::{Builder as ScheduleBuilder, ParallelRunnable, Runnable},
-    Resources, Schedule, World,
-};
-use rand::Rng;
+use legion::{Resources, Schedule, World};
 use render::graph::RenderGraph;
 use resource::store::TextureStore;
 use std::{
     env,
-    marker::PhantomData,
     path::PathBuf,
-    rc::Rc,
     str::FromStr,
     sync::{Arc, Mutex},
-    time::Instant,
+    time::{Duration, Instant},
 };
 use uuid::Uuid;
 use winit::{
@@ -31,18 +25,19 @@ use winit::{
 use winit_input_helper::WinitInputHelper;
 
 use crate::{
-    components::{Position2D, Velocity2D},
     constants::{
-        BASE_2D_BIND_GROUP_ID, BASE_2D_COMMON_TEXTURE_ID, BASE_2D_RENDER_NODE_ID,
-        CAMERA_2D_BIND_GROUP_ID, DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH,
-        DEFAULT_TEXTURE_BUFFER_FORMAT, ID, LIGHTING_2D_BIND_GROUP_ID,
+        BASE_2D_BIND_GROUP_ID, BASE_2D_COMMON_TEXTURE_ID, CAMERA_2D_BIND_GROUP_ID,
+        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, DEFAULT_TEXTURE_BUFFER_FORMAT,
+        FORWARD_2D_NODE_ID, ID, LIGHTING_2D_BIND_GROUP_ID, METRICS_UI_IMGUI_ID,
+        RENDER_UI_SYSTEM_ID,
     },
-    render::{buffer::*, graph::GraphBuilder, node::*, texture::Texture, uniform::*, *},
+    render::{buffer::*, graph::GraphBuilder, node::*, uniform::*, *},
     resource::{
         camera::Camera2D,
+        metrics::{EngineMetrics, SystemMetrics},
         schedule::{Schedulable, SubSchedule},
         store::TextureStoreBuilder,
-        ui::UI,
+        ui::{ImguiWindow, UIBuilder, UI},
     },
     system::{base_2d::*, camera_2d::*, lighting_2d::*, physics_2d::*, render_2d::*},
 };
@@ -57,25 +52,6 @@ pub mod render;
 pub mod resource;
 pub mod system;
 
-// Engine properties:
-//  - event loop
-//  - Dschedule
-//  - Dworld
-//  - resources
-//  - Drender graph
-
-pub struct LegionState {
-    pub schedule: Schedule,
-    pub world: World,
-    pub resources: Resources,
-}
-
-impl LegionState {
-    pub fn execute(&mut self) {
-        self.schedule.execute(&mut self.world, &mut self.resources);
-    }
-}
-
 pub struct Engine {
     gpu: Arc<Mutex<GpuState>>,
     graph: Arc<RenderGraph>,
@@ -83,6 +59,7 @@ pub struct Engine {
     window: Arc<Window>,
     input: WinitInputHelper,
     legion: LegionState,
+    metrics: Arc<EngineMetrics>,
 }
 
 impl Engine {
@@ -97,9 +74,19 @@ impl Engine {
 
         event_loop.run(move |event, _, control_flow| {
             if let Event::RedrawRequested(_) = event {
+                *self.metrics.frame_start.lock().unwrap() = Instant::now();
+
                 debug!("executing all systems");
                 self.legion.execute();
+
                 frame_count += 1;
+                *self.metrics.execution_time.lock().unwrap() = self
+                    .metrics
+                    .frame_start
+                    .lock()
+                    .unwrap()
+                    .elapsed()
+                    .as_secs_f64();
             }
 
             let ui = self.legion.resources.get_mut::<Arc<UI>>().unwrap();
@@ -124,13 +111,10 @@ impl Engine {
                 self.window.request_redraw();
             }
 
-            if frame_count == 300 {
-                let elapsed = start_time.elapsed();
-                info!(
-                    "300 frames took {:.2?}, average fps = {}",
-                    elapsed,
-                    (1.0 / (elapsed.as_secs_f64() / 300.0)) as u32 + 1
-                );
+            let elapsed = start_time.elapsed();
+            if elapsed > Duration::from_millis(1000) {
+                let fps = (1.0 / (elapsed.as_secs_f64() / (frame_count as f64))) as u32 + 1;
+                *self.metrics.fps.lock().unwrap() = fps;
                 start_time = Instant::now();
                 frame_count = 0;
             }
@@ -235,7 +219,7 @@ impl EngineBuilder {
             0,
             ShaderSource::WGSL(include_str!("render/shaders/base2D.wgsl").to_owned()),
         )
-        .with_id(ID(BASE_2D_RENDER_NODE_ID))
+        .with_id(ID(FORWARD_2D_NODE_ID))
         .with_vertex_layout(VertexBuffer::layout_2d())
         .with_texture_group(resource::store::TextureGroup::Base2D)
         .with_uniform_group(base_2d_uniforms)
@@ -256,6 +240,22 @@ impl EngineBuilder {
             .add_system(camera_2d_uniform_system())
             .add_system(lighting_2d_uniform_system());
 
+        let mut metrics_ui = EngineMetrics::new();
+        metrics_ui.register_system_id(
+            ID(FORWARD_2D_NODE_ID),
+            Mutex::new(SystemMetrics::new("forward_2d")),
+        );
+        metrics_ui.register_system_id(
+            ID(RENDER_UI_SYSTEM_ID),
+            Mutex::new(SystemMetrics::new("render_ui")),
+        );
+
+        let metrics_ui = Arc::new(metrics_ui);
+        resources.insert(Arc::clone(&metrics_ui));
+        let metrics_arc = Arc::clone(&metrics_ui);
+        let ui_builder =
+            UIBuilder::new().with_imgui_window(metrics_ui.impl_imgui(), ID(METRICS_UI_IMGUI_ID));
+
         info!("building render graph");
         let mut graph_schedule = SubSchedule::new();
         let render_graph = GraphBuilder::new()
@@ -270,8 +270,8 @@ impl EngineBuilder {
                 &texture_bind_group_layout,
                 Arc::clone(&texture_store),
                 &window,
+                ui_builder,
             )?;
-        drop(gpu_mut);
 
         info!("scheduling render graph");
         graph_schedule.schedule(&mut schedule);
@@ -283,8 +283,9 @@ impl EngineBuilder {
             DEFAULT_SCREEN_HEIGHT as f32,
         )));
 
-        resources.insert(Arc::clone(&window));
+        drop(gpu_mut);
         resources.insert(Arc::clone(&gpu));
+        resources.insert(Arc::clone(&window));
         resources.insert(Arc::clone(&camera));
 
         info!("ready to start!");
@@ -292,6 +293,7 @@ impl EngineBuilder {
         Ok((
             Engine {
                 window,
+                metrics: metrics_arc,
                 input: WinitInputHelper::new(),
                 legion: LegionState {
                     world: World::default(),
@@ -304,5 +306,17 @@ impl EngineBuilder {
             },
             event_loop,
         ))
+    }
+}
+
+pub struct LegionState {
+    pub schedule: Schedule,
+    pub world: World,
+    pub resources: Resources,
+}
+
+impl LegionState {
+    pub fn execute(&mut self) {
+        self.schedule.execute(&mut self.world, &mut self.resources);
     }
 }
