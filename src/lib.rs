@@ -7,7 +7,7 @@ extern crate legion;
 use anyhow::Result;
 use legion::{Resources, Schedule, World};
 use render::graph::RenderGraph;
-use resource::store::TextureStore;
+use resource::{metrics::EngineReporter, store::TextureStore};
 use std::{
     env,
     path::PathBuf,
@@ -60,6 +60,7 @@ pub struct Engine {
     input: WinitInputHelper,
     legion: LegionState,
     metrics: Arc<EngineMetrics>,
+    reporter: EngineReporter,
 }
 
 impl Engine {
@@ -69,24 +70,18 @@ impl Engine {
 
     pub fn start(mut self, event_loop: EventLoop<()>) {
         info!("starting engine");
-        let mut start_time = Instant::now();
-        let mut frame_count = 0;
 
+        let metrics_last_updated = Arc::new(Mutex::new(Instant::now()));
         event_loop.run(move |event, _, control_flow| {
             if let Event::RedrawRequested(_) = event {
-                *self.metrics.frame_start.lock().unwrap() = Instant::now();
-
                 debug!("executing all systems");
                 self.legion.execute();
+                self.reporter.update();
 
-                frame_count += 1;
-                *self.metrics.execution_time.lock().unwrap() = self
-                    .metrics
-                    .frame_start
-                    .lock()
-                    .unwrap()
-                    .elapsed()
-                    .as_secs_f64();
+                if metrics_last_updated.lock().unwrap().elapsed() >= Duration::from_secs(1) {
+                    self.metrics.calculate();
+                    *metrics_last_updated.lock().unwrap() = Instant::now();
+                }
             }
 
             let ui = self.legion.resources.get_mut::<Arc<UI>>().unwrap();
@@ -109,15 +104,6 @@ impl Engine {
 
                 // Request a redraw
                 self.window.request_redraw();
-            }
-
-            // Metrics are reported every 1 second
-            let elapsed = start_time.elapsed();
-            if elapsed > Duration::from_millis(1000) {
-                let fps = (1.0 / (elapsed.as_secs_f64() / (frame_count as f64))) as u32 + 1;
-                *self.metrics.fps.lock().unwrap() = fps;
-                start_time = Instant::now();
-                frame_count = 0;
             }
         });
     }
@@ -242,24 +228,10 @@ impl EngineBuilder {
             .add_system(lighting_2d_uniform_system());
 
         let mut metrics_ui = EngineMetrics::new();
-        metrics_ui.register_system_id(
-            ID(FORWARD_2D_NODE_ID),
-            Mutex::new(SystemMetrics::new("forward_2d")),
-        );
-        metrics_ui.register_system_id(
-            ID(RENDER_UI_SYSTEM_ID),
-            Mutex::new(SystemMetrics::new("render_ui")),
-        );
-
-        let metrics_ui = Arc::new(metrics_ui);
-        resources.insert(Arc::clone(&metrics_ui));
-        let metrics_arc = Arc::clone(&metrics_ui);
-        let ui_builder =
-            UIBuilder::new().with_imgui_window(metrics_ui.impl_imgui(), ID(METRICS_UI_IMGUI_ID));
 
         info!("building render graph");
         let mut graph_schedule = SubSchedule::new();
-        let render_graph = GraphBuilder::new()
+        let (render_graph, metrics) = GraphBuilder::new()
             .with_master_node(base_2d_pipeline_node)
             .with_ui_master()
             .build(
@@ -271,7 +243,7 @@ impl EngineBuilder {
                 &texture_bind_group_layout,
                 Arc::clone(&texture_store),
                 &window,
-                ui_builder,
+                metrics_ui,
             )?;
 
         info!("scheduling render graph");
@@ -293,8 +265,7 @@ impl EngineBuilder {
 
         Ok((
             Engine {
-                window,
-                metrics: metrics_arc,
+                reporter: EngineReporter::new(Arc::clone(&metrics.fps)),
                 input: WinitInputHelper::new(),
                 legion: LegionState {
                     world: World::default(),
@@ -303,6 +274,8 @@ impl EngineBuilder {
                 },
                 graph: render_graph,
                 store: texture_store,
+                window,
+                metrics,
                 gpu,
             },
             event_loop,

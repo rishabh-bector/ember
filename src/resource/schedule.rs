@@ -4,6 +4,8 @@ use legion::systems::{Builder as ScheduleBuilder, ParallelRunnable, Runnable};
 
 use crate::render::graph::NodeState;
 
+use super::metrics::SystemReporter;
+
 pub enum Step {
     Stateless {
         builder: Arc<Box<dyn Schedulable>>,
@@ -14,6 +16,10 @@ pub enum Step {
     },
     Local {
         builder: Arc<Box<dyn LocalSchedulable>>,
+    },
+    LocalReporter {
+        builder: Arc<Box<dyn LocalReporterSchedulable>>,
+        state: SystemReporter,
     },
     Flush,
 }
@@ -56,6 +62,17 @@ impl SubSchedule {
         self.steps.push(Step::Local { builder: system });
     }
 
+    pub fn add_single_threaded_reporter(
+        &mut self,
+        system: Arc<Box<dyn LocalReporterSchedulable>>,
+        state: SystemReporter,
+    ) {
+        self.steps.push(Step::LocalReporter {
+            builder: system,
+            state,
+        });
+    }
+
     pub fn flush(&mut self) {
         self.steps.push(Step::Flush);
     }
@@ -75,6 +92,7 @@ impl Schedulable for SubSchedule {
                 Step::System { builder, state } => builder.schedule(schedule, state.clone()),
                 Step::Stateless { builder } => builder.schedule(schedule),
                 Step::Local { builder } => builder.schedule(schedule),
+                Step::LocalReporter { builder, state } => builder.schedule(schedule, state.clone()),
             }
         }
     }
@@ -183,5 +201,41 @@ where
 {
     fn schedule(&self, schedule: &mut ScheduleBuilder) {
         schedule.add_thread_local((self.builder)());
+    }
+}
+
+pub struct LocalReporterSystem<F, S>
+where
+    F: Fn(SystemReporter) -> S,
+    S: Runnable + 'static,
+{
+    builder: F,
+    _marker: PhantomData<S>,
+}
+
+impl<F, S> LocalReporterSystem<F, S>
+where
+    F: Fn(SystemReporter) -> S,
+    S: Runnable + 'static,
+{
+    pub fn new(system_builder: F) -> Self {
+        Self {
+            builder: system_builder,
+            _marker: PhantomData,
+        }
+    }
+}
+
+pub trait LocalReporterSchedulable {
+    fn schedule(&self, schedule: &mut ScheduleBuilder, state: SystemReporter);
+}
+
+impl<F, S> LocalReporterSchedulable for LocalReporterSystem<F, S>
+where
+    F: Fn(SystemReporter) -> S,
+    S: Runnable + 'static,
+{
+    fn schedule(&self, schedule: &mut ScheduleBuilder, state: SystemReporter) {
+        schedule.add_thread_local((self.builder)(state));
     }
 }

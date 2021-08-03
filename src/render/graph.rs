@@ -9,14 +9,14 @@ use uuid::Uuid;
 use crate::{
     buffer::{IndexBuffer, Vertex2D, VertexBuffer},
     constants::{
-        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, FORWARD_2D_NODE_ID, ID,
-        UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
+        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, FORWARD_2D_NODE_ID, ID, METRICS_UI_IMGUI_ID,
+        RENDER_UI_SYSTEM_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
     },
     resource::{
-        metrics::SystemReporter,
-        schedule::{LocalSystem, StatelessSystem, SubSchedule},
+        metrics::{EngineMetrics, SystemReporter},
+        schedule::{LocalReporterSystem, LocalSystem, StatelessSystem, SubSchedule},
         store::TextureStore,
-        ui::UIBuilder,
+        ui::{ImguiWindow, UIBuilder},
     },
     system::{render_2d::create_render_pass, render_graph::*, render_ui::*},
     texture::Texture,
@@ -168,8 +168,8 @@ impl GraphBuilder {
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         texture_store: Arc<Mutex<TextureStore>>,
         window: &winit::window::Window,
-        ui_builder: UIBuilder,
-    ) -> Result<Arc<RenderGraph>> {
+        mut metrics_ui: EngineMetrics,
+    ) -> Result<(Arc<RenderGraph>, Arc<EngineMetrics>)> {
         debug!("building render graph nodes");
         let nodes = self
             .node_builders
@@ -213,18 +213,6 @@ impl GraphBuilder {
             UIMode::Master => Arc::clone(&swap_chain_target),
             UIMode::Node(id) => Arc::clone(&node_targets.get(id).unwrap()),
         };
-        match self.ui_mode {
-            UIMode::Node(_) | UIMode::Master => {
-                ui_builder.build_to_resources(
-                    resources,
-                    Arc::clone(&ui_target),
-                    window,
-                    &device,
-                    &queue,
-                );
-            }
-            _ => (debug!("ui is disabled")),
-        }
 
         let unit_square_buffers = (
             VertexBuffer::new_2d(
@@ -301,10 +289,36 @@ impl GraphBuilder {
                             .binder
                             .dyn_offset_state
                             .clone(),
+                        reporter: metrics_ui.register_system_id(&node.name, *node_id),
                     },
                 )
             })
             .collect();
+
+        // let reporter_forward_2d =
+        //     metrics_ui.register_system_id("forward_2d", ID(FORWARD_2D_NODE_ID));
+        // let reporter_render_ui =
+        //     metrics_ui.register_system_id("render_ui", ID(RENDER_UI_SYSTEM_ID));
+
+        let ui_reporter = metrics_ui.register_system_id("render_ui", ID(RENDER_UI_SYSTEM_ID));
+        let metrics_ui = Arc::new(metrics_ui);
+        let metrics_arc = Arc::clone(&metrics_ui);
+        resources.insert(Arc::clone(&metrics_ui));
+        let ui_builder =
+            UIBuilder::new().with_imgui_window(metrics_ui.impl_imgui(), ID(METRICS_UI_IMGUI_ID));
+
+        match self.ui_mode {
+            UIMode::Node(_) | UIMode::Master => {
+                ui_builder.build_to_resources(
+                    resources,
+                    Arc::clone(&ui_target),
+                    window,
+                    &device,
+                    &queue,
+                );
+            }
+            _ => (debug!("ui is disabled")),
+        }
 
         debug!("scheduling render systems");
 
@@ -328,8 +342,10 @@ impl GraphBuilder {
 
         // Run ui system
         if let UIMode::Master = self.ui_mode {
-            sub_schedule
-                .add_single_threaded(Arc::new(Box::new(LocalSystem::new(render_ui_system))));
+            sub_schedule.add_single_threaded_reporter(
+                Arc::new(Box::new(LocalReporterSystem::new(render_ui_system))),
+                ui_reporter,
+            );
         }
 
         // Release lock on swap chain, end of frame
@@ -352,7 +368,7 @@ impl GraphBuilder {
 
         debug!("done building render graph!");
 
-        Ok(Arc::clone(&self.dest.as_ref().unwrap()))
+        Ok((Arc::clone(&self.dest.as_ref().unwrap()), metrics_arc))
     }
 
     fn input_nodes_for_node(&self, node_id: Uuid) -> Vec<Uuid> {

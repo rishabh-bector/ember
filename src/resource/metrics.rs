@@ -10,85 +10,104 @@ use super::ui::ImguiWindow;
 
 pub struct EngineMetrics {
     pub systems: HashMap<Uuid, Arc<Mutex<SystemMetrics>>>,
+    pub ui: Arc<Mutex<EngineMetricsUI>>,
+
+    pub fps: Arc<Mutex<u32>>,
 
     last_updated: Instant,
-
-    // Written each frame
-    // Should only store data for engine-level metrics
-    frame_count: u32,
+    // written each frame
+    // should only store data for engine-level metrics
 
     // written each second, read each frame
-    fps: u32,
-    avg_execution_time: f64,
-    percent_system_shares: HashMap<Uuid, (String, u32)>,
+    //avg_fps: u32,
+    //avg_execution_time: f64,
+    //percent_system_shares: HashMap<Uuid, (String, u32)>,
 }
 
 impl EngineMetrics {
     pub fn new() -> Self {
         Self {
-            fps: 60,
-            avg_execution_time: 0.0,
-            systems: HashMap::new(),
-            percent_system_shares: HashMap::new(),
             last_updated: Instant::now(),
-            frame_count: 0,
+            ui: Default::default(),
+            fps: Arc::new(Mutex::new(0)),
+            systems: HashMap::new(),
+            //percent_system_shares: HashMap::new(),
+            //avg_execution_time: 0.0,
+            //avg_fps: 0,
         }
     }
 
-    pub fn register_system(&mut self, metrics: Arc<Mutex<SystemMetrics>>) -> Uuid {
-        let id = Uuid::new_v4();
-        self.systems.insert(id, metrics);
-        self.percent_system_shares
-            .insert(id, (metrics.lock().unwrap().system_name, 0));
-        id
-    }
+    // pub fn register_system(&mut self, metrics: Arc<Mutex<SystemMetrics>>) -> Uuid {
+    //     let id = Uuid::new_v4();
+    //     self.percent_system_shares
+    //         .insert(id, (metrics.lock().unwrap().system_name.to_owned(), 0));
+    //     self.systems.insert(id, metrics);
+    //     id
+    // }
 
-    pub fn register_system_id(&mut self, id: Uuid, metrics: Arc<Mutex<SystemMetrics>>) {
-        self.systems.insert(id, metrics);
-        self.percent_system_shares
-            .insert(id, (metrics.lock().unwrap().system_name, 0));
+    pub fn register_system_id(&mut self, name: &str, id: Uuid) -> SystemReporter {
+        let system_metrics = Arc::new(Mutex::new(SystemMetrics::new(name)));
+        let reporter = SystemReporter::new(Arc::clone(&system_metrics));
+        self.ui.lock().unwrap().percent_system_shares.insert(
+            id,
+            (system_metrics.lock().unwrap().system_name.to_owned(), 0),
+        );
+        self.systems.insert(id, system_metrics);
+        reporter
     }
 
     pub fn mut_system(&mut self, id: &Uuid) -> MutexGuard<SystemMetrics> {
         self.systems.get(id).unwrap().lock().unwrap()
     }
 
-    // Should be called every frame
-    pub fn update(&mut self) {
-        self.frame_count += 1;
-        if self.last_updated.elapsed() > Duration::from_secs(1) {
-            // Metric: fps
-            self.fps = (1.0
-                / (self.last_updated.elapsed().as_secs_f64() / (self.frame_count as f64)))
-                as u32
-                + 1;
-            self.last_updated = Instant::now();
-            self.frame_count = 0;
+    // Expensive, should not be called every frame
+    pub fn calculate(&self) {
+        let mut ui = self.ui.lock().unwrap();
 
-            // Metric: average system run time
-            self.avg_execution_time = 0.0;
-            for (id, system) in &self.systems {
-                self.avg_execution_time += system.lock().unwrap().avg_run_time;
-            }
-            self.avg_execution_time /= self.systems.len() as f64;
+        // Metric: average fps (from reporter)
+        ui.avg_fps = *self.fps.lock().unwrap();
 
-            // Metric: individual system frame share
-            for (id, system) in &self.systems {
-                let (name, _) = self.percent_system_shares.get(id).unwrap();
-                self.percent_system_shares.insert(
-                    *id,
-                    (
-                        name.to_owned(),
-                        ((system.lock().unwrap().avg_run_time / self.avg_execution_time) * 100.0)
-                            as u32,
-                    ),
-                );
-            }
+        // Metric: average system run time
+        ui.avg_execution_time = 0.0;
+        for (_, system) in &self.systems {
+            ui.avg_execution_time += system.lock().unwrap().avg_run_time;
+        }
+        let total_execution_time = ui.avg_execution_time;
+        ui.avg_execution_time /= self.systems.len() as f64;
+
+        // Metric: individual system frame share
+        for (id, system) in &self.systems {
+            let (name, _) = ui.percent_system_shares.get(id).unwrap();
+            let name = name.to_owned();
+            ui.percent_system_shares.insert(
+                *id,
+                (
+                    name.to_owned(),
+                    ((system.lock().unwrap().avg_run_time / total_execution_time) * 100.0) as u32,
+                ),
+            );
         }
     }
 }
 
 impl ImguiWindow for EngineMetrics {
+    fn build(&self, frame: &imgui::Ui) {
+        self.ui.lock().unwrap().build(frame);
+    }
+
+    fn impl_imgui(self: Arc<Self>) -> Arc<dyn ImguiWindow> {
+        self
+    }
+}
+
+#[derive(Default)]
+pub struct EngineMetricsUI {
+    pub avg_fps: u32,
+    pub percent_system_shares: HashMap<Uuid, (String, u32)>,
+    pub avg_execution_time: f64,
+}
+
+impl ImguiWindow for EngineMetricsUI {
     fn build(&self, frame: &imgui::Ui) {
         imgui::Window::new(im_str!("Ember Engine Debugger"))
             .size([225.0, 200.0], imgui::Condition::FirstUseEver)
@@ -97,16 +116,16 @@ impl ImguiWindow for EngineMetrics {
                     .default_open(true)
                     .build(&frame)
                 {
-                    frame.text(format!("fps: {}", self.fps));
+                    frame.text(format!("fps: {}", self.avg_fps));
                 }
 
                 frame.spacing();
                 if imgui::CollapsingHeader::new(im_str!("Render Graph")).build(&frame) {
-                    frame.text("System Frame Usage");
+                    frame.text("Frame Time");
+                    frame.separator();
                     for (_, (system_name, usage)) in &self.percent_system_shares {
                         frame.text(format!("{}: {}%", system_name, usage));
                     }
-                    frame.separator();
                 }
 
                 frame.separator();
@@ -120,6 +139,37 @@ impl ImguiWindow for EngineMetrics {
 
     fn impl_imgui(self: Arc<Self>) -> Arc<dyn ImguiWindow> {
         self
+    }
+}
+
+pub struct EngineReporter {
+    target: Arc<Mutex<u32>>,
+    last_reported: Instant,
+    frame_count: u32,
+}
+
+impl EngineReporter {
+    pub fn new(target: Arc<Mutex<u32>>) -> Self {
+        Self {
+            target,
+            last_reported: Instant::now(),
+            frame_count: 0,
+        }
+    }
+
+    pub fn update(&mut self) {
+        self.frame_count += 1;
+        if self.last_reported.elapsed() >= Duration::from_secs(1) {
+            self.report();
+        }
+    }
+
+    fn report(&mut self) {
+        *self.target.lock().unwrap() =
+            (1.0 / (self.last_reported.elapsed().as_secs_f64() / (self.frame_count as f64))) as u32
+                + 1;
+        self.last_reported = Instant::now();
+        self.frame_count = 0;
     }
 }
 
@@ -144,6 +194,7 @@ impl SystemMetrics {
 pub struct SystemReporter {
     target: Arc<Mutex<SystemMetrics>>,
     last_reported: Instant,
+    frame_count: u32,
     total_run_time: f64,
 }
 
@@ -153,25 +204,26 @@ impl SystemReporter {
             target,
             last_reported: Instant::now(),
             total_run_time: 0.0,
+            frame_count: 0,
         }
     }
 
     // should be called every frame
     pub fn update(&mut self, run_time: f64) {
         self.total_run_time += run_time;
+        self.frame_count += 1;
 
         if self.last_reported.elapsed() >= Duration::from_secs(1) {
             self.report();
-            self.last_reported = Instant::now();
         }
     }
 
     // average run time of system (seconds)
-    pub fn report(&self) {
-        let avg = self.total_run_time / self.last_reported.elapsed().as_secs_f64();
+    fn report(&mut self) {
+        let avg = self.total_run_time / self.frame_count as f64;
         self.last_reported = Instant::now();
         self.total_run_time = 0.0;
-
+        self.frame_count = 0;
         self.target.lock().unwrap().avg_run_time = avg;
     }
 }

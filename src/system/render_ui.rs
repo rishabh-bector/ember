@@ -46,7 +46,7 @@ pub fn render_ui(
         window.build(&frame);
     }
 
-    frame.show_demo_window(&mut true);
+    frame.show_demo_window(&mut false);
 
     // Render to texture
     debug!("rendering ui");

@@ -37,10 +37,9 @@ pub type Base2DRenderNode = ();
 
 #[system]
 pub fn forward_render_2d(
-    #[state] state: &NodeState,
+    #[state] state: &mut NodeState,
     #[resource] device: &Arc<wgpu::Device>,
     #[resource] queue: &Arc<wgpu::Queue>,
-    #[resource] metrics: &Arc<EngineMetrics>,
 ) {
     let start_time = Instant::now();
     debug!("running system forward_render_2d (graph node)");
