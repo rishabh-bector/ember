@@ -34,7 +34,7 @@ use crate::{
     render::{buffer::*, graph::GraphBuilder, node::*, uniform::*, *},
     resource::{
         camera::Camera2D,
-        metrics::{EngineMetrics, SystemMetrics},
+        metrics::EngineMetrics,
         schedule::{Schedulable, SubSchedule},
         store::TextureStoreBuilder,
         ui::{ImguiWindow, UIBuilder, UI},
