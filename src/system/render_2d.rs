@@ -1,29 +1,14 @@
-use legion::{world::SubWorld, IntoQuery};
-use std::{
-    borrow::Borrow,
-    marker::PhantomData,
-    str::FromStr,
-    sync::{Arc, Mutex},
-    time::Instant,
-};
-use uuid::Uuid;
+use std::{sync::Arc, time::Instant};
 
 use crate::{
-    components::Position2D,
     constants::{
-        BASE_2D_BIND_GROUP_ID, BASE_2D_COMMON_TEXTURE_ID, CAMERA_2D_BIND_GROUP_ID,
-        FORWARD_2D_NODE_ID, ID, LIGHTING_2D_BIND_GROUP_ID, UNIT_SQUARE_IND_BUFFER_ID,
-        UNIT_SQUARE_VRT_BUFFER_ID,
+        BASE_2D_BIND_GROUP_ID, BASE_2D_COMMON_TEXTURE_ID, CAMERA_2D_BIND_GROUP_ID, ID,
+        LIGHTING_2D_BIND_GROUP_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
     },
     render::{
         buffer::{IndexBuffer, VertexBuffer},
-        graph::{NodeState, RenderGraph},
-        texture::Texture,
-        uniform::UniformGroup,
-        GpuState,
+        graph::NodeState,
     },
-    resource::metrics::EngineMetrics,
-    system::{base_2d::*, camera_2d::*, lighting_2d::*},
 };
 
 pub struct Render2DSystem {

@@ -1,12 +1,7 @@
-use imgui::im_str;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 
-use crate::resource::metrics::SystemReporter;
-use crate::{
-    constants::{ID, RENDER_UI_SYSTEM_ID},
-    resource::{metrics::EngineMetrics, ui::UI},
-};
+use crate::resource::{metrics::SystemReporter, ui::UI};
 
 #[system]
 pub fn render_ui(
@@ -46,7 +41,7 @@ pub fn render_ui(
         window.build(&frame);
     }
 
-    frame.show_demo_window(&mut false);
+    // frame.show_demo_window(&mut false);
 
     // Render to texture
     debug!("rendering ui");

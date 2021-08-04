@@ -11,29 +11,15 @@ use super::ui::ImguiWindow;
 pub struct EngineMetrics {
     pub systems: HashMap<Uuid, Arc<Mutex<SystemMetrics>>>,
     pub ui: Arc<Mutex<EngineMetricsUI>>,
-
     pub fps: Arc<Mutex<u32>>,
-
-    last_updated: Instant,
-    // written each frame
-    // should only store data for engine-level metrics
-
-    // written each second, read each frame
-    //avg_fps: u32,
-    //avg_execution_time: f64,
-    //percent_system_shares: HashMap<Uuid, (String, u32)>,
 }
 
 impl EngineMetrics {
     pub fn new() -> Self {
         Self {
-            last_updated: Instant::now(),
             ui: Default::default(),
             fps: Arc::new(Mutex::new(0)),
             systems: HashMap::new(),
-            //percent_system_shares: HashMap::new(),
-            //avg_execution_time: 0.0,
-            //avg_fps: 0,
         }
     }
 

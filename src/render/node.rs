@@ -2,17 +2,16 @@ use anyhow::{anyhow, Result};
 use legion::{systems::ParallelRunnable, Resources};
 use std::{
     collections::HashMap,
-    marker::PhantomData,
     sync::{Arc, Mutex},
 };
 use uuid::Uuid;
 
 use crate::resource::{
-    schedule::{NodeSystem, Schedulable, SubSchedulable},
+    schedule::{NodeSystem, SubSchedulable},
     store::{TextureGroup, TextureStore},
 };
 
-use super::{graph::NodeState, texture::Texture, uniform::GroupResourceBuilder};
+use super::{graph::NodeState, uniform::GroupResourceBuilder};
 
 pub struct RenderNode {
     pub id: Uuid,

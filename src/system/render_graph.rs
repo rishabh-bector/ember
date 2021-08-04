@@ -1,15 +1,9 @@
-use std::{
-    collections::HashMap,
-    marker::PhantomData,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use crate::render::{
     graph::{RenderGraph, RenderTarget},
     GpuState,
 };
-
-use super::render_2d::Base2DRenderNode;
 
 #[system]
 pub fn begin_render_graph(

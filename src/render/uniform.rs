@@ -53,7 +53,7 @@ impl<N> UniformGroup<N> {
         self.dynamic_offset_state.iter_mut().for_each(|i| *i = 0);
     }
 
-    pub fn load_dynamic_uniform(&mut self, index: usize, source_bytes: &[u8]) {
+    pub fn load_dynamic_uniform(&mut self, source_bytes: &[u8]) {
         for i in 0..self.buffers.len() {
             self.queue
                 .write_buffer(&self.buffers[i], self.dynamic_offset_state[i], source_bytes);

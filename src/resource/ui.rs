@@ -1,14 +1,13 @@
 use anyhow::Result;
-use imgui::im_str;
 use legion::Resources;
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, MutexGuard},
-    time::{Duration, Instant},
+    sync::{Arc, Mutex},
+    time::Instant,
 };
 use uuid::Uuid;
 
-use crate::render::{graph::RenderTarget, texture::Texture};
+use crate::render::graph::RenderTarget;
 
 pub struct UI {
     pub platform: Mutex<imgui_winit_support::WinitPlatform>,

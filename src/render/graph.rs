@@ -14,7 +14,7 @@ use crate::{
     },
     resource::{
         metrics::{EngineMetrics, SystemReporter},
-        schedule::{LocalReporterSystem, LocalSystem, StatelessSystem, SubSchedule},
+        schedule::{LocalReporterSystem, StatelessSystem, SubSchedule},
         store::TextureStore,
         ui::{ImguiWindow, UIBuilder},
     },

@@ -95,7 +95,7 @@ pub fn base_2d_uniform(
         base_uniforms.mut_ref().model = [pos.x, pos.y, base_2d.width, base_2d.height];
         base_uniforms.mut_ref().color = base_2d.color;
         base_uniforms.mut_ref().mix = base_2d.mix;
-        base_uniforms_group.load_dynamic_uniform(0, base_uniforms.as_bytes());
+        base_uniforms_group.load_dynamic_uniform(base_uniforms.as_bytes());
         count += 1;
     }
     *base_uniforms_group.dynamic_entity_count.lock().unwrap() = count;

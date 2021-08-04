@@ -28,8 +28,7 @@ use crate::{
     constants::{
         BASE_2D_BIND_GROUP_ID, BASE_2D_COMMON_TEXTURE_ID, CAMERA_2D_BIND_GROUP_ID,
         DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, DEFAULT_TEXTURE_BUFFER_FORMAT,
-        FORWARD_2D_NODE_ID, ID, LIGHTING_2D_BIND_GROUP_ID, METRICS_UI_IMGUI_ID,
-        RENDER_UI_SYSTEM_ID,
+        FORWARD_2D_NODE_ID, ID, LIGHTING_2D_BIND_GROUP_ID,
     },
     render::{buffer::*, graph::GraphBuilder, node::*, uniform::*, *},
     resource::{
@@ -37,7 +36,7 @@ use crate::{
         metrics::EngineMetrics,
         schedule::{Schedulable, SubSchedule},
         store::TextureStoreBuilder,
-        ui::{ImguiWindow, UIBuilder, UI},
+        ui::UI,
     },
     system::{base_2d::*, camera_2d::*, lighting_2d::*, physics_2d::*, render_2d::*},
 };
@@ -52,6 +51,7 @@ pub mod render;
 pub mod resource;
 pub mod system;
 
+#[allow(dead_code)]
 pub struct Engine {
     gpu: Arc<Mutex<GpuState>>,
     graph: Arc<RenderGraph>,
@@ -227,7 +227,7 @@ impl EngineBuilder {
             .add_system(camera_2d_uniform_system())
             .add_system(lighting_2d_uniform_system());
 
-        let mut metrics_ui = EngineMetrics::new();
+        let metrics_ui = EngineMetrics::new();
 
         info!("building render graph");
         let mut graph_schedule = SubSchedule::new();
