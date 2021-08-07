@@ -6,12 +6,11 @@ use std::{
 };
 use uuid::Uuid;
 
+use super::{graph::NodeState, uniform::group::GroupResourceBuilder};
 use crate::resource::{
     schedule::{NodeSystem, SubSchedulable},
     store::{TextureGroup, TextureStore},
 };
-
-use super::{graph::NodeState, uniform::GroupResourceBuilder};
 
 pub struct RenderNode {
     pub id: Uuid,
@@ -87,6 +86,16 @@ impl NodeBuilder {
             .push(BindIndex::Uniform(self.uniform_group_builders.len()));
         self.uniform_group_builders
             .push(Arc::new(Mutex::new(group_builder)));
+        self
+    }
+
+    pub fn with_shared_uniform_group<T: GroupResourceBuilder + 'static>(
+        mut self,
+        group_builder: Arc<Mutex<T>>,
+    ) -> Self {
+        self.bind_groups
+            .push(BindIndex::Uniform(self.uniform_group_builders.len()));
+        self.uniform_group_builders.push(group_builder);
         self
     }
 

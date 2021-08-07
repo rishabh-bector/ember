@@ -1,0 +1,12 @@
+[package]
+name = "vertex_layout_derive"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+vertex_traits = { path = "../vertex_traits" }
+syn = "1.0"
+quote = "1.0"

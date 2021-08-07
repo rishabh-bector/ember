@@ -1,6 +1,13 @@
 use std::sync::Arc;
-
+use vertex_traits::{VertexAttribute, VertexLayout, VertexLayoutBuilder};
 use wgpu::util::DeviceExt;
+
+// Vertex Layout Builder
+// - Automatically generate vertex buffer layouts
+//   for structs based on macros! (MAKE THIS A SEPARATE CRATE PROOOOOJECT)
+//
+// - Then I can automatically generate the buffer layouts
+//   need to make any generic uniform struct instancable!
 
 // Vertex and index buffers
 
@@ -15,7 +22,7 @@ unsafe impl bytemuck::Pod for Vertex3D {}
 unsafe impl bytemuck::Zeroable for Vertex3D {}
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(VertexLayout, Copy, Clone, Debug)]
 pub struct Vertex2D {
     pub position: [f32; 2],
     pub uvs: [f32; 2],
@@ -58,6 +65,8 @@ impl VertexBuffer {
         }
     }
     pub fn layout_2d<'a>() -> wgpu::VertexBufferLayout<'a> {
+        let attrs = Vertex2D::layout_builder();
+
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex2D>() as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,

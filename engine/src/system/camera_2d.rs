@@ -2,7 +2,7 @@ use cgmath::Matrix2;
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    render::uniform::{GenericUniform, Uniform, UniformGroup},
+    render::uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
     resource::camera::Camera2D,
 };
 

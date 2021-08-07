@@ -12,8 +12,36 @@ use crate::{
     constants::{
         BASE_2D_COMMON_INDEX_BUFFER, BASE_2D_COMMON_TEXTURE_ID, BASE_2D_COMMON_VERTEX_BUFFER,
     },
-    render::uniform::{GenericUniform, Uniform, UniformGroup},
+    render::uniform::{generic::GenericUniform, group::UniformGroup},
+    Uniform,
 };
+
+// Notes: Automatic instancing of Base2D components
+//
+//  - currently, Base2D components use dynamic buffering by default
+//    therefore, even a single component should use a (tiny) dynamic buffer
+//
+//  - once instancing is available, we need to create one instance
+//    buffer for each "group" of Base2D components. So, we need to decide:
+//      - How to form the groups
+//      - How/where to store the instance buffers
+//
+//    Groups:
+//      Base2D components should be sorted into groups which share the
+//      same texture, common_vertex_buffer, and common_index_buffer
+//
+//    Storing the instance buffers:
+//      One instance buffer is needed per group; the user may add an arbitrary
+//      number of different Base2D components, each with different "shared" properties,
+//      consisting of an arbitrary total of groups.
+//
+//    Requirements for the instance buffer:
+//      - Instance buffers must have a constant "num max entities", like dynamic
+//        buffers, to be allocated on init
+//      - Instance buffers are a per-uniform concept: thanks to my macros, we should be able
+//        to use any generic uniform struct as an instance layout.
+//      - Instance buffers are a per-uniform group concept: we will make a Base2DInstance
+//        struct which is consumed by the render_2d_instance shader (and/or others) as vertex input.
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Base2D {
@@ -71,7 +99,9 @@ pub struct Base2DUniforms {
     pub __padding: [f32; 23],
 }
 
-pub struct Base2DUniformGroup {}
+pub struct Base2DUniformGroup {
+    pub instance: bool,
+}
 
 // TODO: Make this a macro?
 #[system]

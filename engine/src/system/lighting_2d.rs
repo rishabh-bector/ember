@@ -4,7 +4,7 @@ use legion::{world::SubWorld, IntoQuery};
 
 use crate::{
     components::Position2D,
-    render::uniform::{GenericUniform, Uniform, UniformGroup},
+    render::uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
 };
 
 pub struct Lighting2DUniformGroup {}

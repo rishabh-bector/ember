@@ -568,6 +568,8 @@ dependencies = [
  "rand",
  "regex",
  "uuid",
+ "vertex_layout_derive",
+ "vertex_traits",
  "wgpu",
  "winit",
  "winit_input_helper",
@@ -593,6 +595,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3de9ad4541d99dc22b59134e7ff8dc3d6c988c89ecd7324bf10a8362b07a2afa"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "example0"
+version = "0.1.0"
+dependencies = [
+ "ember",
+ "rand",
 ]
 
 [[package]]
@@ -2064,6 +2074,22 @@ name = "version_check"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fecdca9a5291cc2b8dcf7dc02453fee791a280f3743cb0905f8822ae463b3fe"
+
+[[package]]
+name = "vertex_layout_derive"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn",
+ "vertex_traits",
+]
+
+[[package]]
+name = "vertex_traits"
+version = "0.1.0"
+dependencies = [
+ "wgpu",
+]
 
 [[package]]
 name = "walkdir"

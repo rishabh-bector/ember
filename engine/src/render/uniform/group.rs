@@ -4,16 +4,29 @@ use std::{
     any::type_name,
     fmt::Debug,
     marker::PhantomData,
-    mem::size_of,
     num::NonZeroU64,
     sync::{Arc, Mutex},
 };
 use uuid::Uuid;
-use wgpu::{util::DeviceExt, BindGroupEntry};
+use wgpu::BindGroupEntry;
 
-use crate::constants::{
-    DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE, DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS,
+use crate::{
+    constants::DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE, render::uniform::generic::BufferState,
+    resource::ResourceBuilder,
 };
+
+use super::UniformBuilder;
+
+// Instancing notes:
+//
+// - Make a new render node: base_2d_instance which is the exact same as base_2d
+//   except it does instancing
+//
+// - Since it also operates on Base2D components, this makes no difference to the user
+//   Instead, the engine should decide whether to render a single object, use dynamic uniform
+//   buffers, or use instancing.
+//
+//   I guess this will become a configurable property of each Base2D component?
 
 pub trait UniformSource:
     Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug + 'static
@@ -70,10 +83,6 @@ impl<N> UniformGroup<N> {
     pub fn bind_group(&self) -> Arc<wgpu::BindGroup> {
         Arc::clone(&self.bind_group)
     }
-}
-
-pub trait ResourceBuilder {
-    fn build_to_resource(&self, resources: &mut Resources);
 }
 
 pub trait GroupBuilder {
@@ -254,149 +263,10 @@ where
         for uniform in &self.uniforms {
             resources.insert(Arc::clone(uniform));
         }
-        resources.insert::<Arc<Mutex<UniformGroup<N>>>>(Arc::clone(self.dest.as_ref().unwrap()));
-    }
-}
-
-pub trait UniformBuilder: ResourceBuilder {
-    // -> (buffer, source size, max dynamic offsets per render pass)
-    fn build_buffer(&mut self, device: &wgpu::Device) -> BufferState;
-    fn dynamic(&self) -> Option<(u64, u64)>;
-}
-
-pub struct GenericUniformBuilder<U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug> {
-    pub source: Option<U>,
-    pub buffer: Option<wgpu::Buffer>,
-
-    // Max sources to fit in one buffer
-    pub dynamic: bool,
-    pub max_size: Option<u32>,
-
-    // Size of one U
-    pub size: u32,
-
-    pub dest: Option<Arc<Mutex<GenericUniform<U>>>>,
-}
-
-impl<U> GenericUniformBuilder<U>
-where
-    U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug,
-{
-    pub fn from_source(source: U) -> Self {
-        Self {
-            source: Some(source),
-            buffer: None,
-            max_size: None,
-            size: size_of::<U>() as u32,
-            dest: None,
-            dynamic: false,
-        }
-    }
-
-    pub fn enable_dynamic_buffering(mut self) -> Self {
-        self.dynamic = true;
-        self
-    }
-
-    pub fn with_dynamic_entity_limit(mut self, max: u32) -> Self {
-        self.max_size = Some(max);
-        self
-    }
-}
-
-impl<U> ResourceBuilder for GenericUniformBuilder<U>
-where
-    U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug + 'static,
-{
-    fn build_to_resource(&self, resources: &mut Resources) {
-        resources.insert(Arc::clone(&self.dest.as_ref().as_ref().unwrap()));
-    }
-}
-
-pub struct BufferState {
-    buffer: wgpu::Buffer,
-    element_size: u64,
-    max_elements: u64,
-}
-
-impl<U> UniformBuilder for GenericUniformBuilder<U>
-where
-    U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug,
-{
-    fn build_buffer(&mut self, device: &wgpu::Device) -> BufferState {
-        let source = &[self.source.unwrap()];
-
-        let max_elements = match self.dynamic {
-            false => 1,
-            true => self
-                .max_size
-                .unwrap_or(DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS),
-        };
-
-        let source_bytes = bytemuck::cast_slice(source);
-        let source_size = source_bytes.len();
-        let source_bytes = source_bytes.repeat(max_elements as usize);
-
-        self.dest = Some(Arc::new(Mutex::new(GenericUniform {
-            source: [self.source.unwrap()],
-            dynamic: self.dynamic,
-        })));
-
-        BufferState {
-            buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("Uniform Buffer: {}", type_name::<U>())),
-                contents: &source_bytes,
-                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
-            }),
-            element_size: source_size as u64,
-            max_elements: max_elements as u64,
-        }
-    }
-
-    fn dynamic(&self) -> Option<(u64, u64)> {
-        match self.dynamic {
-            false => None,
-            true => Some((
-                self.size as u64,
-                self.max_size
-                    .unwrap_or(DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS) as u64,
-            )),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct GenericUniform<U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug> {
-    pub source: [U; 1],
-    pub dynamic: bool,
-}
-
-impl<U> GenericUniform<U>
-where
-    U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug,
-{
-    pub fn mut_ref(&mut self) -> &mut U {
-        &mut self.source[0]
-    }
-
-    pub fn buffer_size(&self) -> u32 {
-        size_of::<U>() as u32
-    }
-
-    pub fn to_bytes(source: &[U]) -> &[u8] {
-        bytemuck::cast_slice(source)
-    }
-}
-
-pub trait Uniform {
-    fn as_bytes(&self) -> &[u8];
-}
-
-impl<U> Uniform for GenericUniform<U>
-where
-    U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug,
-{
-    fn as_bytes(&self) -> &[u8] {
-        bytemuck::cast_slice(&self.source)
+        // If this group already exists, then keep the existing one
+        let group_builder = resources
+            .remove::<Arc<Mutex<UniformGroup<N>>>>()
+            .unwrap_or_else(|| Arc::clone(self.dest.as_ref().unwrap()));
+        resources.insert::<Arc<Mutex<UniformGroup<N>>>>(group_builder);
     }
 }
