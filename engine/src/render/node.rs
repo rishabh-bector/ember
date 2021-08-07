@@ -29,8 +29,21 @@ pub struct PipelineBinder {
     pub texture_groups: HashMap<Uuid, Arc<wgpu::BindGroup>>,
     pub uniform_groups: HashMap<Uuid, Arc<wgpu::BindGroup>>,
 
+    // pub instance_groups: HashMap<Uuid, InstanceGroup>,
+
     // uniform group id -> (dyn_entity_count, [(dyn uniform size, max count)])
+    // Todo: should deprecate or improve this
     pub dyn_offset_state: HashMap<Uuid, (Arc<Mutex<u64>>, Vec<(u64, u64)>)>,
+}
+
+// A group of components which can be rendered with one instanced draw call.
+// These share textures and vertex/index buffers.
+pub struct InstanceGroup {
+    pub id: Uuid,
+
+    pub texture: Uuid,
+    pub common_vertex_buffer: usize,
+    pub common_index_buffer: usize,
 }
 
 pub enum ShaderSource {
@@ -42,8 +55,8 @@ pub enum BindIndex {
     Uniform(usize),
     Texture(TextureGroup),
 }
-/// Builder for easily creating flexible wgpu render pipelines
 
+/// RenderGraph node builder.
 pub struct NodeBuilder {
     pub name: String,
     pub graph_inputs: u32,

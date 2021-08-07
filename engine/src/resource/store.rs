@@ -25,11 +25,11 @@ pub struct TextureStoreBuilder {
 impl TextureStoreBuilder {
     pub fn new() -> Self {
         let mut to_load: HashMap<TextureGroup, Vec<(Uuid, String)>> = HashMap::new();
-        to_load.insert(TextureGroup::Base2D, vec![]);
+        to_load.insert(TextureGroup::Render2D, vec![]);
         to_load.insert(TextureGroup::_Base3D, vec![]);
         Self {
             to_load,
-            load_group: TextureGroup::Base2D,
+            load_group: TextureGroup::Render2D,
             bind_group_layout: Rc::new(None),
             texture_store: None,
         }
@@ -135,6 +135,6 @@ impl TextureStore {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextureGroup {
-    Base2D,
+    Render2D,
     _Base3D,
 }

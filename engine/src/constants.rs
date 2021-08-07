@@ -5,9 +5,14 @@ use uuid::Uuid;
 pub const DEFAULT_SCREEN_WIDTH: usize = 1440;
 pub const DEFAULT_SCREEN_HEIGHT: usize = 900;
 
+// Buffers
+
 pub const DEFAULT_TEXTURE_BUFFER_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
+
 pub const DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS: u32 = 128;
 pub const DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE: u64 = 128;
+
+pub const DEFAULT_MAX_INSTANCES_PER_PASS: u32 = 1024;
 
 // Engine render nodes
 
@@ -19,7 +24,7 @@ pub const RENDER_UI_SYSTEM_ID: &str = "7a370e52-053a-46dc-82d6-4fd8d41c1c19";
 
 // Engine bind groups
 
-pub const BASE_2D_BIND_GROUP_ID: &str = "2fc8e285-38ca-45e2-a910-00f49a7455d1";
+pub const RENDER_2D_BIND_GROUP_ID: &str = "2fc8e285-38ca-45e2-a910-00f49a7455d1";
 pub const CAMERA_2D_BIND_GROUP_ID: &str = "50cdf623-c003-4c7c-ae56-646339c4f026";
 pub const LIGHTING_2D_BIND_GROUP_ID: &str = "eb964ee1-abc3-435f-ab03-0dceb692661e";
 
@@ -29,9 +34,9 @@ pub const METRICS_UI_IMGUI_ID: &str = "cb7550b5-e8a7-49b0-954a-c156f69db093";
 
 // 2D render graph base
 
-pub const BASE_2D_COMMON_TEXTURE_ID: &str = "8a22d465-7935-41e5-9e90-686ef5632c54";
-pub const BASE_2D_COMMON_VERTEX_BUFFER: usize = 0;
-pub const BASE_2D_COMMON_INDEX_BUFFER: usize = 0;
+pub const RENDER_2D_COMMON_TEXTURE_ID: &str = "8a22d465-7935-41e5-9e90-686ef5632c54";
+pub const RENDER_2D_COMMON_VERTEX_BUFFER: usize = 0;
+pub const RENDER_2D_COMMON_INDEX_BUFFER: usize = 0;
 
 // Common shapes
 

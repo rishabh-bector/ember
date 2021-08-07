@@ -1,27 +1,76 @@
-use std::{sync::Arc, time::Instant};
+use cgmath::Matrix2;
+use legion::world::SubWorld;
+use legion::IntoQuery;
+use std::time::Instant;
+use std::{
+    str::FromStr,
+    sync::{Arc, Mutex},
+};
+use uuid::Uuid;
 
 use crate::{
+    components::Position2D,
     constants::{
-        BASE_2D_BIND_GROUP_ID, BASE_2D_COMMON_TEXTURE_ID, CAMERA_2D_BIND_GROUP_ID, ID,
-        LIGHTING_2D_BIND_GROUP_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
+        CAMERA_2D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID, RENDER_2D_BIND_GROUP_ID,
+        RENDER_2D_COMMON_TEXTURE_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
     },
     render::{
         buffer::{IndexBuffer, VertexBuffer},
         graph::NodeState,
+        uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
     },
+    system::render_2d::Render2D,
 };
 
-pub struct Render2DSystem {
-    pub common_vertex_buffers: [VertexBuffer; 1],
-    pub common_index_buffers: [IndexBuffer; 1],
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Render2DForwardDynamicUniforms {
+    pub model: [f32; 4],
+    pub color: [f32; 4],
+    pub mix: f32,
+    pub _padding: [f32; 32],
+    pub __padding: [f32; 23],
 }
 
-// Draw all Base2D components //
+// Phantom type
+pub struct Render2DForwardDynamicGroup {}
 
-pub type Base2DRenderNode = ();
+// TODO: Make this a macro?
+#[system]
+#[read_component(Render2D)]
+#[read_component(Position2D)]
+pub fn load(
+    world: &mut SubWorld,
+    #[resource] base_uniforms: &Arc<Mutex<GenericUniform<Render2DForwardDynamicUniforms>>>,
+    #[resource] base_uniforms_group: &Arc<Mutex<UniformGroup<Render2DForwardDynamicGroup>>>,
+) {
+    debug!("running system render_2d_uniforms");
+
+    let mut base_uniforms = base_uniforms.lock().unwrap();
+    let mut base_uniforms_group = base_uniforms_group.lock().unwrap();
+
+    let mut query = <(&Render2D, &Position2D)>::query();
+
+    base_uniforms_group.begin_dynamic_loading();
+    let mut count: u64 = 0;
+    for (render_2d, pos) in query.iter_mut(world) {
+        base_uniforms.mut_ref().model = [pos.x, pos.y, render_2d.width, render_2d.height];
+        base_uniforms.mut_ref().color = render_2d.color;
+        base_uniforms.mut_ref().mix = render_2d.mix;
+        base_uniforms_group.load_dynamic_uniform(base_uniforms.as_bytes());
+        count += 1;
+    }
+    *base_uniforms_group.entity_count.lock().unwrap() = count;
+    debug!(
+        "done loading render_2d uniforms with {} dynamic entities",
+        count
+    );
+}
+
+// Draw all Render2D components //
 
 #[system]
-pub fn forward_render_2d(
+pub fn render(
     #[state] state: &mut NodeState,
     #[resource] device: &Arc<wgpu::Device>,
     #[resource] queue: &Arc<wgpu::Queue>,
@@ -39,6 +88,7 @@ pub fn forward_render_2d(
         .unwrap();
 
     pass_handle.set_pipeline(&node.pipeline);
+
     pass_handle.set_bind_group(
         2,
         &node.binder.uniform_groups[&ID(CAMERA_2D_BIND_GROUP_ID)],
@@ -68,7 +118,7 @@ pub fn forward_render_2d(
     let (entity_count, group_info) = node
         .binder
         .dyn_offset_state
-        .get(&ID(BASE_2D_BIND_GROUP_ID))
+        .get(&ID(RENDER_2D_BIND_GROUP_ID))
         .unwrap();
 
     let mut dyn_offset_state = std::iter::repeat(0)
@@ -78,13 +128,13 @@ pub fn forward_render_2d(
     for _ in 0..*entity_count.lock().unwrap() {
         pass_handle.set_bind_group(
             0,
-            &node.binder.texture_groups[&ID(BASE_2D_COMMON_TEXTURE_ID)],
+            &node.binder.texture_groups[&ID(RENDER_2D_COMMON_TEXTURE_ID)],
             &[],
         );
 
         pass_handle.set_bind_group(
             1,
-            &node.binder.uniform_groups[&ID(BASE_2D_BIND_GROUP_ID)],
+            &node.binder.uniform_groups[&ID(RENDER_2D_BIND_GROUP_ID)],
             &dyn_offset_state,
         );
 
@@ -105,29 +155,4 @@ pub fn forward_render_2d(
 
     debug!("forward_render_2d pass submitted");
     state.reporter.update(start_time.elapsed().as_secs_f64());
-}
-
-pub fn create_render_pass<'a>(
-    target: &'a wgpu::TextureView,
-    encoder: &'a mut wgpu::CommandEncoder,
-    label: &'a str,
-) -> wgpu::RenderPass<'a> {
-    encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some(label),
-        color_attachments: &[wgpu::RenderPassColorAttachment {
-            view: target,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Load,
-                // load: wgpu::LoadOp::Clear(wgpu::Color {
-                //     r: 0.0,
-                //     g: 0.0,
-                //     b: 0.0,
-                //     a: 0.0,
-                // }),
-                store: true,
-            },
-        }],
-        depth_stencil_attachment: None,
-    })
 }

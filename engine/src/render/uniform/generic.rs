@@ -7,24 +7,13 @@ use std::{
 };
 use wgpu::util::DeviceExt;
 
-use super::UniformBuilder;
-use crate::{constants::DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS, resource::ResourceBuilder};
-
-#[derive(Clone)]
-pub enum BufferMode {
-    Single,
-    Dynamic(u32),
-    Instance(u32),
-}
+use super::{group::BufferMode, UniformBuilder};
+use crate::resource::ResourceBuilder;
 
 pub struct GenericUniformBuilder<U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug> {
     pub source: Option<U>,
     pub buffer: Option<wgpu::Buffer>,
-    pub mode: BufferMode,
-
-    // Size of one U
-    pub size: u32,
-
+    pub size: u32, // Size of one U
     pub dest: Option<Arc<Mutex<GenericUniform<U>>>>,
 }
 
@@ -36,20 +25,9 @@ where
         Self {
             source: Some(source),
             buffer: None,
-            mode: BufferMode::Single,
             size: size_of::<U>() as u32,
             dest: None,
         }
-    }
-
-    pub fn enable_dynamic_buffering(mut self) -> Self {
-        self.mode = BufferMode::Dynamic(DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS);
-        self
-    }
-
-    pub fn with_dynamic_entity_limit(mut self, max: u32) -> Self {
-        self.mode = BufferMode::Dynamic(max);
-        self
     }
 }
 
@@ -72,14 +50,14 @@ impl<U> UniformBuilder for GenericUniformBuilder<U>
 where
     U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug,
 {
-    fn build_buffer(&mut self, device: &wgpu::Device) -> BufferState {
+    fn build_buffer(&mut self, device: &wgpu::Device, mode: BufferMode) -> BufferState {
         let source = &[self.source.unwrap()];
         self.dest = Some(Arc::new(Mutex::new(GenericUniform {
             source: [self.source.unwrap()],
-            mode: self.mode.clone(),
+            mode: mode.clone(),
         })));
 
-        return match self.mode {
+        return match mode {
             BufferMode::Single => {
                 let source_bytes = bytemuck::cast_slice(source);
                 BufferState {
@@ -126,11 +104,8 @@ where
     }
 
     // Used by UniformGroupBuilder to store dynamic buffer info
-    fn dynamic(&self) -> Option<(u64, u64)> {
-        if let BufferMode::Dynamic(max_size) = self.mode {
-            return Some((self.size as u64, max_size as u64));
-        }
-        None
+    fn dynamic_size(&self) -> u64 {
+        self.size as u64
     }
 }
 

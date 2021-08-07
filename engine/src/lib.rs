@@ -29,9 +29,9 @@ use winit_input_helper::WinitInputHelper;
 
 use crate::{
     constants::{
-        BASE_2D_BIND_GROUP_ID, BASE_2D_COMMON_TEXTURE_ID, CAMERA_2D_BIND_GROUP_ID,
-        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, DEFAULT_TEXTURE_BUFFER_FORMAT,
-        FORWARD_2D_NODE_ID, ID, LIGHTING_2D_BIND_GROUP_ID,
+        CAMERA_2D_BIND_GROUP_ID, DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH,
+        DEFAULT_TEXTURE_BUFFER_FORMAT, FORWARD_2D_NODE_ID, ID, LIGHTING_2D_BIND_GROUP_ID,
+        RENDER_2D_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID,
     },
     render::{
         buffer::*,
@@ -47,7 +47,7 @@ use crate::{
         store::TextureStoreBuilder,
         ui::UI,
     },
-    system::{base_2d::*, camera_2d::*, lighting_2d::*, physics_2d::*, render_2d::*},
+    system::{camera_2d::*, lighting_2d::*, physics_2d::*, render_2d},
 };
 
 pub fn engine() -> EngineBuilder {
@@ -158,7 +158,7 @@ impl EngineBuilder {
         info!("loading textures");
         let mut texture_store_builder = TextureStoreBuilder::new();
         texture_store_builder.load_id(
-            Uuid::from_str(BASE_2D_COMMON_TEXTURE_ID).unwrap(),
+            Uuid::from_str(RENDER_2D_COMMON_TEXTURE_ID).unwrap(),
             &base_dir
                 .join("src/resource/static/test.png")
                 .into_os_string()
@@ -179,19 +179,19 @@ impl EngineBuilder {
 
         info!("building uniforms");
 
-        let base_2d_uniforms = Arc::new(Mutex::new(
-            UniformGroup::<Base2DUniformGroup>::builder()
-                .with_uniform(
-                    GenericUniformBuilder::from_source(Base2DUniforms {
+        let render_2d_dynamic_uniforms = Arc::new(Mutex::new(
+            UniformGroup::<render_2d::forward_dynamic::Render2DForwardDynamicGroup>::builder()
+                .with_uniform(GenericUniformBuilder::from_source(
+                    render_2d::forward_dynamic::Render2DForwardDynamicUniforms {
                         model: [0.0, 0.0, 1.0, 1.0],
                         color: [1.0, 1.0, 1.0, 1.0],
                         mix: 1.0,
                         _padding: [0.0; 32],
                         __padding: [0.0; 23],
-                    })
-                    .enable_dynamic_buffering(),
-                )
-                .with_id(Uuid::from_str(BASE_2D_BIND_GROUP_ID).unwrap()),
+                    },
+                ))
+                .with_id(Uuid::from_str(RENDER_2D_BIND_GROUP_ID).unwrap())
+                .mode_instance(),
         ));
 
         let camera_2d_uniforms = Arc::new(Mutex::new(
@@ -218,31 +218,31 @@ impl EngineBuilder {
 
         info!("building render graph nodes");
 
-        let base_2d_node = NodeBuilder::new(
-            "base_2d_node".to_owned(),
+        let node_2d_forward_dynamic = NodeBuilder::new(
+            "render_2d_node".to_owned(),
             0,
-            ShaderSource::WGSL(include_str!("render/shaders/base2D.wgsl").to_owned()),
+            ShaderSource::WGSL(include_str!("render/shaders/render_2d.wgsl").to_owned()),
         )
         .with_id(ID(FORWARD_2D_NODE_ID))
         .with_vertex_layout(VertexBuffer::layout_2d())
-        .with_texture_group(resource::store::TextureGroup::Base2D)
-        .with_shared_uniform_group(Arc::clone(&base_2d_uniforms))
+        .with_texture_group(resource::store::TextureGroup::Render2D)
+        .with_shared_uniform_group(Arc::clone(&render_2d_dynamic_uniforms))
         .with_shared_uniform_group(Arc::clone(&camera_2d_uniforms))
         .with_shared_uniform_group(Arc::clone(&lighting_2d_uniforms))
-        .with_system(forward_render_2d_system);
+        .with_system(render_2d::forward_dynamic::render_system);
 
-        let base_2d_instance_node = NodeBuilder::new(
-            "base_2d_instance_node".to_owned(),
+        let node_2d_forward_instance = NodeBuilder::new(
+            "render_2d_instance_node".to_owned(),
             0,
-            ShaderSource::WGSL(include_str!("render/shaders/base2D.wgsl").to_owned()),
+            ShaderSource::WGSL(include_str!("render/shaders/render_2d.wgsl").to_owned()),
         )
         .with_id(ID(FORWARD_2D_NODE_ID))
         .with_vertex_layout(VertexBuffer::layout_2d())
-        .with_texture_group(resource::store::TextureGroup::Base2D)
-        .with_shared_uniform_group(Arc::clone(&base_2d_uniforms))
+        .with_texture_group(resource::store::TextureGroup::Render2D)
+        .with_shared_uniform_group(Arc::clone(&render_2d_dynamic_uniforms))
         .with_shared_uniform_group(Arc::clone(&camera_2d_uniforms))
         .with_shared_uniform_group(Arc::clone(&lighting_2d_uniforms))
-        .with_system(forward_render_2d_system);
+        .with_system(render_2d::forward_instance::render_system);
 
         info!("scheduling systems");
         let mut schedule = Schedule::builder();
@@ -253,7 +253,7 @@ impl EngineBuilder {
             .add_system(lighting_2d_system())
             // Uniform loading systems
             .flush()
-            .add_system(base_2d_uniform_system())
+            .add_system(render_2d::forward_instance::load_system())
             .add_system(camera_2d_uniform_system())
             .add_system(lighting_2d_uniform_system());
 
@@ -262,7 +262,7 @@ impl EngineBuilder {
         info!("building render graph");
         let mut graph_schedule = SubSchedule::new();
         let (render_graph, metrics) = GraphBuilder::new()
-            .with_master_node(base_2d_instance_node)
+            .with_master_node(node_2d_forward_instance)
             .with_ui_master()
             .build(
                 Arc::clone(&gpu_mut.device),

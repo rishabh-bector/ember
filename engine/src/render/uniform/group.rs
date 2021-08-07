@@ -11,22 +11,39 @@ use uuid::Uuid;
 use wgpu::BindGroupEntry;
 
 use crate::{
-    constants::DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE, render::uniform::generic::BufferState,
+    constants::{
+        DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE, DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS,
+        DEFAULT_MAX_INSTANCES_PER_PASS,
+    },
+    render::uniform::generic::BufferState,
     resource::ResourceBuilder,
 };
 
 use super::UniformBuilder;
 
+#[derive(Clone, Copy)]
+pub enum BufferMode {
+    Single,
+    Dynamic(u32),
+    Instance(u32),
+}
+
+pub struct DynamicOffsets {
+    pub limits: Vec<u64>,
+    pub sizes: Vec<u64>,
+    pub state: Vec<u64>,
+}
+
 // Instancing notes:
 //
-// - Make a new render node: base_2d_instance which is the exact same as base_2d
+// - Make a new render node: render_2d_instance which is the exact same as render_2d
 //   except it does instancing
 //
-// - Since it also operates on Base2D components, this makes no difference to the user
+// - Since it also operates on Render2D components, this makes no difference to the user
 //   Instead, the engine should decide whether to render a single object, use dynamic uniform
 //   buffers, or use instancing.
 //
-//   I guess this will become a configurable property of each Base2D component?
+//   I guess this will become a configurable property of each Render2D component?
 
 pub trait UniformSource:
     Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug + 'static
@@ -39,15 +56,14 @@ pub trait Group {
 
 pub struct UniformGroup<N> {
     pub buffers: Vec<wgpu::Buffer>,
+    pub mode: BufferMode,
     pub bind_group: Arc<wgpu::BindGroup>,
 
-    pub dynamic_offset_limits: Vec<u64>,
-    pub dynamic_offset_sizes: Vec<u64>,
-    pub dynamic_offset_state: Vec<u64>,
+    pub dynamic_offsets: DynamicOffsets,
 
     pub id: Uuid,
     pub queue: Arc<wgpu::Queue>,
-    pub dynamic_entity_count: Arc<Mutex<u64>>,
+    pub entity_count: Arc<Mutex<u64>>,
 
     _marker: PhantomData<N>,
 }
@@ -57,26 +73,29 @@ impl<N> UniformGroup<N> {
         UniformGroupBuilder::new()
     }
 
-    pub fn load_uniform(&self, index: usize, source_bytes: &[u8]) {
+    pub fn load_buffer(&self, index: usize, source_bytes: &[u8]) {
         self.queue
             .write_buffer(&self.buffers[index], 0, source_bytes)
     }
 
     pub fn begin_dynamic_loading(&mut self) {
-        self.dynamic_offset_state.iter_mut().for_each(|i| *i = 0);
+        self.dynamic_offsets.state.iter_mut().for_each(|i| *i = 0);
     }
 
     pub fn load_dynamic_uniform(&mut self, source_bytes: &[u8]) {
         for i in 0..self.buffers.len() {
-            self.queue
-                .write_buffer(&self.buffers[i], self.dynamic_offset_state[i], source_bytes);
+            self.queue.write_buffer(
+                &self.buffers[i],
+                self.dynamic_offsets.state[i],
+                source_bytes,
+            );
             self.increase_offset(i);
         }
     }
 
     pub fn increase_offset(&mut self, index: usize) -> u32 {
-        let old = self.dynamic_offset_state[index];
-        self.dynamic_offset_state[index] += self.dynamic_offset_sizes[index];
+        let old = self.dynamic_offsets.state[index];
+        self.dynamic_offsets.state[index] += self.dynamic_offsets.sizes[index];
         old as u32
     }
 
@@ -102,6 +121,7 @@ impl<N> GroupResourceBuilder for UniformGroupBuilder<N> where N: 'static {}
 
 pub struct UniformGroupBuilder<N> {
     pub uniforms: Vec<Arc<Mutex<dyn UniformBuilder>>>,
+    pub mode: BufferMode,
 
     pub bind_group_layout: Option<wgpu::BindGroupLayout>,
     pub bind_group: Option<Arc<wgpu::BindGroup>>,
@@ -111,12 +131,13 @@ pub struct UniformGroupBuilder<N> {
     pub dest: Option<Arc<Mutex<UniformGroup<N>>>>,
 
     pub dyn_offset_info: Vec<(u64, u64)>,
-    pub dyn_entity_count: Arc<Mutex<u64>>,
+    pub entity_count: Arc<Mutex<u64>>,
 }
 
 impl<N> UniformGroupBuilder<N> {
     pub fn new() -> Self {
         Self {
+            mode: BufferMode::Single,
             uniforms: vec![],
             bind_group_layout: None,
             bind_group: None,
@@ -124,20 +145,40 @@ impl<N> UniformGroupBuilder<N> {
             dest: None,
             id: Uuid::new_v4(),
             dyn_offset_info: vec![],
-            dyn_entity_count: Arc::new(Mutex::new(0)),
+            entity_count: Arc::new(Mutex::new(0)),
         }
     }
 
     pub fn with_uniform<T: UniformBuilder + 'static>(mut self, uniform: T) -> Self {
-        if let Some(offset_info) = uniform.dynamic() {
-            self.dyn_offset_info.push(offset_info);
-        }
+        // if let Some(offset_info) = uniform.dynamic() {
+        //     self.dyn_offset_info.push(offset_info);
+        // }
         self.uniforms.push(Arc::new(Mutex::new(uniform)));
         self
     }
 
     pub fn with_id(mut self, id: Uuid) -> Self {
         self.id = id;
+        self
+    }
+
+    pub fn mode_instance(mut self) -> Self {
+        self.mode = BufferMode::Instance(DEFAULT_MAX_INSTANCES_PER_PASS);
+        self
+    }
+
+    pub fn with_instance_limit(mut self, max: u32) -> Self {
+        self.mode = BufferMode::Instance(max);
+        self
+    }
+
+    pub fn mode_dynamic(mut self) -> Self {
+        self.mode = BufferMode::Dynamic(DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS);
+        self
+    }
+
+    pub fn with_dynamic_entity_limit(mut self, max: u32) -> Self {
+        self.mode = BufferMode::Dynamic(max);
         self
     }
 
@@ -162,10 +203,11 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
             ));
         }
 
+        let mode = self.mode;
         let buffer_states: Vec<BufferState> = self
             .uniforms
             .iter_mut()
-            .map(|builder| builder.lock().unwrap().build_buffer(device))
+            .map(|builder| builder.lock().unwrap().build_buffer(device, mode))
             .collect();
 
         let entries: Vec<wgpu::BindGroupLayoutEntry> = (0..buffer_states.len())
@@ -224,12 +266,15 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
         self.dest = Some(Arc::new(Mutex::new(UniformGroup {
             queue,
             id: self.id,
+            mode: self.mode,
             bind_group: Arc::clone(&self.bind_group.as_ref().unwrap()),
-            dynamic_offset_state: std::iter::repeat(0).take(buffer_states.len()).collect(),
-            dynamic_offset_sizes: buffer_states.iter().map(|s| s.element_size).collect(),
-            dynamic_offset_limits: buffer_states.iter().map(|s| s.max_elements).collect(),
+            dynamic_offsets: DynamicOffsets {
+                state: std::iter::repeat(0).take(buffer_states.len()).collect(),
+                sizes: buffer_states.iter().map(|s| s.element_size).collect(),
+                limits: buffer_states.iter().map(|s| s.max_elements).collect(),
+            },
             buffers: buffer_states.into_iter().map(|s| s.buffer).collect(),
-            dynamic_entity_count: Arc::clone(&self.dyn_entity_count),
+            entity_count: Arc::clone(&self.entity_count),
             _marker: PhantomData,
         })));
 
@@ -244,10 +289,7 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
         if self.dyn_offset_info.len() == 0 {
             return None;
         }
-        Some((
-            Arc::clone(&self.dyn_entity_count),
-            self.dyn_offset_info.clone(),
-        ))
+        Some((Arc::clone(&self.entity_count), self.dyn_offset_info.clone()))
     }
 
     fn binding(&self) -> (Uuid, Arc<wgpu::BindGroup>) {

@@ -1,6 +1,9 @@
 use std::fmt::Debug;
 
-use self::generic::{BufferState, GenericUniform};
+use self::{
+    generic::{BufferState, GenericUniform},
+    group::BufferMode,
+};
 use crate::resource::ResourceBuilder;
 
 pub mod generic;
@@ -20,6 +23,6 @@ where
 }
 pub trait UniformBuilder: ResourceBuilder {
     // -> (buffer, source size, max dynamic offsets per render pass)
-    fn build_buffer(&mut self, device: &wgpu::Device) -> BufferState;
-    fn dynamic(&self) -> Option<(u64, u64)>;
+    fn build_buffer(&mut self, device: &wgpu::Device, mode: BufferMode) -> BufferState;
+    fn dynamic_size(&self) -> u64;
 }

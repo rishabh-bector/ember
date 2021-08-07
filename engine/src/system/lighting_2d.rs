@@ -60,5 +60,5 @@ pub fn lighting_2d_uniform(
     lighting_uniforms_group
         .lock()
         .unwrap()
-        .load_uniform(0, lighting_uniforms.lock().unwrap().as_bytes());
+        .load_buffer(0, lighting_uniforms.lock().unwrap().as_bytes());
 }

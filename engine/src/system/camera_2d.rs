@@ -36,7 +36,7 @@ pub fn camera_2d_uniform(
     camera_uniform_group
         .lock()
         .unwrap()
-        .load_uniform(0, camera_uniform.lock().unwrap().as_bytes());
+        .load_buffer(0, camera_uniform.lock().unwrap().as_bytes());
 }
 
 pub fn _flatten(mat: Matrix2<f32>) -> [f32; 4] {

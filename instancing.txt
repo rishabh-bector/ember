@@ -1,0 +1,140 @@
+
+Plan: Instanced Rendering
+
+----- ACTIONS -----
+
+- DONE Move BufferMode (singleton/dynamic) from GenericUniform to UniformGroup
+- DONE Add a new "instance" buffer mode
+    - Instance buffers will be created on build_buffer
+- For each of its uniforms, the instance group will:
+    - add a VBL to the pipeline 
+      (uniform must impl VertexLayout, maybe rename trait to InstanceUniform)
+
+- MAYBE Add a new node render_2d_instance; build it with the Render2D Generic Uniform 
+  but make the group an instance group, so that the vertex layout will be added to the pipeline.
+
+- Either add a new render_2d_instance_loader system or use the existing render_2d_uniform system
+  to update the instance buffer each frame.
+
+- Perhaps Ember can automatically decide whether to use instance or dynamic buffering?
+  The render_2d_instance system will take the same inputs as the regular render_2d system.
+  This is a problem, because it means both cannot be used together in the same render graph.
+  Otherwise, will Render2D entities be rendered twice?
+  For now, can both systems not be in the same render graph? No, I think they can.
+  Explore: maybe only one system is required, which does different things?
+  
+  Suppose I have 2 different particle systems and 2 sprites w/ different textures.
+  Right now, the render_2d system uses "dyn_offset_state" from the node.binder to
+  determine how many dynamic draw calls to submit. Offsets are increased accordingly.
+  Therefore, right now, render_2d can only process one "group" of dynamic entities.
+
+  Problem: The render_2d node needs to be able to process an arbitrary amount of dynamic entity groups.
+    (e.g. two different types of bullet)
+  Solutions:
+    - Upgrade node.binder, which currently stores one dyn_offset_state for each uniform group,
+      to be a vector of hashmaps?
+      Then, Ember can sort all Render2D components submitted by the user into groups which
+      share the same texture and v/i buffers. Each group can be dynamically rendered.
+
+  Problem: The render_2d node needs to be able to process an arbitrary amount of instance entity groups:
+    (e.g. two different particle systems)
+  Solutions:
+    - Something similar to the node binder?
+
+  Problem: The render_2d system currently binds the render_2d node's pipeline, whose shaders/layouts are 
+  specific to dynamic entity groups.
+  Solutions:
+    - Create a new render_2d_instance node + system:
+        pro: instanced groups can be rendered concurrently with dynamic groups?
+        con: Will be difficult to make engine automatically optimize
+        con: Does not make sense as render passes would be separate and would have to be combined?
+            (unless they are drawn over the same target buffer, could this work?)
+    - Extend the existing render_2d node + system:
+        Maybe render nodes can optionally have multiple pipelines? E.g. Singleton, Dynamic, Instance
+    
+    - Deprecate dynamic uniform support in render_2d, replace with
+      Engine-sorted (overridable) uuid key-based instancing, or some form of instancing
+      But keep the example of how to do dynamic buffering for other users; aka keep 
+      separation of singleton vs dynamic vs instance data in general.
+
+-------------------
+
+WGPU Requirements (per instance group):
+INIT
+- Struct to define the instance uniforms
+- Instance vertex buffer to hold the instance uniforms
+    - Structs are serialized via byteslice
+    - The buffer needs a capacity: element_size * max_elements, similar to dynamic buffers
+- Vertex buffer descriptor to register with the pipeline (aka node)
+    - Needs to contain an attribute for each element of the instance struct
+    - This will be created via the vertex_layout_derive macro crate; Plan:
+        - Impl VertexAttribute for most common uniform types, like [f32; 4].
+        - Users can define their own "instance" structs, which can derive VertexLayout,
+          building a layout from each struct field.
+FRAME
+- Instance buffer needs to be bound in the render pass
+- Indexed draw call needs to know how many instances to draw
+
+----- Questions -----
+
+Should a separate system be created for instancing (e.g. render_2d_instanced)?
+Currently:
+    - Render2D components must be dynamic
+    - In lib.rs, we call .enable_dynamic_buffering() on the Render2D Generic Uniform Builder
+    - This switches the uniform builder's mode from "single" to "dynamic" with some max capacity
+    - Allows the generic uniform builder to build the appropriate buffer (single or dynamic)
+    - Also used by the uniform group builder to store offset info, which is needed
+      to create a bind group (to bind the uniforms in the render pass)
+
+What role will the uniform group builder play in instanced buffering?
+Currently:
+    - Uniform groups are bound into shaders and can contain several
+      different uniform structs (i.e. different GenericUniformBuilders)
+    - Each group has a list of BindGroupEntries which are tied to specific uniform buffers (a buffer can
+      be singleton or dynamic)
+      Groups also can be either singleton or dynamic and all their buffers must match
+      Can there be instance groups? Of course! In that case, each uniform in the group must be an instance uniform,
+      and every instance uniform will be written as its own vertex input (and added as a vertex layout in the node!)
+    - On frame:
+        - The render_2d system submits N draw calls where N is the number of dynamic entities
+        - First, the singular uniform groups are bound w/ offset 0, as these are constant
+          for each dynamic entity
+        - Then, each dynamic draw call is combined with the dynamic uniform groups (w/ offsets)
+          that it needs
+        - The render_2d node currently requires one dynamic uniform group: Render2DDynamicUniforms
+        - Technically there is no reason that it couldn't have 2 or 3... but maybe it makes
+          sense to limit dynamic render nodes to a one dynamic uniform group + multiple singleton groups. 
+          why?
+            - number of entities in each dynamic uniform group must match
+
+Ideal solution:
+- The user defines one "shaderdata" struct; for example:
+
+    #[repr(C)]
+    #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+    pub struct Render2DShaderData {
+        pub model: [f32; 4],
+        pub color: [f32; 4],
+        pub mix: f32,
+        pub _padding: [f32; 32],
+        pub __padding: [f32; 23],
+    }
+
+This could be used either:
+- as a generic uniform (aka part of a group)
+- as an instance layout
+
+Note that:
+- Render2DDynamicUniforms is different from Render2D
+    Render2DDynamicUniforms represents a single shader binding within a group;
+    Render2D represents a single 2D Ember entity
+- Every frame, the render_2d_uniform system queries all Render2D components,
+  and copies the required data into the buffers of the Render2DUniformGroup.
+- This logic is specific to the DYNAMIC Render2D buffer.
+For singleton uniforms: loader system calls group.load_uniform (example: camera_2d)
+For dynamic uniforms: loader system calls .begin_dynamic_loading and .load_dynamic_uniform (example: render_2d)
+For instance uniforms: loader system calls .load_instance_uniform
+- Perhaps the loader system can also become macro-generated.
+
+Where will the instance buffers be stored?
+Answer: in the uniform group, just like the singleton and dynamic buffers
