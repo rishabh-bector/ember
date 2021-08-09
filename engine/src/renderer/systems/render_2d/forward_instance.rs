@@ -7,14 +7,10 @@ use std::{
 use crate::{
     components::Position2D,
     constants::{
-        CAMERA_2D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID, RENDER_2D_BIND_GROUP_ID,
-        RENDER_2D_COMMON_TEXTURE_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
+        CAMERA_2D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID, UNIT_SQUARE_IND_BUFFER_ID,
+        UNIT_SQUARE_VRT_BUFFER_ID,
     },
-    renderer::{
-        buffer::{IndexBuffer, VertexBuffer},
-        graph::NodeState,
-        uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
-    },
+    renderer::{graph::NodeState, uniform::group::UniformGroup},
 };
 
 #[repr(C)]

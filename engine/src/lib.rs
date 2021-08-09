@@ -109,7 +109,7 @@ impl Engine {
                 }
 
                 if let Some(physical_size) = self.input.resolution() {
-                    &self.gpu.lock().unwrap().resize(physical_size);
+                    let _ = &self.gpu.lock().unwrap().resize(physical_size);
                 }
 
                 // Request a redraw

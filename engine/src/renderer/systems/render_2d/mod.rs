@@ -1,15 +1,8 @@
 use std::str::FromStr;
 use uuid::Uuid;
 
-use crate::{
-    components::Position2D,
-    constants::{
-        RENDER_2D_COMMON_INDEX_BUFFER, RENDER_2D_COMMON_TEXTURE_ID, RENDER_2D_COMMON_VERTEX_BUFFER,
-    },
-    renderer::{
-        buffer::{IndexBuffer, VertexBuffer},
-        uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
-    },
+use crate::constants::{
+    RENDER_2D_COMMON_INDEX_BUFFER, RENDER_2D_COMMON_TEXTURE_ID, RENDER_2D_COMMON_VERTEX_BUFFER,
 };
 
 pub mod forward_dynamic;
