@@ -1,7 +1,8 @@
-use legion::world::SubWorld;
-use legion::IntoQuery;
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use legion::{world::SubWorld, IntoQuery};
+use std::{
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
 use crate::{
     components::Position2D,

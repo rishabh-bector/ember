@@ -1,13 +1,9 @@
-
-use legion::world::SubWorld;
-use legion::IntoQuery;
-use std::time::Instant;
+use legion::{world::SubWorld, IntoQuery};
 use std::{
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
-
-use crate::renderer::systems::render_2d::Render2D;
 use crate::{
     components::Position2D,
     constants::{
@@ -16,6 +12,7 @@ use crate::{
     },
     renderer::{
         graph::NodeState,
+        systems::render_2d::Render2D,
         uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
     },
 };
