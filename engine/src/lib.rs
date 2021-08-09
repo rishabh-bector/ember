@@ -38,7 +38,7 @@ use crate::{
         graph::GraphBuilder,
         node::*,
         systems::render_2d,
-        uniform::{generic::GenericUniformBuilder, group::UniformGroup, *},
+        uniform::{generic::GenericUniformBuilder, group::UniformGroup},
         *,
     },
     sources::{
@@ -219,7 +219,7 @@ impl EngineBuilder {
 
         info!("building render graph nodes");
 
-        let node_2d_forward_dynamic = NodeBuilder::new(
+        let _node_2d_forward_dynamic = NodeBuilder::new(
             "render_2d_node".to_owned(),
             0,
             ShaderSource::WGSL(include_str!("renderer/shaders/render_2d.wgsl").to_owned()),

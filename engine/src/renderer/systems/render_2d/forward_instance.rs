@@ -2,7 +2,6 @@ use legion::world::SubWorld;
 use legion::IntoQuery;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use uuid::Uuid;
 
 use crate::{
     components::Position2D,

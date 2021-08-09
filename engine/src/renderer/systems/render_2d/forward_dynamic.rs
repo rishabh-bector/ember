@@ -1,12 +1,11 @@
-use cgmath::Matrix2;
+
 use legion::world::SubWorld;
 use legion::IntoQuery;
 use std::time::Instant;
 use std::{
-    str::FromStr,
     sync::{Arc, Mutex},
 };
-use uuid::Uuid;
+
 
 use crate::renderer::systems::render_2d::Render2D;
 use crate::{
@@ -16,7 +15,6 @@ use crate::{
         RENDER_2D_COMMON_TEXTURE_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
     },
     renderer::{
-        buffer::{IndexBuffer, VertexBuffer},
         graph::NodeState,
         uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
     },

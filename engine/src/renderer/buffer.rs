@@ -65,7 +65,7 @@ impl VertexBuffer {
         }
     }
     pub fn layout_2d<'a>() -> wgpu::VertexBufferLayout<'a> {
-        let attrs = Vertex2D::layout_builder();
+        let _attrs = Vertex2D::layout_builder();
 
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex2D>() as wgpu::BufferAddress,
