@@ -9,7 +9,7 @@ use std::{
 use uuid::Uuid;
 use wgpu::BindGroup;
 
-use crate::render::texture::Texture;
+use crate::renderer::texture::Texture;
 
 pub struct TextureStore {
     pub textures: HashMap<TextureGroup, HashMap<Uuid, Texture>>,

@@ -1,6 +1,6 @@
 use ember::{
     components::{Position2D, Velocity2D},
-    system::{lighting_2d::Light2D, render_2d::Render2D},
+    systems::{lighting_2d::Light2D, render_2d::Render2D},
 };
 use rand::Rng;
 

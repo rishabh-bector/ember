@@ -7,7 +7,7 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::render::graph::RenderTarget;
+use crate::renderer::graph::RenderTarget;
 
 pub struct UI {
     pub platform: Mutex<imgui_winit_support::WinitPlatform>,

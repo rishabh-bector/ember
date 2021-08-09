@@ -5,6 +5,7 @@ use winit::window::Window;
 pub mod buffer;
 pub mod graph;
 pub mod node;
+pub mod systems;
 pub mod texture;
 pub mod uniform;
 

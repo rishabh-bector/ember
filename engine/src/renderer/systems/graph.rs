@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crate::render::{
+use crate::renderer::{
     graph::{RenderGraph, RenderTarget},
     GpuState,
 };

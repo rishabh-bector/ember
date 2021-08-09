@@ -2,7 +2,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use legion::systems::{Builder as ScheduleBuilder, ParallelRunnable, Runnable};
 
-use crate::render::graph::NodeState;
+use crate::renderer::graph::NodeState;
 
 use super::metrics::SystemReporter;
 

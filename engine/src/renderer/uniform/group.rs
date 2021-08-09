@@ -15,7 +15,7 @@ use crate::{
         DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE, DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS,
         DEFAULT_MAX_INSTANCES_PER_PASS,
     },
-    render::uniform::generic::BufferState,
+    renderer::uniform::generic::BufferState,
     resource::ResourceBuilder,
 };
 

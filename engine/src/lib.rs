@@ -9,7 +9,7 @@ extern crate vertex_traits;
 
 use anyhow::Result;
 use legion::{Resources, Schedule, World};
-use render::graph::RenderGraph;
+use renderer::graph::RenderGraph;
 use resource::{metrics::EngineReporter, store::TextureStore};
 use std::{
     env,
@@ -33,7 +33,7 @@ use crate::{
         DEFAULT_TEXTURE_BUFFER_FORMAT, FORWARD_2D_NODE_ID, ID, LIGHTING_2D_BIND_GROUP_ID,
         RENDER_2D_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID,
     },
-    render::{
+    renderer::{
         buffer::*,
         graph::GraphBuilder,
         node::*,
@@ -47,7 +47,7 @@ use crate::{
         store::TextureStoreBuilder,
         ui::UI,
     },
-    system::{camera_2d::*, lighting_2d::*, physics_2d::*, render_2d},
+    systems::{camera_2d::*, lighting_2d::*, physics_2d::*, render_2d},
 };
 
 pub fn engine() -> EngineBuilder {
@@ -56,9 +56,9 @@ pub fn engine() -> EngineBuilder {
 
 pub mod components;
 pub mod constants;
-pub mod render;
+pub mod renderer;
 pub mod resource;
-pub mod system;
+pub mod systems;
 
 #[allow(dead_code)]
 pub struct Engine {
