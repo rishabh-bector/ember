@@ -16,7 +16,7 @@ use crate::{
         DEFAULT_MAX_INSTANCES_PER_PASS,
     },
     renderer::uniform::generic::BufferState,
-    resource::ResourceBuilder,
+    sources::ResourceBuilder,
 };
 
 use super::UniformBuilder;

@@ -10,7 +10,7 @@ extern crate vertex_traits;
 use anyhow::Result;
 use legion::{Resources, Schedule, World};
 use renderer::graph::RenderGraph;
-use resource::{metrics::EngineReporter, store::TextureStore};
+use sources::{metrics::EngineReporter, store::TextureStore};
 use std::{
     env,
     path::PathBuf,
@@ -37,17 +37,18 @@ use crate::{
         buffer::*,
         graph::GraphBuilder,
         node::*,
+        systems::render_2d,
         uniform::{generic::GenericUniformBuilder, group::UniformGroup, *},
         *,
     },
-    resource::{
+    sources::{
         camera::Camera2D,
         metrics::EngineMetrics,
         schedule::{Schedulable, SubSchedule},
         store::TextureStoreBuilder,
         ui::UI,
     },
-    systems::{camera_2d::*, lighting_2d::*, physics_2d::*, render_2d},
+    systems::{camera_2d::*, lighting_2d::*, physics_2d::*},
 };
 
 pub fn engine() -> EngineBuilder {
@@ -57,7 +58,7 @@ pub fn engine() -> EngineBuilder {
 pub mod components;
 pub mod constants;
 pub mod renderer;
-pub mod resource;
+pub mod sources;
 pub mod systems;
 
 #[allow(dead_code)]
@@ -221,11 +222,11 @@ impl EngineBuilder {
         let node_2d_forward_dynamic = NodeBuilder::new(
             "render_2d_node".to_owned(),
             0,
-            ShaderSource::WGSL(include_str!("render/shaders/render_2d.wgsl").to_owned()),
+            ShaderSource::WGSL(include_str!("renderer/shaders/render_2d.wgsl").to_owned()),
         )
         .with_id(ID(FORWARD_2D_NODE_ID))
         .with_vertex_layout(VertexBuffer::layout_2d())
-        .with_texture_group(resource::store::TextureGroup::Render2D)
+        .with_texture_group(sources::store::TextureGroup::Render2D)
         .with_shared_uniform_group(Arc::clone(&render_2d_dynamic_uniforms))
         .with_shared_uniform_group(Arc::clone(&camera_2d_uniforms))
         .with_shared_uniform_group(Arc::clone(&lighting_2d_uniforms))
@@ -234,11 +235,11 @@ impl EngineBuilder {
         let node_2d_forward_instance = NodeBuilder::new(
             "render_2d_instance_node".to_owned(),
             0,
-            ShaderSource::WGSL(include_str!("render/shaders/render_2d.wgsl").to_owned()),
+            ShaderSource::WGSL(include_str!("renderer/shaders/render_2d.wgsl").to_owned()),
         )
         .with_id(ID(FORWARD_2D_NODE_ID))
         .with_vertex_layout(VertexBuffer::layout_2d())
-        .with_texture_group(resource::store::TextureGroup::Render2D)
+        .with_texture_group(sources::store::TextureGroup::Render2D)
         .with_shared_uniform_group(Arc::clone(&render_2d_dynamic_uniforms))
         .with_shared_uniform_group(Arc::clone(&camera_2d_uniforms))
         .with_shared_uniform_group(Arc::clone(&lighting_2d_uniforms))

@@ -8,6 +8,7 @@ use std::{
 };
 use uuid::Uuid;
 
+use crate::renderer::systems::render_2d::Render2D;
 use crate::{
     components::Position2D,
     constants::{
@@ -19,7 +20,6 @@ use crate::{
         graph::NodeState,
         uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
     },
-    systems::render_2d::Render2D,
 };
 
 #[repr(C)]

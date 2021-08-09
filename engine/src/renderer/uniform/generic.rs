@@ -8,7 +8,7 @@ use std::{
 use wgpu::util::DeviceExt;
 
 use super::{group::BufferMode, UniformBuilder};
-use crate::resource::ResourceBuilder;
+use crate::sources::ResourceBuilder;
 
 pub struct GenericUniformBuilder<U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug> {
     pub source: Option<U>,

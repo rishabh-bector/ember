@@ -4,7 +4,7 @@ use self::{
     generic::{BufferState, GenericUniform},
     group::BufferMode,
 };
-use crate::resource::ResourceBuilder;
+use crate::sources::ResourceBuilder;
 
 pub mod generic;
 pub mod group;

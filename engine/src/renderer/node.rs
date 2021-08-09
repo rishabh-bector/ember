@@ -7,7 +7,7 @@ use std::{
 use uuid::Uuid;
 
 use super::{graph::NodeState, uniform::group::GroupResourceBuilder};
-use crate::resource::{
+use crate::sources::{
     schedule::{NodeSystem, SubSchedulable},
     store::{TextureGroup, TextureStore},
 };

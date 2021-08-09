@@ -6,6 +6,7 @@ pub mod buffer;
 pub mod graph;
 pub mod node;
 pub mod systems;
+pub mod target;
 pub mod texture;
 pub mod uniform;
 

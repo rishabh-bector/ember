@@ -159,35 +159,35 @@ pub fn render(
 
     // Dynamic bindings
 
-    let entity_count = 10;
+    // let entity_count = 10;
 
-    // let mut dyn_offset_state = std::iter::repeat(0)
-    //     .take(group_info.len())
-    //     .collect::<Vec<u32>>();
+    // // let mut dyn_offset_state = std::iter::repeat(0)
+    // //     .take(group_info.len())
+    // //     .collect::<Vec<u32>>();
 
-    for _ in 0..*entity_count.lock().unwrap() {
-        pass_handle.set_bind_group(
-            0,
-            &node.binder.texture_groups[&ID(RENDER_2D_COMMON_TEXTURE_ID)],
-            &[],
-        );
+    // for _ in 0..*entity_count.lock().unwrap() {
+    //     pass_handle.set_bind_group(
+    //         0,
+    //         &node.binder.texture_groups[&ID(RENDER_2D_COMMON_TEXTURE_ID)],
+    //         &[],
+    //     );
 
-        pass_handle.set_bind_group(
-            1,
-            &node.binder.uniform_groups[&ID(RENDER_2D_BIND_GROUP_ID)],
-            &dyn_offset_state,
-        );
+    //     pass_handle.set_bind_group(
+    //         1,
+    //         &node.binder.uniform_groups[&ID(RENDER_2D_BIND_GROUP_ID)],
+    //         &dyn_offset_state,
+    //     );
 
-        pass_handle.draw_indexed(
-            0..state.common_buffers[&ID(UNIT_SQUARE_IND_BUFFER_ID)].1,
-            0,
-            0..1,
-        );
+    //     pass_handle.draw_indexed(
+    //         0..state.common_buffers[&ID(UNIT_SQUARE_IND_BUFFER_ID)].1,
+    //         0,
+    //         0..1,
+    //     );
 
-        for i in 0..dyn_offset_state.len() {
-            dyn_offset_state[i] += group_info[i].0 as u32;
-        }
-    }
+    //     for i in 0..dyn_offset_state.len() {
+    //         dyn_offset_state[i] += group_info[i].0 as u32;
+    //     }
+    // }
 
     debug!("done recording; submitting render pass");
     drop(pass_handle);

@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::{
     renderer::uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
-    resource::camera::Camera2D,
+    sources::camera::Camera2D,
 };
 
 pub struct Camera2DUniformGroup {}

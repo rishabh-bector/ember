@@ -12,17 +12,20 @@ use crate::{
         DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, FORWARD_2D_NODE_ID, ID, METRICS_UI_IMGUI_ID,
         RENDER_UI_SYSTEM_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
     },
-    resource::{
+    sources::{
         metrics::{EngineMetrics, SystemReporter},
         schedule::{LocalReporterSystem, StatelessSystem, SubSchedule},
         store::TextureStore,
         ui::{ImguiWindow, UIBuilder},
     },
-    systems::{render_2d::create_render_pass, render_graph::*, render_ui::*},
     texture::Texture,
 };
 
-use super::node::{NodeBuilder, NodeBuilderTrait, RenderNode};
+use super::{
+    node::{NodeBuilder, NodeBuilderTrait, RenderNode},
+    systems::{graph::*, render_2d::forward_dynamic::*, render_2d::forward_instance::*, ui::*},
+    target::RenderTarget,
+};
 
 pub enum UIMode {
     Disabled,

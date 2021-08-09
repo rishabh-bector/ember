@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use super::{systems::render_2d::create_render_pass, texture::Texture};
+
 pub enum RenderTarget {
     Empty,
     Texture(Arc<Texture>),

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::resource::{metrics::SystemReporter, ui::UI};
+use crate::sources::{metrics::SystemReporter, ui::UI};
 
 #[system]
 pub fn render_ui(
