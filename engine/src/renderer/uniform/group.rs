@@ -34,17 +34,6 @@ pub struct DynamicOffsets {
     pub state: Vec<u64>,
 }
 
-// Instancing notes:
-//
-// - Make a new render node: render_2d_instance which is the exact same as render_2d
-//   except it does instancing
-//
-// - Since it also operates on Render2D components, this makes no difference to the user
-//   Instead, the engine should decide whether to render a single object, use dynamic uniform
-//   buffers, or use instancing.
-//
-//   I guess this will become a configurable property of each Render2D component?
-
 pub trait UniformSource:
     Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug + 'static
 {

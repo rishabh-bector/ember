@@ -36,16 +36,6 @@ pub struct PipelineBinder {
     pub dyn_offset_state: HashMap<Uuid, (Arc<Mutex<u64>>, Vec<(u64, u64)>)>,
 }
 
-// A group of components which can be rendered with one instanced draw call.
-// These share textures and vertex/index buffers.
-pub struct InstanceGroup {
-    pub id: Uuid,
-
-    pub texture: Uuid,
-    pub common_vertex_buffer: usize,
-    pub common_index_buffer: usize,
-}
-
 pub enum ShaderSource {
     WGSL(String),
     _SPIRV(String),

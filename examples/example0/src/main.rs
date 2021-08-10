@@ -1,6 +1,6 @@
 use ember::{
     components::{Position2D, Velocity2D},
-    renderer::systems::render_2d::Render2D,
+    renderer::systems::render_2d::{forward_instance::Render2DInstance, Render2D},
     systems::lighting_2d::Light2D,
 };
 use rand::Rng;
@@ -11,6 +11,8 @@ fn main() {
     std::env::set_var("RUST_LOG", "ember=info");
 
     let (mut engine, event_loop) = ember::engine().default().unwrap();
+
+    let particle_group = Render2DInstance::default_group();
 
     engine.world().push((
         Render2D::solid_rect("background", 1440.0, 900.0, [0.02, 0.02, 0.05, 1.0]),

@@ -1,8 +1,8 @@
 use legion::Resources;
 
 pub mod camera;
+pub mod group;
 pub mod metrics;
-pub mod registry;
 pub mod schedule;
 pub mod store;
 pub mod ui;

@@ -3,21 +3,25 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
+use uuid::Uuid;
 
 use crate::{
     components::Position2D,
     constants::{
-        CAMERA_2D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID, UNIT_SQUARE_IND_BUFFER_ID,
+        CAMERA_2D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID, RENDER_2D_COMMON_INDEX_BUFFER,
+        RENDER_2D_COMMON_TEXTURE_ID, RENDER_2D_COMMON_VERTEX_BUFFER, UNIT_SQUARE_IND_BUFFER_ID,
         UNIT_SQUARE_VRT_BUFFER_ID,
     },
     renderer::{graph::NodeState, uniform::group::UniformGroup},
+    sources::group::{Instance, InstanceGroup},
 };
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Render2DInstance {
-    model: [f32; 4],
-    color: [f32; 4],
+    pub model: [f32; 4],
+    pub color: [f32; 4],
+    pub id: u64,
 }
 
 impl Render2DInstance {
@@ -25,7 +29,16 @@ impl Render2DInstance {
         Self {
             model: [x, y, w, h],
             color,
+            id: 0,
         }
+    }
+
+    pub fn default_group() -> InstanceGroup<Render2DInstance> {
+        InstanceGroup::new(
+            ID(RENDER_2D_COMMON_TEXTURE_ID),
+            RENDER_2D_COMMON_VERTEX_BUFFER,
+            RENDER_2D_COMMON_INDEX_BUFFER,
+        )
     }
 
     pub fn update_position(&mut self, pos: &Position2D) {
@@ -34,15 +47,25 @@ impl Render2DInstance {
     }
 }
 
+impl Instance for Render2DInstance {
+    fn get_id(&self) -> u64 {
+        self.id
+    }
+
+    fn set_id(&mut self, id: u64) {
+        self.id = id
+    }
+}
+
 // Phantom type
-pub struct Render2DInstanceGroup {}
+pub struct Render2DUniformGroup {}
 
 #[system]
 #[write_component(Render2DInstance)]
 #[read_component(Position2D)]
 pub fn load(
     world: &mut SubWorld,
-    #[resource] uniform_group: &Arc<Mutex<UniformGroup<Render2DInstanceGroup>>>,
+    #[resource] uniform_group: &Arc<Mutex<UniformGroup<Render2DUniformGroup>>>,
 ) {
     debug!("running system render_2d_uniforms");
 
@@ -93,7 +116,7 @@ pub fn load(
 //      - add this struct to some master registry resource
 //    !!! only one instance buffer should be created per node/pipeline !!!
 //
-// Adding instances:
+// Adding instances: AUTOMATIC ADDING CAN COME LATER
 //   Users should be able to request "Render2DInstanceRef" components from the Render2D InstanceGroup within the registry resource at any time
 //   The function takes ownership of the user's Render2DInstance builder, building the instance and inserting it into a vector.
 //   The user is given a Render2DInstanceRef whose u64 ID which matches the instance's ID in the instance group's vector.
@@ -107,7 +130,6 @@ pub fn load(
 //   - Instances can be deleted by ID via the instance group (less efficient obviously)
 //   In both cases, Vec.swap_remove is used for O(1) performance, although when deleting by ID, the vector must be searched.
 //
-
 #[system]
 pub fn render(
     #[state] state: &mut NodeState,
@@ -115,15 +137,15 @@ pub fn render(
     #[resource] queue: &Arc<wgpu::Queue>,
 ) {
     let start_time = Instant::now();
-    debug!("running system forward_render_2d (graph node)");
+    debug!("running system render_2d_forward_instance (graph node)");
     let node = Arc::clone(&state.node);
 
     let render_target = state.render_target.lock().unwrap();
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("Render2D Encoder"),
+        label: Some("render_2d_forward_instance_encoder"),
     });
     let mut pass_handle = render_target
-        .create_render_pass(&mut encoder, "forward_render_2d")
+        .create_render_pass(&mut encoder, "render_2d_forward_instance_pass")
         .unwrap();
 
     pass_handle.set_pipeline(&node.pipeline);
@@ -189,6 +211,6 @@ pub fn render(
     drop(pass_handle);
     queue.submit(std::iter::once(encoder.finish()));
 
-    debug!("forward_render_2d pass submitted");
+    debug!("render_2d_forward_instance pass submitted");
     state.reporter.update(start_time.elapsed().as_secs_f64());
 }

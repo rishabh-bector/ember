@@ -78,30 +78,30 @@ pub fn render(
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Render2D Encoder"),
     });
-    let mut pass_handle = render_target
+    let mut pass = render_target
         .create_render_pass(&mut encoder, "forward_render_2d")
         .unwrap();
 
-    pass_handle.set_pipeline(&node.pipeline);
+    pass.set_pipeline(&node.pipeline);
 
-    pass_handle.set_bind_group(
+    pass.set_bind_group(
         2,
         &node.binder.uniform_groups[&ID(CAMERA_2D_BIND_GROUP_ID)],
         &[],
     );
-    pass_handle.set_bind_group(
+    pass.set_bind_group(
         3,
         &node.binder.uniform_groups[&ID(LIGHTING_2D_BIND_GROUP_ID)],
         &[],
     );
 
-    pass_handle.set_vertex_buffer(
+    pass.set_vertex_buffer(
         0,
         state.common_buffers[&ID(UNIT_SQUARE_VRT_BUFFER_ID)]
             .0
             .slice(..),
     );
-    pass_handle.set_index_buffer(
+    pass.set_index_buffer(
         state.common_buffers[&ID(UNIT_SQUARE_IND_BUFFER_ID)]
             .0
             .slice(..),
@@ -121,19 +121,19 @@ pub fn render(
         .collect::<Vec<u32>>();
 
     for _ in 0..*entity_count.lock().unwrap() {
-        pass_handle.set_bind_group(
+        pass.set_bind_group(
             0,
             &node.binder.texture_groups[&ID(RENDER_2D_COMMON_TEXTURE_ID)],
             &[],
         );
 
-        pass_handle.set_bind_group(
+        pass.set_bind_group(
             1,
             &node.binder.uniform_groups[&ID(RENDER_2D_BIND_GROUP_ID)],
             &dyn_offset_state,
         );
 
-        pass_handle.draw_indexed(
+        pass.draw_indexed(
             0..state.common_buffers[&ID(UNIT_SQUARE_IND_BUFFER_ID)].1,
             0,
             0..1,
@@ -145,7 +145,7 @@ pub fn render(
     }
 
     debug!("done recording; submitting render pass");
-    drop(pass_handle);
+    drop(pass);
     queue.submit(std::iter::once(encoder.finish()));
 
     debug!("forward_render_2d pass submitted");
