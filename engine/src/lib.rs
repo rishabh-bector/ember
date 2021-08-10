@@ -19,6 +19,7 @@ use std::{
     time::{Duration, Instant},
 };
 use uuid::Uuid;
+use vertex_traits::VertexLayout;
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -37,7 +38,7 @@ use crate::{
         buffer::*,
         graph::GraphBuilder,
         node::*,
-        systems::render_2d,
+        systems::render_2d::{self, forward_instance::Render2DInstance},
         uniform::{generic::GenericUniformBuilder, group::UniformGroup},
         *,
     },
@@ -235,12 +236,15 @@ impl EngineBuilder {
         let node_2d_forward_instance = NodeBuilder::new(
             "render_2d_instance_node".to_owned(),
             0,
-            ShaderSource::WGSL(include_str!("renderer/shaders/render_2d.wgsl").to_owned()),
+            ShaderSource::WGSL(include_str!("renderer/shaders/render_2d_instance.wgsl").to_owned()),
         )
         .with_id(ID(FORWARD_2D_NODE_ID))
         .with_vertex_layout(VertexBuffer::layout_2d())
+        .with_vertex_layout(
+            Render2DInstance::layout_builder()
+                .build(std::mem::size_of::<Render2DInstance>() as u64),
+        )
         .with_texture_group(sources::store::TextureGroup::Render2D)
-        .with_shared_uniform_group(Arc::clone(&render_2d_dynamic_uniforms))
         .with_shared_uniform_group(Arc::clone(&camera_2d_uniforms))
         .with_shared_uniform_group(Arc::clone(&lighting_2d_uniforms))
         .with_system(render_2d::forward_instance::render_system);

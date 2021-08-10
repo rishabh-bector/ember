@@ -9,23 +9,29 @@ use rand::Rng;
 
 fn main() {
     std::env::set_var("RUST_LOG", "ember=info");
-
     let (mut engine, event_loop) = ember::engine().default().unwrap();
 
-    let particle_group = Render2DInstance::default_group();
+    let mut particle_group = Render2DInstance::default_group();
 
-    engine.world().push((
-        Render2D::solid_rect("background", 1440.0, 900.0, [0.02, 0.02, 0.05, 1.0]),
-        Position2D {
-            x: 0.0, //rng.gen_range(100..500) as f32,
-            y: 0.0, //rng.gen_range(100..500) as f32,
-        },
-    ));
+    // engine.world().push((
+    //     Render2D::solid_rect("background", 1440.0, 900.0, [0.02, 0.02, 0.05, 1.0]),
+    //     Position2D {
+    //         x: 0.0, //rng.gen_range(100..500) as f32,
+    //         y: 0.0, //rng.gen_range(100..500) as f32,
+    //     },
+    // ));
 
     let mut rng = rand::thread_rng();
     for i in 0..5 {
         engine.world().push((
-            Render2D::solid_rect(&format!("light_{}", i), 10.0, 10.0, [1.0, 1.0, 1.0, 1.0]),
+            particle_group.insert(Render2DInstance::new(
+                200.0,
+                200.0,
+                10.0,
+                10.0,
+                [1.0, 1.0, 0.0, 1.0],
+            )),
+            // Render2D::solid_rect(&format!("light_{}", i), 10.0, 10.0, [1.0, 1.0, 1.0, 1.0]),
             Position2D {
                 x: rng.gen_range(100.0..500.0),
                 y: rng.gen_range(100.0..500.0),
@@ -42,21 +48,21 @@ fn main() {
         ));
     }
 
-    for i in 0..120 {
-        let size = rng.gen_range(5.0..25.0);
-        engine.world().push((
-            Render2D::solid_rect(&format!("block_{}", i), size, size, [1.0, 1.0, 1.0, 1.0]),
-            Position2D {
-                x: rng.gen_range(100.0..500.0),
-                y: rng.gen_range(100.0..500.0),
-            },
-            Velocity2D {
-                dx: rng.gen_range(-15.0..15.0),
-                dy: rng.gen_range(-15.0..15.0),
-                bounce: true,
-            },
-        ));
-    }
+    // for i in 0..120 {
+    //     let size = rng.gen_range(5.0..25.0);
+    //     engine.world().push((
+    //         Render2D::solid_rect(&format!("block_{}", i), size, size, [1.0, 1.0, 1.0, 1.0]),
+    //         Position2D {
+    //             x: rng.gen_range(100.0..500.0),
+    //             y: rng.gen_range(100.0..500.0),
+    //         },
+    //         Velocity2D {
+    //             dx: rng.gen_range(-15.0..15.0),
+    //             dy: rng.gen_range(-15.0..15.0),
+    //             bounce: true,
+    //         },
+    //     ));
+    // }
 
     engine.start(event_loop);
 }

@@ -1,18 +1,6 @@
 // Vertex shader
 
 [[block]]
-struct Render2DUniforms {
-    // [x, y, width, height]
-    model: vec4<f32>;
-
-    // color
-    color: vec4<f32>;
-   
-    // mix color and texture 
-    mix: f32;
-};
-
-[[block]]
 struct CameraUniforms {
     // [x, y, width, height]
     view: vec4<f32>;
@@ -28,25 +16,14 @@ struct LightUniforms {
     light_4: vec4<f32>;
 };
 
-[[group(1), binding(0)]]
-var<uniform> render_2d_uniforms: Render2DUniforms;
-
 [[group(2), binding(0)]]
 var<uniform> camera_uniforms: CameraUniforms;
 
 [[group(3), binding(0)]]
 var<uniform> light_uniforms: LightUniforms;
 
-struct VertexInput {
-    [[location(0)]] position: vec2<f32>;
-    [[location(1)]] uvs: vec2<f32>;
-};
-
-struct VertexOutput {
-    [[builtin(position)]] clip_position: vec4<f32>;
-    [[location(0)]] uvs: vec2<f32>;
-    [[location(1)]] world_pos: vec2<f32>;
-};
+// These two utilities should be moved into
+// their own file when I write the shader linker
 
 fn multiply_vec4_as_mat2(in: vec2<f32>, mat2: vec4<f32>) -> vec2<f32> {
     return vec2<f32>(
@@ -59,18 +36,41 @@ fn snap2grid(in: vec2<f32>, grid_size: i32) -> vec2<f32> {
     return vec2<f32>(f32(i32(in.x/f32(grid_size))*grid_size), f32(i32(in.y/f32(grid_size))*grid_size));
 }
 
+struct VertexInput {
+    [[location(0)]] position: vec2<f32>;
+    [[location(1)]] uvs: vec2<f32>;
+};
+
+struct InstanceInput {
+    [[location(0)]] model: vec4<f32>;
+    [[location(1)]] color: vec4<f32>;
+    [[location(2)]] mix: f32;
+    [[location(3)]] id: u64;
+};
+
+struct VertexOutput {
+    [[builtin(position)]] clip_position: vec4<f32>;
+    [[location(0)]] uvs: vec2<f32>;
+    [[location(1)]] world_pos: vec2<f32>;
+    [[location(2)]] color: vec4<f32>;
+    [[location(3)]] mix: f32;
+};
+
 [[stage(vertex)]]
 fn main(
-    in: VertexInput,
+    vertex: VertexInput,
+    instance: InstanceInput,
 ) -> VertexOutput {
-    var world_space: vec2<f32> = in.position * render_2d_uniforms.model.zw + render_2d_uniforms.model.xy;
+    var world_space: vec2<f32> = vertex.position * instance.model.zw + instance.model.xy;
     // var snapped: vec2<f32> = vec2<f32>(round(world_space.x), round(world_space.y));
     var camera_space: vec2<f32> = snap2grid(world_space + camera_uniforms.view.xy, i32(1)) / camera_uniforms.view.zw;
 
     var out: VertexOutput;
-    out.uvs = in.uvs;
     out.clip_position = vec4<f32>(camera_space, 0.0, 1.0);
+    out.uvs = vertex.uvs;
     out.world_pos = world_space;
+    out.color = instance.color;
+    out.mix = instance.mix;
 
     return out;
 }
@@ -93,7 +93,7 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     var world_pos: vec2<f32> = in.world_pos;
     
     var sample_texture: vec4<f32> = textureSample(texture0, sampler0, in.uvs);
-    var sample_final: vec4<f32> = (render_2d_uniforms.color * render_2d_uniforms.mix) + ((1.0 - render_2d_uniforms.mix) * sample_texture);
+    var sample_final: vec4<f32> = (in.color * in.mix) + ((1.0 - in.mix) * sample_texture);
 
     var lighting_0: f32 = point_light_2d(world_pos.xy, light_uniforms.light_0);
     var lighting_1: f32 = point_light_2d(world_pos.xy, light_uniforms.light_1);

@@ -2,38 +2,11 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::constants::{
-    RENDER_2D_COMMON_INDEX_BUFFER, RENDER_2D_COMMON_TEXTURE_ID, RENDER_2D_COMMON_VERTEX_BUFFER,
+    ID, RENDER_2D_COMMON_TEXTURE_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
 };
 
 pub mod forward_dynamic;
 pub mod forward_instance;
-
-// Notes: Automatic instancing of Render2D components
-//
-//  - currently, Render2D components use dynamic buffering by default
-//    therefore, even a single component should use a (tiny) dynamic buffer
-//
-//  - once instancing is available, we need to create one instance
-//    buffer for each "group" of Render2D components. So, we need to decide:
-//      - How to form the groups
-//      - How/where to store the instance buffers
-//
-//    Groups:
-//      Render2D components should be sorted into groups which share the
-//      same texture, common_vertex_buffer, and common_index_buffer
-//
-//    Storing the instance buffers:
-//      One instance buffer is needed per group; the user may add an arbitrary
-//      number of different Render2D components, each with different "shared" properties,
-//      consisting of an arbitrary total of groups.
-//
-//    Requirements for the instance buffer:
-//      - Instance buffers must have a constant "num max entities", like dynamic
-//        buffers, to be allocated on init
-//      - Instance buffers are a per-uniform concept: thanks to my macros, we should be able
-//        to use any generic uniform struct as an instance layout.
-//      - Instance buffers are a per-uniform group concept: we will make a Render2DInstance
-//        struct which is consumed by the render_2d_instance shader (and/or others) as vertex input.
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Render2D {
@@ -46,8 +19,8 @@ pub struct Render2D {
     pub width: f32,
     pub height: f32,
 
-    pub common_vertex_buffer: usize,
-    pub common_index_buffer: usize,
+    pub common_vertex_buffer: Uuid,
+    pub common_index_buffer: Uuid,
 }
 
 impl Render2D {
@@ -63,8 +36,8 @@ impl Render2D {
             width,
             height,
             texture: Uuid::from_str(RENDER_2D_COMMON_TEXTURE_ID).unwrap(),
-            common_vertex_buffer: RENDER_2D_COMMON_VERTEX_BUFFER,
-            common_index_buffer: RENDER_2D_COMMON_INDEX_BUFFER,
+            common_vertex_buffer: ID(UNIT_SQUARE_VRT_BUFFER_ID),
+            common_index_buffer: ID(UNIT_SQUARE_IND_BUFFER_ID),
         }
     }
 
@@ -76,15 +49,11 @@ impl Render2D {
             width,
             height,
             texture,
-            common_vertex_buffer: RENDER_2D_COMMON_VERTEX_BUFFER,
-            common_index_buffer: RENDER_2D_COMMON_INDEX_BUFFER,
+            common_vertex_buffer: ID(UNIT_SQUARE_VRT_BUFFER_ID),
+            common_index_buffer: ID(UNIT_SQUARE_IND_BUFFER_ID),
         }
     }
 }
-
-// pub fn _flatten(mat: Matrix2<f32>) -> [f32; 4] {
-//     [mat.x[0], mat.y[0], mat.x[1], mat.y[1]]
-// }
 
 pub fn create_render_pass<'a>(
     target: &'a wgpu::TextureView,
@@ -110,3 +79,7 @@ pub fn create_render_pass<'a>(
         depth_stencil_attachment: None,
     })
 }
+
+// pub fn _flatten(mat: Matrix2<f32>) -> [f32; 4] {
+//     [mat.x[0], mat.y[0], mat.x[1], mat.y[1]]
+// }

@@ -1,7 +1,6 @@
 use legion::Resources;
 
 pub mod camera;
-pub mod group;
 pub mod metrics;
 pub mod schedule;
 pub mod store;

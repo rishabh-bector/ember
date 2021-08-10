@@ -8,20 +8,23 @@ use uuid::Uuid;
 use crate::{
     components::Position2D,
     constants::{
-        CAMERA_2D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID, RENDER_2D_COMMON_INDEX_BUFFER,
-        RENDER_2D_COMMON_TEXTURE_ID, RENDER_2D_COMMON_VERTEX_BUFFER, UNIT_SQUARE_IND_BUFFER_ID,
-        UNIT_SQUARE_VRT_BUFFER_ID,
+        CAMERA_2D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID,
+        UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
     },
-    renderer::{graph::NodeState, uniform::group::UniformGroup},
-    sources::group::{Instance, InstanceGroup},
+    renderer::{
+        graph::NodeState,
+        instance::{Instance, InstanceGroup, InstanceGroupBinder},
+        uniform::group::UniformGroup,
+    },
 };
+use vertex_traits::*;
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(VertexLayout, Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Render2DInstance {
     pub model: [f32; 4],
     pub color: [f32; 4],
-    pub id: u64,
+    pub id: u32,
 }
 
 impl Render2DInstance {
@@ -36,8 +39,7 @@ impl Render2DInstance {
     pub fn default_group() -> InstanceGroup<Render2DInstance> {
         InstanceGroup::new(
             ID(RENDER_2D_COMMON_TEXTURE_ID),
-            RENDER_2D_COMMON_VERTEX_BUFFER,
-            RENDER_2D_COMMON_INDEX_BUFFER,
+            (ID(UNIT_SQUARE_VRT_BUFFER_ID), ID(UNIT_SQUARE_IND_BUFFER_ID)),
         )
     }
 
@@ -48,11 +50,11 @@ impl Render2DInstance {
 }
 
 impl Instance for Render2DInstance {
-    fn get_id(&self) -> u64 {
+    fn get_id(&self) -> u32 {
         self.id
     }
 
-    fn set_id(&mut self, id: u64) {
+    fn set_id(&mut self, id: u32) {
         self.id = id
     }
 }
@@ -63,31 +65,12 @@ pub struct Render2DUniformGroup {}
 #[system]
 #[write_component(Render2DInstance)]
 #[read_component(Position2D)]
-pub fn load(
-    world: &mut SubWorld,
-    #[resource] uniform_group: &Arc<Mutex<UniformGroup<Render2DUniformGroup>>>,
-) {
+pub fn load(world: &mut SubWorld) {
     debug!("running system render_2d_uniforms");
 
     <(&mut Render2DInstance, &Position2D)>::query().par_for_each_mut(world, |(instance, pos)| {
         instance.update_position(pos);
     });
-
-    let instances: Vec<Render2DInstance> = <(&Render2DInstance, &Position2D)>::query()
-        .iter(world)
-        .map(|(instance, _)| instance.to_owned())
-        .collect();
-
-    uniform_group
-        .lock()
-        .unwrap()
-        .load_buffer(0, bytemuck::cast_slice(&instances));
-    *uniform_group.lock().unwrap().entity_count.lock().unwrap() = instances.len() as u64;
-
-    debug!(
-        "done loading render_2d instances with {} dynamic entities",
-        instances.len()
-    );
 }
 
 // Draw all Render2D components //
@@ -131,8 +114,11 @@ pub fn load(
 //   In both cases, Vec.swap_remove is used for O(1) performance, although when deleting by ID, the vector must be searched.
 //
 #[system]
+#[read_component(InstanceGroup<Render2DInstance>)]
 pub fn render(
+    world: &mut SubWorld,
     #[state] state: &mut NodeState,
+    #[resource] uniform_group: &Arc<Mutex<UniformGroup<Render2DUniformGroup>>>,
     #[resource] device: &Arc<wgpu::Device>,
     #[resource] queue: &Arc<wgpu::Queue>,
 ) {
@@ -144,71 +130,58 @@ pub fn render(
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("render_2d_forward_instance_encoder"),
     });
-    let mut pass_handle = render_target
+    let mut pass = render_target
         .create_render_pass(&mut encoder, "render_2d_forward_instance_pass")
         .unwrap();
+    pass.set_pipeline(&node.pipeline);
 
-    pass_handle.set_pipeline(&node.pipeline);
-
-    pass_handle.set_bind_group(
+    // Global bindings
+    pass.set_bind_group(
         2,
         &node.binder.uniform_groups[&ID(CAMERA_2D_BIND_GROUP_ID)],
         &[],
     );
-    pass_handle.set_bind_group(
+    pass.set_bind_group(
         3,
         &node.binder.uniform_groups[&ID(LIGHTING_2D_BIND_GROUP_ID)],
         &[],
     );
 
-    pass_handle.set_vertex_buffer(
-        0,
-        state.common_buffers[&ID(UNIT_SQUARE_VRT_BUFFER_ID)]
-            .0
-            .slice(..),
-    );
+    // Instance group bindings
+    for group in <&InstanceGroup<Render2DInstance>>::query().iter(world) {
+        debug!(
+            "loading render_2d instance group {}, size: {}",
+            "",
+            group.num_instances()
+        );
 
-    pass_handle.set_index_buffer(
-        state.common_buffers[&ID(UNIT_SQUARE_IND_BUFFER_ID)]
-            .0
-            .slice(..),
-        wgpu::IndexFormat::Uint16,
-    );
+        uniform_group
+            .lock()
+            .unwrap()
+            .load_buffer(0, group.buffer_bytes());
 
-    // Dynamic bindings
+        pass.set_bind_group(0, &node.binder.texture_groups[&group.texture()], &[]);
+        pass.set_bind_group(
+            1,
+            &node.binder.uniform_groups[&uniform_group.lock().unwrap().id],
+            &[],
+        );
 
-    // let entity_count = 10;
+        pass.set_vertex_buffer(0, state.common_buffers[&group.geometry().0].0.slice(..));
+        pass.set_index_buffer(
+            state.common_buffers[&group.geometry().1].0.slice(..),
+            wgpu::IndexFormat::Uint16,
+        );
 
-    // // let mut dyn_offset_state = std::iter::repeat(0)
-    // //     .take(group_info.len())
-    // //     .collect::<Vec<u32>>();
-
-    // for _ in 0..*entity_count.lock().unwrap() {
-    //     pass_handle.set_bind_group(
-    //         0,
-    //         &node.binder.texture_groups[&ID(RENDER_2D_COMMON_TEXTURE_ID)],
-    //         &[],
-    //     );
-
-    //     pass_handle.set_bind_group(
-    //         1,
-    //         &node.binder.uniform_groups[&ID(RENDER_2D_BIND_GROUP_ID)],
-    //         &dyn_offset_state,
-    //     );
-
-    //     pass_handle.draw_indexed(
-    //         0..state.common_buffers[&ID(UNIT_SQUARE_IND_BUFFER_ID)].1,
-    //         0,
-    //         0..1,
-    //     );
-
-    //     for i in 0..dyn_offset_state.len() {
-    //         dyn_offset_state[i] += group_info[i].0 as u32;
-    //     }
-    // }
+        pass.draw_indexed(
+            0..state.common_buffers[&group.geometry().1].1,
+            0,
+            0..group.num_instances() as _,
+        );
+    }
 
     debug!("done recording; submitting render pass");
-    drop(pass_handle);
+    drop(pass);
     queue.submit(std::iter::once(encoder.finish()));
 
     debug!("render_2d_forward_instance pass submitted");
