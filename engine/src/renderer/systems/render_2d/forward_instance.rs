@@ -1,10 +1,5 @@
 use legion::{world::SubWorld, IntoQuery};
-use rayon::prelude::*;
-use std::{
-    sync::{Arc},
-    time::Instant,
-};
-
+use std::{sync::Arc, time::Instant};
 
 use crate::{
     components::Position2D,
@@ -17,7 +12,6 @@ use crate::{
         instance::{Instance, InstanceBuffer, InstanceGroup, InstanceGroupBinder, InstanceId},
     },
 };
-
 
 #[instance((4, 44usize))]
 #[repr(C)]

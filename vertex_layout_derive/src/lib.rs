@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate proc_macro;
 #[macro_use]
 extern crate mem_macros;

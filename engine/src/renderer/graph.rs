@@ -9,9 +9,8 @@ use uuid::Uuid;
 use crate::{
     buffer::{IndexBuffer, Vertex2D, VertexBuffer},
     constants::{
-        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, ID, INSTANCE_2D_NODE_ID,
-        METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID, UNIT_SQUARE_IND_BUFFER_ID,
-        UNIT_SQUARE_VRT_BUFFER_ID,
+        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, ID, INSTANCE_2D_NODE_ID, METRICS_UI_IMGUI_ID,
+        RENDER_UI_SYSTEM_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
     },
     sources::{
         metrics::{EngineMetrics, SystemReporter},
