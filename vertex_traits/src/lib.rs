@@ -1,5 +1,6 @@
 pub trait VertexLayout {
     fn layout_builder() -> VertexLayoutBuilder;
+    fn layout() -> wgpu::VertexBufferLayout<'static>;
 }
 pub struct VertexLayoutBuilder {
     pub attributes: Vec<wgpu::VertexAttribute>,

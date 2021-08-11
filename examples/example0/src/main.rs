@@ -8,7 +8,7 @@ use rand::Rng;
 // Ember example
 
 fn main() {
-    std::env::set_var("RUST_LOG", "ember=info");
+    std::env::set_var("RUST_LOG", "trace");
     let (mut engine, event_loop) = ember::engine().default().unwrap();
 
     let mut particle_group = Render2DInstance::default_group();
@@ -64,5 +64,5 @@ fn main() {
     //     ));
     // }
 
-    engine.start(event_loop);
+    engine.with_resource(particle_group).start(event_loop);
 }

@@ -60,14 +60,15 @@ where
         return match mode {
             BufferMode::Single => {
                 let source_bytes = bytemuck::cast_slice(source);
+                let source_size = source_bytes.len();
                 BufferState {
                     buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                         label: Some("Uniform Buffer"),
                         contents: source_bytes,
                         usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
                     }),
-                    element_size: 0,
-                    max_elements: 0,
+                    element_size: source_size as u64,
+                    max_elements: 1,
                 }
             }
             BufferMode::Dynamic(max_elements) => {
@@ -85,20 +86,8 @@ where
                     max_elements: max_elements as u64,
                 }
             }
-            BufferMode::Instance(max_elements) => {
-                let source_bytes = bytemuck::cast_slice(source);
-                let source_size = source_bytes.len();
-                let source_bytes = source_bytes.repeat(max_elements as usize);
-
-                BufferState {
-                    buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some(&format!("Instance Buffer: {}", type_name::<U>())),
-                        contents: &source_bytes,
-                        usage: wgpu::BufferUsage::VERTEX,
-                    }),
-                    element_size: source_size as u64,
-                    max_elements: max_elements as u64,
-                }
+            _ => {
+                panic!("uniforms only support single and dynamic buffers")
             }
         };
     }

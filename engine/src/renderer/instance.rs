@@ -1,7 +1,40 @@
 use anyhow::Result;
+use std::{any::type_name, marker::PhantomData};
 use uuid::Uuid;
+use wgpu::util::DeviceExt;
 
 use crate::constants::{ID, RENDER_2D_COMMON_TEXTURE_ID};
+
+use super::uniform::generic::BufferState;
+
+pub struct InstanceBuffer<I: Instance> {
+    pub state: BufferState,
+    _marker: PhantomData<I>,
+}
+
+impl<I> InstanceBuffer<I>
+where
+    I: Instance,
+{
+    pub fn new(device: &wgpu::Device, max_elements: u32) -> Self {
+        let source = &[I::default()];
+        let source_bytes = bytemuck::cast_slice(source);
+        let source_size = source_bytes.len();
+        let source_bytes = source_bytes.repeat(max_elements as usize);
+        Self {
+            state: BufferState {
+                buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(&format!("Instance Buffer: {}", type_name::<I>())),
+                    contents: &source_bytes,
+                    usage: wgpu::BufferUsage::VERTEX,
+                }),
+                element_size: source_size as u64,
+                max_elements: max_elements as u64,
+            },
+            _marker: PhantomData,
+        }
+    }
+}
 
 // A group of components which can be rendered with one instanced draw call.
 // These share textures and vertex/index buffers.
@@ -18,9 +51,10 @@ pub struct InstanceGroup<T: Instance> {
 #[derive(Clone, Copy)]
 pub struct InstanceId(u32);
 
-pub trait Instance {
+pub trait Instance: bytemuck::Pod + bytemuck::Zeroable + Clone + Default {
     fn get_id(&self) -> u32;
     fn set_id(&mut self, id: u32);
+    fn size() -> usize;
 }
 
 impl<T> InstanceGroup<T>

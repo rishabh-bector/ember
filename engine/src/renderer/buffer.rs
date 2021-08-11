@@ -21,8 +21,9 @@ pub struct Vertex3D {
 unsafe impl bytemuck::Pod for Vertex3D {}
 unsafe impl bytemuck::Zeroable for Vertex3D {}
 
+#[layout((0, 16usize))]
 #[repr(C)]
-#[derive(VertexLayout, Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Vertex2D {
     pub position: [f32; 2],
     pub uvs: [f32; 2],
@@ -65,7 +66,7 @@ impl VertexBuffer {
         }
     }
     pub fn layout_2d<'a>() -> wgpu::VertexBufferLayout<'a> {
-        let _attrs = Vertex2D::layout_builder();
+        // let _attrs = Vertex2D::layout_builder();
 
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex2D>() as wgpu::BufferAddress,

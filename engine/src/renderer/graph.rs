@@ -9,8 +9,9 @@ use uuid::Uuid;
 use crate::{
     buffer::{IndexBuffer, Vertex2D, VertexBuffer},
     constants::{
-        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, FORWARD_2D_NODE_ID, ID, METRICS_UI_IMGUI_ID,
-        RENDER_UI_SYSTEM_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
+        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, FORWARD_2D_NODE_ID, ID, INSTANCE_2D_NODE_ID,
+        METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID, UNIT_SQUARE_IND_BUFFER_ID,
+        UNIT_SQUARE_VRT_BUFFER_ID,
     },
     sources::{
         metrics::{EngineMetrics, SystemReporter},
@@ -124,6 +125,7 @@ impl GraphBuilder {
             .node_builders
             .iter_mut()
             .map(|(id, builder)| {
+                debug!("building node: {}", builder.id());
                 let node = builder.build(
                     resources,
                     &device,
@@ -283,8 +285,11 @@ impl GraphBuilder {
         // ));
 
         sub_schedule.add_boxed(
-            Arc::clone(&nodes.get(&ID(FORWARD_2D_NODE_ID)).unwrap().system),
-            node_states.get(&ID(FORWARD_2D_NODE_ID)).unwrap().to_owned(),
+            Arc::clone(&nodes.get(&ID(INSTANCE_2D_NODE_ID)).unwrap().system),
+            node_states
+                .get(&ID(INSTANCE_2D_NODE_ID))
+                .unwrap()
+                .to_owned(),
         );
 
         sub_schedule.flush();

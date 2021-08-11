@@ -8,8 +8,11 @@ extern crate vertex_layout_derive;
 extern crate vertex_traits;
 
 use anyhow::Result;
-use legion::{Resources, Schedule, World};
-use renderer::graph::RenderGraph;
+use legion::{systems::Resource, Resources, Schedule, World};
+use renderer::{
+    graph::RenderGraph,
+    instance::{Instance, InstanceGroup},
+};
 use sources::{metrics::EngineReporter, store::TextureStore};
 use std::{
     env,
@@ -31,14 +34,14 @@ use winit_input_helper::WinitInputHelper;
 use crate::{
     constants::{
         CAMERA_2D_BIND_GROUP_ID, DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH,
-        DEFAULT_TEXTURE_BUFFER_FORMAT, FORWARD_2D_NODE_ID, ID, LIGHTING_2D_BIND_GROUP_ID,
-        RENDER_2D_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID,
+        DEFAULT_TEXTURE_BUFFER_FORMAT, FORWARD_2D_NODE_ID, ID, INSTANCE_2D_NODE_ID,
+        LIGHTING_2D_BIND_GROUP_ID, RENDER_2D_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID,
     },
     renderer::{
         buffer::*,
         graph::GraphBuilder,
         node::*,
-        systems::render_2d::{self, forward_instance::Render2DInstance},
+        systems::*,
         uniform::{generic::GenericUniformBuilder, group::UniformGroup},
         *,
     },
@@ -77,6 +80,12 @@ pub struct Engine {
 impl Engine {
     pub fn world(&mut self) -> &mut World {
         &mut self.legion.world
+    }
+
+    pub fn with_instance_group<I: Instance>(mut self, group: InstanceGroup<I>) -> Self {
+        // MAKE THE INSTANCE BUFFERS OWNED BY THE RENDA GRAPH
+        group.self.legion.resources.insert(src);
+        self
     }
 
     pub fn start(mut self, event_loop: EventLoop<()>) {
@@ -126,6 +135,10 @@ impl EngineBuilder {
     pub fn default(self) -> Result<(Engine, EventLoop<()>)> {
         pretty_env_logger::init();
         info!("building engine");
+        // panic!(
+        //     "{}",
+        //     std::mem::size_of::<render_2d::forward_instance::Render2DInstance>()
+        // );
 
         let base_dir = option_env!("CARGO_MANIFEST_DIR").map_or_else(
             || {
@@ -162,7 +175,7 @@ impl EngineBuilder {
         texture_store_builder.load_id(
             Uuid::from_str(RENDER_2D_COMMON_TEXTURE_ID).unwrap(),
             &base_dir
-                .join("src/resource/static/test.png")
+                .join("src/sources/static/test.png")
                 .into_os_string()
                 .into_string()
                 .unwrap(),
@@ -191,6 +204,15 @@ impl EngineBuilder {
                         _padding: [0.0; 32],
                         __padding: [0.0; 23],
                     },
+                ))
+                .with_id(Uuid::from_str(RENDER_2D_BIND_GROUP_ID).unwrap())
+                .mode_instance(),
+        ));
+
+        let render_2d_instance_uniforms = Arc::new(Mutex::new(
+            UniformGroup::<render_2d::forward_dynamic::Render2DForwardDynamicGroup>::builder()
+                .with_uniform(GenericUniformBuilder::from_source(
+                    render_2d::forward_instance::Render2DInstance::default(),
                 ))
                 .with_id(Uuid::from_str(RENDER_2D_BIND_GROUP_ID).unwrap())
                 .mode_instance(),
@@ -226,7 +248,7 @@ impl EngineBuilder {
             ShaderSource::WGSL(include_str!("renderer/shaders/render_2d.wgsl").to_owned()),
         )
         .with_id(ID(FORWARD_2D_NODE_ID))
-        .with_vertex_layout(VertexBuffer::layout_2d())
+        .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
         .with_texture_group(sources::store::TextureGroup::Render2D)
         .with_shared_uniform_group(Arc::clone(&render_2d_dynamic_uniforms))
         .with_shared_uniform_group(Arc::clone(&camera_2d_uniforms))
@@ -238,12 +260,9 @@ impl EngineBuilder {
             0,
             ShaderSource::WGSL(include_str!("renderer/shaders/render_2d_instance.wgsl").to_owned()),
         )
-        .with_id(ID(FORWARD_2D_NODE_ID))
-        .with_vertex_layout(VertexBuffer::layout_2d())
-        .with_vertex_layout(
-            Render2DInstance::layout_builder()
-                .build(std::mem::size_of::<Render2DInstance>() as u64),
-        )
+        .with_id(ID(INSTANCE_2D_NODE_ID))
+        .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
+        .with_vertex_layout(render_2d::forward_instance::RENDER2DINSTANCE_BUFFER_LAYOUT)
         .with_texture_group(sources::store::TextureGroup::Render2D)
         .with_shared_uniform_group(Arc::clone(&camera_2d_uniforms))
         .with_shared_uniform_group(Arc::clone(&lighting_2d_uniforms))

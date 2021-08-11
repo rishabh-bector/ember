@@ -28,6 +28,15 @@ pub enum BufferMode {
     Instance(u32),
 }
 
+impl BufferMode {
+    pub fn is_instance(&self) -> bool {
+        if let BufferMode::Instance(_) = &self {
+            return true;
+        }
+        false
+    }
+}
+
 pub struct DynamicOffsets {
     pub limits: Vec<u64>,
     pub sizes: Vec<u64>,
@@ -94,6 +103,7 @@ impl<N> UniformGroup<N> {
 }
 
 pub trait GroupBuilder {
+    fn mode(&self) -> BufferMode;
     fn build(
         &mut self,
         device: &wgpu::Device,
@@ -114,6 +124,7 @@ pub struct UniformGroupBuilder<N> {
 
     pub bind_group_layout: Option<wgpu::BindGroupLayout>,
     pub bind_group: Option<Arc<wgpu::BindGroup>>,
+    pub entries: Option<Vec<wgpu::BindGroupLayoutEntry>>,
 
     pub id: Uuid,
     pub state: Option<N>,
@@ -130,6 +141,7 @@ impl<N> UniformGroupBuilder<N> {
             uniforms: vec![],
             bind_group_layout: None,
             bind_group: None,
+            entries: None,
             state: None,
             dest: None,
             id: Uuid::new_v4(),
@@ -178,13 +190,31 @@ impl<N> UniformGroupBuilder<N> {
 }
 
 impl<N> GroupBuilder for UniformGroupBuilder<N> {
+    fn mode(&self) -> BufferMode {
+        self.mode
+    }
+
     fn build(
         &mut self,
         device: &wgpu::Device,
         resources: &mut Resources,
         queue: Arc<wgpu::Queue>,
     ) -> Result<wgpu::BindGroupLayout> {
-        debug!("UniformGroupBuilder: building {}", type_name::<N>());
+        debug!(
+            "UniformGroupBuilder: building {} with {} bind entries",
+            type_name::<N>(),
+            self.uniforms.len()
+        );
+
+        if let Some(entries) = &self.entries {
+            debug!("This uniform group has already been built; reusing");
+            return Ok(
+                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    entries: &entries,
+                    label: Some(&format!("uniform_bind_group_layout: {}", type_name::<N>())),
+                }),
+            );
+        }
 
         if self.uniforms.len() == 0 {
             return Err(anyhow!(
@@ -220,6 +250,7 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
                 }
             })
             .collect();
+        self.entries = Some(entries.clone());
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &entries,

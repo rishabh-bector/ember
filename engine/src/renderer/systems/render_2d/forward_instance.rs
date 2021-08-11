@@ -19,11 +19,13 @@ use crate::{
 };
 use vertex_traits::*;
 
+#[layout((4, 36usize))]
 #[repr(C)]
-#[derive(VertexLayout, Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Render2DInstance {
     pub model: [f32; 4],
     pub color: [f32; 4],
+    pub mix: f32,
     pub id: u32,
 }
 
@@ -32,6 +34,7 @@ impl Render2DInstance {
         Self {
             model: [x, y, w, h],
             color,
+            mix: 1.0,
             id: 0,
         }
     }
@@ -49,6 +52,12 @@ impl Render2DInstance {
     }
 }
 
+impl Default for Render2DInstance {
+    fn default() -> Self {
+        Self::new(0.0, 0.0, 10.0, 10.0, [1.0, 1.0, 1.0, 1.0])
+    }
+}
+
 impl Instance for Render2DInstance {
     fn get_id(&self) -> u32 {
         self.id
@@ -56,6 +65,10 @@ impl Instance for Render2DInstance {
 
     fn set_id(&mut self, id: u32) {
         self.id = id
+    }
+
+    fn size() -> usize {
+        36
     }
 }
 

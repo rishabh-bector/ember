@@ -1259,6 +1259,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60302e4db3a61da70c0cb7991976248362f30319e88850c487b9b95bbf059e00"
 
 [[package]]
+name = "mem_macros"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31b0c70916185f497a11218be7b13af9d53688619cc5992d62a7a238a48d1ff4"
+
+[[package]]
 name = "memchr"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2079,9 +2085,12 @@ checksum = "5fecdca9a5291cc2b8dcf7dc02453fee791a280f3743cb0905f8822ae463b3fe"
 name = "vertex_layout_derive"
 version = "0.1.0"
 dependencies = [
+ "mem_macros",
+ "proc-macro2",
  "quote",
  "syn",
  "vertex_traits",
+ "wgpu",
 ]
 
 [[package]]

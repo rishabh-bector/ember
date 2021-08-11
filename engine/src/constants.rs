@@ -18,6 +18,7 @@ pub const DEFAULT_MAX_INSTANCES_PER_PASS: u32 = 1024;
 //
 // Engine render nodes
 pub const FORWARD_2D_NODE_ID: &str = "0660ca73-c74c-40b0-afee-8cd9128aa190";
+pub const INSTANCE_2D_NODE_ID: &str = "19c32cfe-bccc-42fe-8d05-0860740fa752";
 // Engine systems (render systems use node id)
 pub const RENDER_UI_SYSTEM_ID: &str = "7a370e52-053a-46dc-82d6-4fd8d41c1c19";
 // Engine bind groups
@@ -30,7 +31,7 @@ pub const METRICS_UI_IMGUI_ID: &str = "cb7550b5-e8a7-49b0-954a-c156f69db093";
 pub const RENDER_2D_COMMON_TEXTURE_ID: &str = "8a22d465-7935-41e5-9e90-686ef5632c54";
 // Common shapes
 pub const UNIT_SQUARE_VRT_BUFFER_ID: &str = "6fd0eeb3-9847-4a26-9eec-370e9839cbd3";
-pub const UNIT_SQUARE_IND_BUFFER_ID: &str = "61c66b5d-8569-4cc7-9d44-a0ab7c4cdf24";
+pub const UNIT_SQUARE_IND_BUFFER_ID: &str = "96743a38-58cf-4c9d-afad-565d434409aa";
 //
 ///
 

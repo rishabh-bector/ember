@@ -16,10 +16,10 @@ struct LightUniforms {
     light_4: vec4<f32>;
 };
 
-[[group(2), binding(0)]]
+[[group(1), binding(0)]]
 var<uniform> camera_uniforms: CameraUniforms;
 
-[[group(3), binding(0)]]
+[[group(2), binding(0)]]
 var<uniform> light_uniforms: LightUniforms;
 
 // These two utilities should be moved into
@@ -42,10 +42,10 @@ struct VertexInput {
 };
 
 struct InstanceInput {
-    [[location(0)]] model: vec4<f32>;
-    [[location(1)]] color: vec4<f32>;
-    [[location(2)]] mix: f32;
-    [[location(3)]] id: u64;
+    [[location(4)]] model: vec4<f32>;
+    [[location(5)]] color: vec4<f32>;
+    [[location(6)]] mix: f32;
+    [[location(7)]] id: u32;
 };
 
 struct VertexOutput {
@@ -57,7 +57,7 @@ struct VertexOutput {
 };
 
 [[stage(vertex)]]
-fn main(
+fn main( 
     vertex: VertexInput,
     instance: InstanceInput,
 ) -> VertexOutput {
