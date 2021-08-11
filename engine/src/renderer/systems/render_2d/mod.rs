@@ -59,22 +59,29 @@ pub fn create_render_pass<'a>(
     target: &'a wgpu::TextureView,
     encoder: &'a mut wgpu::CommandEncoder,
     label: &'a str,
+    clear: bool,
 ) -> wgpu::RenderPass<'a> {
+    let ops = match clear {
+        true => wgpu::Operations {
+            load: wgpu::LoadOp::Clear(wgpu::Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 0.0,
+            }),
+            store: true,
+        },
+        false => wgpu::Operations {
+            load: wgpu::LoadOp::Load,
+            store: true,
+        },
+    };
     encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some(label),
         color_attachments: &[wgpu::RenderPassColorAttachment {
             view: target,
             resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Load,
-                // load: wgpu::LoadOp::Clear(wgpu::Color {
-                //     r: 0.0,
-                //     g: 0.0,
-                //     b: 0.0,
-                //     a: 0.0,
-                // }),
-                store: true,
-            },
+            ops,
         }],
         depth_stencil_attachment: None,
     })

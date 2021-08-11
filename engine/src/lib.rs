@@ -8,13 +8,15 @@ extern crate vertex_layout_derive;
 extern crate vertex_traits;
 
 use anyhow::Result;
+use constants::DEFAULT_MAX_INSTANCES_PER_BUFFER;
 use legion::{systems::Resource, Resources, Schedule, World};
 use renderer::{
     graph::RenderGraph,
-    instance::{Instance, InstanceGroup},
+    instance::{Instance, InstanceBuffer, InstanceGroup},
 };
 use sources::{metrics::EngineReporter, store::TextureStore};
 use std::{
+    any::type_name,
     env,
     path::PathBuf,
     str::FromStr,
@@ -84,7 +86,48 @@ impl Engine {
 
     pub fn with_instance_group<I: Instance>(mut self, group: InstanceGroup<I>) -> Self {
         // MAKE THE INSTANCE BUFFERS OWNED BY THE RENDA GRAPH
-        group.self.legion.resources.insert(src);
+
+        // Each instance group has both a type (impl Instance) and an ID
+        // The type corresponds to the actual instance data struct, e.g. Render2DInstance
+        // The ID corresponds to one specific group, as the user could have many different
+        // Render2DInstance groups each with many Render2DInstances
+        //
+        // One instance buffer is created per group type (not per group)
+        // This instance buffer is a resource which OWNS a list of all the groups of its type,
+        // so that the appropriate system can iterate through and render them.
+
+        // If this group's type already has an instance buffer, register the group with it
+        // Otherwise, create a new instance buffer.
+
+        debug!("processing instance group: {}", type_name::<I>());
+
+        let mut maybe_buffer = self.legion.resources.get_mut::<InstanceBuffer<I>>();
+        let mut maybe_resource: Option<InstanceBuffer<I>> = None;
+
+        match maybe_buffer.as_mut() {
+            Some(instance_buf) => {
+                debug!("adding to existing instance buffer");
+                instance_buf.insert_group(group);
+            }
+            None => {
+                debug!("instance buffer not found; creating");
+                let queue = Arc::clone(&self.gpu.lock().unwrap().queue);
+                let mut instance_buf = InstanceBuffer::<I>::new(
+                    &self.gpu.lock().unwrap().device,
+                    queue,
+                    DEFAULT_MAX_INSTANCES_PER_BUFFER,
+                );
+                instance_buf.insert_group(group);
+                maybe_resource = Some(instance_buf);
+            }
+        }
+
+        drop(maybe_buffer);
+        if let Some(instance_buf) = maybe_resource {
+            debug!("adding instance buffer {} to resources", type_name::<I>());
+            self.legion.resources.insert(instance_buf);
+        }
+
         self
     }
 
@@ -113,11 +156,12 @@ impl Engine {
 
             if self.input.update(&event) {
                 if self.input.key_pressed(VirtualKeyCode::Escape) || self.input.quit() {
-                    debug!("received exit signal; shutting down");
+                    debug!("shutting down");
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
 
+                // Window resizing
                 if let Some(physical_size) = self.input.resolution() {
                     let _ = &self.gpu.lock().unwrap().resize(physical_size);
                 }

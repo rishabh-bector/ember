@@ -17,11 +17,14 @@ impl RenderTarget {
         &'a self,
         encoder: &'a mut wgpu::CommandEncoder,
         label: &'a str,
+        clear: bool,
     ) -> Option<wgpu::RenderPass<'a>> {
         match self {
             RenderTarget::Empty => None,
-            RenderTarget::Texture(tex) => Some(create_render_pass(&tex.view, encoder, label)),
-            RenderTarget::Master(opt) => Some(create_render_pass(&opt.view, encoder, label)),
+            RenderTarget::Texture(tex) => {
+                Some(create_render_pass(&tex.view, encoder, label, clear))
+            }
+            RenderTarget::Master(opt) => Some(create_render_pass(&opt.view, encoder, label, clear)),
         }
     }
 

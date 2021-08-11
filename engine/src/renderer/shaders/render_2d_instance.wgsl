@@ -45,7 +45,8 @@ struct InstanceInput {
     [[location(4)]] model: vec4<f32>;
     [[location(5)]] color: vec4<f32>;
     [[location(6)]] mix: f32;
-    [[location(7)]] id: u32;
+    [[location(7)]] group_id: u32;
+    [[location(8)]] id: u32;
 };
 
 struct VertexOutput {

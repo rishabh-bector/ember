@@ -1,5 +1,7 @@
 use legion::{world::SubWorld, IntoQuery};
+use rayon::prelude::*;
 use std::{
+    collections::HashMap,
     sync::{Arc, Mutex},
     time::Instant,
 };
@@ -13,19 +15,20 @@ use crate::{
     },
     renderer::{
         graph::NodeState,
-        instance::{Instance, InstanceGroup, InstanceGroupBinder},
+        instance::{Instance, InstanceBuffer, InstanceGroup, InstanceGroupBinder, InstanceId},
         uniform::group::UniformGroup,
     },
 };
 use vertex_traits::*;
 
-#[layout((4, 36usize))]
+#[instance((4, 44usize))]
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Render2DInstance {
     pub model: [f32; 4],
     pub color: [f32; 4],
     pub mix: f32,
+    pub group_id: u32,
     pub id: u32,
 }
 
@@ -35,12 +38,14 @@ impl Render2DInstance {
             model: [x, y, w, h],
             color,
             mix: 1.0,
+            group_id: 0,
             id: 0,
         }
     }
 
     pub fn default_group() -> InstanceGroup<Render2DInstance> {
         InstanceGroup::new(
+            0,
             ID(RENDER_2D_COMMON_TEXTURE_ID),
             (ID(UNIT_SQUARE_VRT_BUFFER_ID), ID(UNIT_SQUARE_IND_BUFFER_ID)),
         )
@@ -59,12 +64,13 @@ impl Default for Render2DInstance {
 }
 
 impl Instance for Render2DInstance {
-    fn get_id(&self) -> u32 {
-        self.id
+    fn id(&self) -> (u32, u32) {
+        (self.group_id, self.id)
     }
 
-    fn set_id(&mut self, id: u32) {
-        self.id = id
+    fn set_id(&mut self, group_id: u32, inst_id: u32) {
+        self.group_id = group_id;
+        self.id = inst_id;
     }
 
     fn size() -> usize {
@@ -76,13 +82,17 @@ impl Instance for Render2DInstance {
 pub struct Render2DUniformGroup {}
 
 #[system]
-#[write_component(Render2DInstance)]
+#[read_component(InstanceId)]
 #[read_component(Position2D)]
-pub fn load(world: &mut SubWorld) {
+pub fn load(world: &SubWorld, #[resource] instance_buffer: &InstanceBuffer<Render2DInstance>) {
     debug!("running system render_2d_uniforms");
 
-    <(&mut Render2DInstance, &Position2D)>::query().par_for_each_mut(world, |(instance, pos)| {
-        instance.update_position(pos);
+    // All instances
+    let mut query = <(&InstanceId, &Position2D)>::query();
+    query.par_for_each(world, |(inst_id, pos_2d)| {
+        let mut group = instance_buffer.groups[inst_id.0 as usize].lock().unwrap();
+        group.instances[inst_id.1 as usize].model[0] = pos_2d.x;
+        group.instances[inst_id.1 as usize].model[1] = pos_2d.y;
     });
 }
 
@@ -127,11 +137,9 @@ pub fn load(world: &mut SubWorld) {
 //   In both cases, Vec.swap_remove is used for O(1) performance, although when deleting by ID, the vector must be searched.
 //
 #[system]
-#[read_component(InstanceGroup<Render2DInstance>)]
 pub fn render(
-    world: &mut SubWorld,
     #[state] state: &mut NodeState,
-    #[resource] uniform_group: &Arc<Mutex<UniformGroup<Render2DUniformGroup>>>,
+    #[resource] instance_buffer: &InstanceBuffer<Render2DInstance>,
     #[resource] device: &Arc<wgpu::Device>,
     #[resource] queue: &Arc<wgpu::Queue>,
 ) {
@@ -144,48 +152,47 @@ pub fn render(
         label: Some("render_2d_forward_instance_encoder"),
     });
     let mut pass = render_target
-        .create_render_pass(&mut encoder, "render_2d_forward_instance_pass")
+        .create_render_pass(&mut encoder, "render_2d_forward_instance_pass", true)
         .unwrap();
     pass.set_pipeline(&node.pipeline);
 
     // Global bindings
     pass.set_bind_group(
-        2,
+        1,
         &node.binder.uniform_groups[&ID(CAMERA_2D_BIND_GROUP_ID)],
         &[],
     );
     pass.set_bind_group(
-        3,
+        2,
         &node.binder.uniform_groups[&ID(LIGHTING_2D_BIND_GROUP_ID)],
         &[],
     );
 
-    // Instance group bindings
-    for group in <&InstanceGroup<Render2DInstance>>::query().iter(world) {
+    // Instance groups
+    for group in &instance_buffer.groups {
+        let group = group.lock().unwrap();
+
         debug!(
-            "loading render_2d instance group {}, size: {}",
+            "rendering instance group, type: render_2d, name: {}, size: {}",
             "",
             group.num_instances()
         );
 
-        uniform_group
-            .lock()
-            .unwrap()
-            .load_buffer(0, group.buffer_bytes());
-
+        // Bind group texture; every instance in a group shares one texture
         pass.set_bind_group(0, &node.binder.texture_groups[&group.texture()], &[]);
-        pass.set_bind_group(
-            1,
-            &node.binder.uniform_groups[&uniform_group.lock().unwrap().id],
-            &[],
-        );
 
+        // Load instance buffer; one gpu buffer is created per group type
+        instance_buffer.load_group(group.buffer_bytes());
+
+        // Bind geometry; every instance in a group shares one vertex/index buffer
         pass.set_vertex_buffer(0, state.common_buffers[&group.geometry().0].0.slice(..));
+        pass.set_vertex_buffer(1, instance_buffer.state.buffer.slice(..));
         pass.set_index_buffer(
             state.common_buffers[&group.geometry().1].0.slice(..),
             wgpu::IndexFormat::Uint16,
         );
 
+        // Batch draw instance group
         pass.draw_indexed(
             0..state.common_buffers[&group.geometry().1].1,
             0,

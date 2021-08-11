@@ -8,7 +8,7 @@ use rand::Rng;
 // Ember example
 
 fn main() {
-    std::env::set_var("RUST_LOG", "trace");
+    std::env::set_var("RUST_LOG", "info");
     let (mut engine, event_loop) = ember::engine().default().unwrap();
 
     let mut particle_group = Render2DInstance::default_group();
@@ -22,13 +22,13 @@ fn main() {
     // ));
 
     let mut rng = rand::thread_rng();
-    for i in 0..5 {
+    for i in 0..5000 {
         engine.world().push((
             particle_group.insert(Render2DInstance::new(
-                200.0,
-                200.0,
-                10.0,
-                10.0,
+                rng.gen_range(100.0..500.0),
+                rng.gen_range(100.0..500.0),
+                3.0,
+                3.0,
                 [1.0, 1.0, 0.0, 1.0],
             )),
             // Render2D::solid_rect(&format!("light_{}", i), 10.0, 10.0, [1.0, 1.0, 1.0, 1.0]),
@@ -64,5 +64,5 @@ fn main() {
     //     ));
     // }
 
-    engine.with_resource(particle_group).start(event_loop);
+    engine.with_instance_group(particle_group).start(event_loop);
 }

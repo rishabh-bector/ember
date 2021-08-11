@@ -21,7 +21,7 @@ pub struct Vertex3D {
 unsafe impl bytemuck::Pod for Vertex3D {}
 unsafe impl bytemuck::Zeroable for Vertex3D {}
 
-#[layout((0, 16usize))]
+#[vertex((0, 16usize))]
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct Vertex2D {

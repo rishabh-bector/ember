@@ -72,9 +72,9 @@ impl GraphBuilder {
     pub fn new() -> GraphBuilder {
         Self {
             node_builders: HashMap::new(),
-            source_nodes: Vec::new(),
+            source_nodes: vec![],
             master_node: None,
-            channels: Vec::new(),
+            channels: vec![],
             node_states: HashMap::new(),
             dest: None,
             ui_mode: UIMode::Disabled,

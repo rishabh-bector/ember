@@ -48,7 +48,7 @@ pub fn render_ui(
         label: Some("ImGui Encoder"),
     });
     let mut pass_handle = render_target
-        .create_render_pass(&mut encoder, "render_ui")
+        .create_render_pass(&mut encoder, "render_ui", false)
         .unwrap();
     renderer
         .render(frame.render(), queue, device, &mut pass_handle)

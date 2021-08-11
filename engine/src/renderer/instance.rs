@@ -1,22 +1,31 @@
 use anyhow::Result;
-use std::{any::type_name, marker::PhantomData};
+use std::{
+    any::type_name,
+    collections::HashMap,
+    marker::PhantomData,
+    sync::{Arc, Mutex},
+};
 use uuid::Uuid;
 use wgpu::util::DeviceExt;
 
-use crate::constants::{ID, RENDER_2D_COMMON_TEXTURE_ID};
+use crate::{
+    components::Position2D,
+    constants::{ID, RENDER_2D_COMMON_TEXTURE_ID},
+};
 
 use super::uniform::generic::BufferState;
 
 pub struct InstanceBuffer<I: Instance> {
     pub state: BufferState,
-    _marker: PhantomData<I>,
+    pub groups: Vec<Arc<Mutex<InstanceGroup<I>>>>,
+    pub queue: Arc<wgpu::Queue>,
 }
 
 impl<I> InstanceBuffer<I>
 where
     I: Instance,
 {
-    pub fn new(device: &wgpu::Device, max_elements: u32) -> Self {
+    pub fn new(device: &wgpu::Device, queue: Arc<wgpu::Queue>, max_elements: u32) -> Self {
         let source = &[I::default()];
         let source_bytes = bytemuck::cast_slice(source);
         let source_size = source_bytes.len();
@@ -26,62 +35,73 @@ where
                 buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some(&format!("Instance Buffer: {}", type_name::<I>())),
                     contents: &source_bytes,
-                    usage: wgpu::BufferUsage::VERTEX,
+                    usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
                 }),
                 element_size: source_size as u64,
                 max_elements: max_elements as u64,
             },
-            _marker: PhantomData,
+            groups: vec![],
+            queue,
         }
+    }
+
+    pub fn insert_group(&mut self, mut group: InstanceGroup<I>) {
+        group.id = self.groups.len() as u32;
+        self.groups.push(Arc::new(Mutex::new(group)));
+    }
+
+    pub fn load_group(&self, bytes: &[u8]) {
+        self.queue.write_buffer(&self.state.buffer, 0, bytes);
     }
 }
 
 // A group of components which can be rendered with one instanced draw call.
 // These share textures and vertex/index buffers.
 pub struct InstanceGroup<T: Instance> {
-    pub id: Uuid,
+    pub id: u32,
 
-    instances: Vec<T>,
+    pub instances: Vec<T>,
     next_id: InstanceId,
 
     pub texture: Uuid,
     pub geometry: (Uuid, Uuid),
 }
 
-#[derive(Clone, Copy)]
-pub struct InstanceId(u32);
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct InstanceId(pub u32, pub u32);
 
 pub trait Instance: bytemuck::Pod + bytemuck::Zeroable + Clone + Default {
-    fn get_id(&self) -> u32;
-    fn set_id(&mut self, id: u32);
+    fn id(&self) -> (u32, u32);
     fn size() -> usize;
+
+    fn set_id(&mut self, group_id: u32, inst_id: u32);
 }
 
 impl<T> InstanceGroup<T>
 where
     T: Instance,
 {
-    pub fn new(texture: Uuid, geometry: (Uuid, Uuid)) -> Self {
+    pub fn new(id: u32, texture: Uuid, geometry: (Uuid, Uuid)) -> Self {
         Self {
-            id: Uuid::new_v4(),
-            instances: Vec::new(),
-            next_id: InstanceId(1),
+            id,
+            instances: vec![],
+            next_id: InstanceId(id, 0),
             texture,
             geometry,
         }
     }
 
     pub fn insert(&mut self, mut instance: T) -> InstanceId {
-        instance.set_id(self.next_id.0);
+        instance.set_id(self.id, self.next_id.1);
         self.instances.push(instance);
 
         let old_id = self.next_id;
-        self.next_id.0 += 1;
+        self.next_id.1 += 1;
         old_id
     }
 
     pub fn delete(&mut self, id: u32) {
-        if let Some(index) = self.instances.iter().position(|inst| inst.get_id() == id) {
+        if let Some(index) = self.instances.iter().position(|inst| inst.id().1 == id) {
             self.instances.swap_remove(index);
         }
     }

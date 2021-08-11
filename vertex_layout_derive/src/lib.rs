@@ -8,11 +8,25 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, ToTokens};
 use syn::{Data, Fields, Type};
 
-// This procedural macro generates static vertex buffer layouts
-// for structs built with the supported primitives.
+#[proc_macro_attribute]
+pub fn instance(start_location: TokenStream, item: TokenStream) -> TokenStream {
+    layout(
+        start_location,
+        item,
+        quote!(wgpu::InputStepMode::Instance).into(),
+    )
+}
 
 #[proc_macro_attribute]
-pub fn layout(start_location: TokenStream, item: TokenStream) -> TokenStream {
+pub fn vertex(start_location: TokenStream, item: TokenStream) -> TokenStream {
+    layout(
+        start_location,
+        item,
+        quote!(wgpu::InputStepMode::Vertex).into(),
+    )
+}
+
+fn layout(start_location: TokenStream, item: TokenStream, step_mode: TokenStream2) -> TokenStream {
     let struct_ast: syn::DeriveInput = syn::parse(item).unwrap();
     let struct_name = &struct_ast.ident.clone();
     let fields: &Fields;
@@ -56,7 +70,7 @@ pub fn layout(start_location: TokenStream, item: TokenStream) -> TokenStream {
     let layout_tokens = quote!(
         pub const #layout_name: wgpu::VertexBufferLayout = wgpu::VertexBufferLayout {
             array_stride: #shader_loc_tokens.1 as wgpu::BufferAddress,
-            step_mode: wgpu::InputStepMode::Vertex,
+            step_mode: #step_mode,
             attributes: &[#attributes],
         };
     );
@@ -81,72 +95,3 @@ fn type_info(ty: Type) -> (TokenStream2, usize) {
         other => panic!("unsupported type in instance struct: {}", other),
     }
 }
-
-// #[proc_macro_derive(VertexLayout)]
-// pub fn derive_vertex_layout(input: TokenStream) -> TokenStream {
-//     let ast: syn::DeriveInput = syn::parse(input).unwrap();
-//     let name = &ast.ident;
-
-//     let fields: &Fields;
-//     if let Data::Struct(struct_data) = &ast.data {
-//         fields = &struct_data.fields;
-//     } else {
-//         panic!("only structs can be vertex layouts");
-//     }
-
-//     let mut attributes = quote!();
-//     let mut total_offsets = quote!(0);
-//     let mut location: u32 = 0;
-
-//     match fields {
-//         Fields::Named(named) => {
-//             for field in named.named.iter() {
-//                 let name = field.ty.clone();
-
-//                 attributes.extend(quote!(wgpu::VertexAttribute {
-//                     offset: 0,                             //#total_offsets,
-//                     shader_location: #location,
-//                     format: <#name>::vertex_format(),
-//                 },));
-
-//                 total_offsets.extend(quote!(+ <#name>::attribute_size()));
-//                 location += 1;
-//             }
-//         }
-//         _ => unimplemented!(),
-//     };
-
-//     let gen = quote! {
-//         impl VertexLayout for #name {
-//             fn layout_builder() -> VertexLayoutBuilder {
-//                 VertexLayoutBuilder::new(vec![#attributes])
-//             }
-
-//             fn layout() -> wgpu::VertexBufferLayout<'static> {
-//                 // wgpu::VertexBufferLayout {
-//                 //     array_stride: 0,
-//                 //     step_mode: wgpu::InputStepMode::Vertex,
-//                 //     attributes: &[#attributes],
-//                 // }
-//                 wgpu::VertexBufferLayout {
-//                     array_stride: 0,// std::mem::size_of::<Vertex2D>() as wgpu::BufferAddress,
-//                     step_mode: wgpu::InputStepMode::Vertex,
-//                     attributes: &[
-//                         #attributes
-//                         // wgpu::VertexAttribute {
-//                         //     offset: 0,
-//                         //     shader_location: 0,
-//                         //     format: wgpu::VertexFormat::Float32x2,
-//                         // },
-//                         // wgpu::VertexAttribute {
-//                         //     offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
-//                         //     shader_location: 1,
-//                         //     format: wgpu::VertexFormat::Float32x2,
-//                         // },
-//                     ],
-//                 }
-//             }
-//         }
-//     };
-//     gen.into()
-// }

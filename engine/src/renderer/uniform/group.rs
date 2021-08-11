@@ -13,7 +13,7 @@ use wgpu::BindGroupEntry;
 use crate::{
     constants::{
         DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE, DEFAULT_MAX_DYNAMIC_ENTITIES_PER_PASS,
-        DEFAULT_MAX_INSTANCES_PER_PASS,
+        DEFAULT_MAX_INSTANCES_PER_BUFFER,
     },
     renderer::uniform::generic::BufferState,
     sources::ResourceBuilder,
@@ -164,7 +164,7 @@ impl<N> UniformGroupBuilder<N> {
     }
 
     pub fn mode_instance(mut self) -> Self {
-        self.mode = BufferMode::Instance(DEFAULT_MAX_INSTANCES_PER_PASS);
+        self.mode = BufferMode::Instance(DEFAULT_MAX_INSTANCES_PER_BUFFER);
         self
     }
 
