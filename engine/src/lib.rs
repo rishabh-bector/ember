@@ -9,7 +9,7 @@ extern crate vertex_traits;
 
 use anyhow::Result;
 use constants::DEFAULT_MAX_INSTANCES_PER_BUFFER;
-use legion::{systems::Resource, Resources, Schedule, World};
+use legion::{Resources, Schedule, World};
 use renderer::{
     graph::RenderGraph,
     instance::{Instance, InstanceBuffer, InstanceGroup},
@@ -24,7 +24,7 @@ use std::{
     time::{Duration, Instant},
 };
 use uuid::Uuid;
-use vertex_traits::VertexLayout;
+
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -253,7 +253,7 @@ impl EngineBuilder {
                 .mode_instance(),
         ));
 
-        let render_2d_instance_uniforms = Arc::new(Mutex::new(
+        let _render_2d_instance_uniforms = Arc::new(Mutex::new(
             UniformGroup::<render_2d::forward_dynamic::Render2DForwardDynamicGroup>::builder()
                 .with_uniform(GenericUniformBuilder::from_source(
                     render_2d::forward_instance::Render2DInstance::default(),

@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use vertex_traits::{VertexAttribute, VertexLayout, VertexLayoutBuilder};
+
 use wgpu::util::DeviceExt;
 
 // Vertex Layout Builder

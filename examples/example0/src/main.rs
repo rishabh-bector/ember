@@ -1,6 +1,6 @@
 use ember::{
     components::{Position2D, Velocity2D},
-    renderer::systems::render_2d::{forward_instance::Render2DInstance, Render2D},
+    renderer::systems::render_2d::{forward_instance::Render2DInstance},
     systems::lighting_2d::Light2D,
 };
 use rand::Rng;
@@ -22,7 +22,7 @@ fn main() {
     // ));
 
     let mut rng = rand::thread_rng();
-    for i in 0..5000 {
+    for _i in 0..5000 {
         engine.world().push((
             particle_group.insert(Render2DInstance::new(
                 rng.gen_range(100.0..500.0),

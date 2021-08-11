@@ -1,17 +1,12 @@
-use anyhow::Result;
+
 use std::{
     any::type_name,
-    collections::HashMap,
-    marker::PhantomData,
     sync::{Arc, Mutex},
 };
 use uuid::Uuid;
 use wgpu::util::DeviceExt;
 
-use crate::{
-    components::Position2D,
-    constants::{ID, RENDER_2D_COMMON_TEXTURE_ID},
-};
+
 
 use super::uniform::generic::BufferState;
 

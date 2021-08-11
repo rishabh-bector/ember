@@ -1,11 +1,10 @@
 use legion::{world::SubWorld, IntoQuery};
 use rayon::prelude::*;
 use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc},
     time::Instant,
 };
-use uuid::Uuid;
+
 
 use crate::{
     components::Position2D,
@@ -16,10 +15,9 @@ use crate::{
     renderer::{
         graph::NodeState,
         instance::{Instance, InstanceBuffer, InstanceGroup, InstanceGroupBinder, InstanceId},
-        uniform::group::UniformGroup,
     },
 };
-use vertex_traits::*;
+
 
 #[instance((4, 44usize))]
 #[repr(C)]
