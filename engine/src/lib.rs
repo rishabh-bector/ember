@@ -280,6 +280,7 @@ impl EngineBuilder {
                     light_2: Default::default(),
                     light_3: Default::default(),
                     light_4: Default::default(),
+                    global: [0.1, 1.0, 1.0, 1.0],
                 }))
                 .with_id(Uuid::from_str(LIGHTING_2D_BIND_GROUP_ID).unwrap()),
         ));
@@ -321,6 +322,7 @@ impl EngineBuilder {
             .add_system(lighting_2d_system())
             // Uniform loading systems
             .flush()
+            .add_system(render_2d::forward_instance::attractor_system())
             .add_system(render_2d::forward_instance::load_system())
             .add_system(camera_2d_uniform_system())
             .add_system(lighting_2d_uniform_system());

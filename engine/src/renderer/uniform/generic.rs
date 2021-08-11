@@ -63,7 +63,7 @@ where
                 let source_size = source_bytes.len();
                 BufferState {
                     buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Uniform Buffer"),
+                        label: Some(&format!("Single Uniform Buffer: {}", type_name::<U>())),
                         contents: source_bytes,
                         usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
                     }),

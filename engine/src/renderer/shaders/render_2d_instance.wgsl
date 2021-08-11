@@ -14,6 +14,7 @@ struct LightUniforms {
     light_2: vec4<f32>;
     light_3: vec4<f32>;
     light_4: vec4<f32>;
+    global: vec4<f32>;
 };
 
 [[group(1), binding(0)]]
@@ -84,6 +85,9 @@ var texture0: texture_2d<f32>;
 var sampler0: sampler;
 
 fn point_light_2d(pos: vec2<f32>, light: vec4<f32>) -> f32 {
+    if (light.z == 0.0) {
+        return 0.0;
+    }
     let d: f32 = length(light.xy - pos);
     let attenuation: f32 = 1.0 / (1.0 + light.z * d + light.w * (d * d));
     return attenuation;
@@ -101,7 +105,7 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     var lighting_2: f32 = point_light_2d(world_pos.xy, light_uniforms.light_2);
     var lighting_3: f32 = point_light_2d(world_pos.xy, light_uniforms.light_3);
     var lighting_4: f32 = point_light_2d(world_pos.xy, light_uniforms.light_4);
-    var lighting: f32 = lighting_0 + lighting_1 + lighting_2 + lighting_3 + lighting_4;
+    var lighting: f32 = light_uniforms.global.x + lighting_0 + lighting_1 + lighting_2 + lighting_3 + lighting_4;
 
     return vec4<f32>(sample_final.rgb * lighting, 1.0);
 }

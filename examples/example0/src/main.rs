@@ -1,6 +1,6 @@
 use ember::{
     components::{Position2D, Velocity2D},
-    renderer::systems::render_2d::{forward_instance::Render2DInstance},
+    renderer::systems::render_2d::forward_instance::{Attractor2D, Render2DInstance},
     systems::lighting_2d::Light2D,
 };
 use rand::Rng;
@@ -22,31 +22,43 @@ fn main() {
     // ));
 
     let mut rng = rand::thread_rng();
-    for _i in 0..5000 {
+    for _i in 0..10000 {
         engine.world().push((
             particle_group.insert(Render2DInstance::new(
-                rng.gen_range(100.0..500.0),
-                rng.gen_range(100.0..500.0),
-                3.0,
-                3.0,
+                rng.gen_range(-700.0..700.0),
+                rng.gen_range(-400.0..400.0),
+                1.0,
+                1.0,
                 [1.0, 1.0, 0.0, 1.0],
             )),
             // Render2D::solid_rect(&format!("light_{}", i), 10.0, 10.0, [1.0, 1.0, 1.0, 1.0]),
             Position2D {
-                x: rng.gen_range(100.0..500.0),
-                y: rng.gen_range(100.0..500.0),
+                x: rng.gen_range(-700.0..700.0),
+                y: rng.gen_range(-400.0..400.0),
             },
             Velocity2D {
-                dx: rng.gen_range(-15.0..15.0),
-                dy: rng.gen_range(-15.0..15.0),
+                dx: rng.gen_range(-10.0..10.0),
+                dy: rng.gen_range(-10.0..10.0),
                 bounce: true,
-            },
-            Light2D {
-                linear: 0.007,
-                quadratic: 0.0002,
             },
         ));
     }
+
+    engine.world().push((
+        particle_group.insert(Render2DInstance::new(
+            0.0,
+            0.0,
+            20.0,
+            20.0,
+            [1.0, 1.0, 1.0, 1.0],
+        )),
+        Position2D { x: 0.0, y: 0.0 },
+        Attractor2D { force: 10000.0 },
+        Light2D {
+            linear: 0.01,
+            quadratic: 0.0002,
+        },
+    ));
 
     // for i in 0..120 {
     //     let size = rng.gen_range(5.0..25.0);

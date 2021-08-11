@@ -17,6 +17,7 @@ pub struct Lighting2DUniforms {
     pub light_2: [f32; 4],
     pub light_3: [f32; 4],
     pub light_4: [f32; 4],
+    pub global: [f32; 4],
 }
 
 #[derive(Clone, Debug, PartialEq)]
