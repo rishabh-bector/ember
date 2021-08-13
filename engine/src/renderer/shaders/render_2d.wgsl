@@ -13,13 +13,13 @@ struct Render2DUniforms {
 };
 
 [[block]]
-struct CameraUniforms {
+struct Camera2DUniforms {
     // [x, y, width, height]
     view: vec4<f32>;
 };
 
 [[block]]
-struct LightUniforms {
+struct Light2DUniforms {
     // [x, y, linear, quadratic]
     light_0: vec4<f32>;
     light_1: vec4<f32>;
@@ -32,10 +32,10 @@ struct LightUniforms {
 var<uniform> render_2d_uniforms: Render2DUniforms;
 
 [[group(2), binding(0)]]
-var<uniform> camera_uniforms: CameraUniforms;
+var<uniform> camera_uniforms: Camera2DUniforms;
 
 [[group(3), binding(0)]]
-var<uniform> light_uniforms: LightUniforms;
+var<uniform> light_uniforms: Light2DUniforms;
 
 struct VertexInput {
     [[location(0)]] position: vec2<f32>;

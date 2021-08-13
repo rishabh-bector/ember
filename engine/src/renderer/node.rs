@@ -260,6 +260,7 @@ impl NodeBuilderTrait for NodeBuilder {
             let needed_group = self.uniform_group_builders[group].lock().unwrap();
             let (id, bind_group) = needed_group.binding();
             uniform_groups.insert(id, bind_group);
+
             if let Some(dyn_offsets) = needed_group.dynamic() {
                 dyn_offset_state.insert(id, dyn_offsets);
             }

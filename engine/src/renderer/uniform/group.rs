@@ -52,6 +52,30 @@ pub trait Group {
     fn into<N>() -> N;
 }
 
+// Ways to draw multiple Render3D components:
+//  - Instancing (each batch must share a texture, v/i buffers, etc.)
+//      - For each group: all instance uniforms are loaded into a vertex buffer (per group type)
+//        by the render system before the group draw call is submitted.
+//  - Singleton (each can have its own texture, etc. which also req)
+//      - One UniformGroup (e.g. Render3DForwardUniformGroup) can have many GroupStates
+//      - A GroupState contains the data needed for a unique object in a render pass:
+//          - buffers (one for each uniform in the group)
+//          - bind group
+//      - The GroupState should be owned by the component, e.g. Render3D
+//        (The group can have one default GroupState to allow for dynamic uniforms in the future...)
+//      - Uniforms are loaded by a par_for_each which iterates all Render3D components (does this work?)
+//      - This way, a node builder can still take one UniformGroup, which defines
+//        the overall layout. Then, each time the user submits a Render3D component,
+//        it needs to be given a BufferState. How? Options:
+//          - 1. User submits a Render3DBuilder component, which contains all the data for a Render3D,
+//            then a system continously consumes all Render3DBuilder(s) and turns them into Render3Ds
+//          - 2. User submits an "incomplete" Render3D with an Option<GroupState>
+//          - Leaning towards option 1 atm.
+pub struct GroupState {
+    pub buffers: Vec<wgpu::Buffer>,
+    pub bind_group: Arc<wgpu::BindGroup>,
+}
+
 pub struct UniformGroup<N> {
     pub buffers: Vec<wgpu::Buffer>,
     pub mode: BufferMode,

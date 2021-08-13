@@ -11,6 +11,7 @@ use wgpu::util::DeviceExt;
 
 // Vertex and index buffers
 
+#[vertex((0, 20usize))]
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct Vertex3D {
@@ -66,8 +67,6 @@ impl VertexBuffer {
         }
     }
     pub fn layout_2d<'a>() -> wgpu::VertexBufferLayout<'a> {
-        // let _attrs = Vertex2D::layout_builder();
-
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex2D>() as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,
@@ -86,7 +85,7 @@ impl VertexBuffer {
         }
     }
 
-    pub fn _layout_3d<'a>() -> wgpu::VertexBufferLayout<'a> {
+    pub fn layout_3d<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex3D>() as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,
