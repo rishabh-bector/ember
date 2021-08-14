@@ -19,7 +19,7 @@ use crate::{
     sources::ResourceBuilder,
 };
 
-use super::UniformBuilder;
+use super::{BufferBuilder, UniformBuilder};
 
 #[derive(Clone, Copy)]
 pub enum BufferMode {
@@ -168,10 +168,11 @@ pub trait GroupBuilder {
 }
 
 pub trait GroupResourceBuilder: GroupBuilder + ResourceBuilder {}
-impl<N> GroupResourceBuilder for UniformGroupBuilder<N> where N: 'static {}
+impl<N> GroupResourceBuilder for UniformGroupBuilder<N> where N: Send + Sync + 'static {}
 
 pub struct UniformGroupBuilder<N> {
     pub uniforms: Vec<Arc<Mutex<dyn UniformBuilder>>>,
+    pub buffer_builders: Vec<Arc<Mutex<dyn BufferBuilder>>>,
     pub mode: BufferMode,
 
     pub bind_group_layout: Option<wgpu::BindGroupLayout>,
@@ -191,6 +192,7 @@ impl<N> UniformGroupBuilder<N> {
         Self {
             mode: BufferMode::Single,
             uniforms: vec![],
+            buffer_builders: vec![],
             bind_group_layout: None,
             bind_group: None,
             entries: None,
@@ -202,11 +204,14 @@ impl<N> UniformGroupBuilder<N> {
         }
     }
 
-    pub fn with_uniform<T: UniformBuilder + 'static>(mut self, uniform: T) -> Self {
+    pub fn with_uniform<T: UniformBuilder + BufferBuilder + 'static>(mut self, uniform: T) -> Self {
         // if let Some(offset_info) = uniform.dynamic() {
         //     self.dyn_offset_info.push(offset_info);
         // }
-        self.uniforms.push(Arc::new(Mutex::new(uniform)));
+        let locked = Arc::new(Mutex::new(uniform));
+        let locked2 = Arc::clone(&locked);
+        self.uniforms.push(locked);
+        self.buffer_builders.push(locked2);
         self
     }
 
@@ -241,7 +246,10 @@ impl<N> UniformGroupBuilder<N> {
     }
 }
 
-impl<N> GroupBuilder for UniformGroupBuilder<N> {
+impl<N> GroupBuilder for UniformGroupBuilder<N>
+where
+    N: Send + Sync + 'static,
+{
     fn mode(&self) -> BufferMode {
         self.mode
     }
@@ -356,6 +364,12 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
             _marker: PhantomData,
         })));
 
+        let group_state_builder = Arc::new(Mutex::new(GroupStateBuilder::<N>::new(
+            self.entries.as_ref().unwrap().clone(),
+            self.buffer_builders.clone(),
+        )));
+        resources.insert(group_state_builder);
+
         for builder in &self.uniforms {
             builder.lock().unwrap().build_to_resource(resources);
         }
@@ -375,34 +389,52 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
     }
 }
 
-impl<N> UniformGroupBuilder<N>
+pub struct GroupStateBuilder<N> {
+    pub bind_group_entries: Vec<wgpu::BindGroupLayoutEntry>,
+    pub uniform_buffer_builders: Vec<Arc<Mutex<dyn BufferBuilder>>>,
+    t: PhantomData<N>,
+}
+
+impl<N> GroupStateBuilder<N>
 where
     N: Send + Sync + 'static,
 {
-    pub fn single_state(&self, device: &wgpu::Device) -> Result<GroupState> {
+    pub fn new(
+        bind_group_entries: Vec<wgpu::BindGroupLayoutEntry>,
+        uniform_buffer_builders: Vec<Arc<Mutex<dyn BufferBuilder>>>,
+    ) -> Self {
+        Self {
+            bind_group_entries,
+            uniform_buffer_builders,
+            t: PhantomData,
+        }
+    }
+
+    pub fn single_state(
+        &self,
+        device: &wgpu::Device,
+        queue: &Arc<wgpu::Queue>,
+    ) -> Result<GroupState> {
         debug!(
-            "UniformGroupBuilder: new state {} with {} bind entries",
+            "GroupStateBuilder: new state {} with {} bind entries",
             type_name::<N>(),
-            self.uniforms.len()
+            self.uniform_buffer_builders.len()
         );
 
-        if self.uniforms.len() == 0 {
+        if self.uniform_buffer_builders.len() == 0 {
             return Err(anyhow!(
-                "GroupBuilder: must provide at least one uniform builder"
+                "GroupStateBuilder: must provide at least one uniform builder"
             ));
         }
 
         let buffer_states: Vec<BufferState> = self
-            .uniforms
+            .uniform_buffer_builders
             .iter()
             .map(|builder| builder.lock().unwrap().single_buffer(device))
             .collect();
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &self
-                .entries
-                .as_ref()
-                .expect("group must be built before group states"),
+            entries: &self.bind_group_entries,
             label: Some(&format!("uniform_bind_group_layout: {}", type_name::<N>())),
         });
 
@@ -442,7 +474,7 @@ where
         Ok(GroupState {
             buffers: Arc::new(buffer_states.into_iter().map(|s| s.buffer).collect()),
             bind_group: Arc::clone(&bind_group),
-            queue: Arc::clone(&self.dest.as_ref().unwrap().lock().unwrap().queue),
+            queue: Arc::clone(&queue),
         })
     }
 }

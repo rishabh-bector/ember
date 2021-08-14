@@ -39,7 +39,7 @@ pub fn load(
     #[resource] base_uniforms: &Arc<Mutex<GenericUniform<Render2DForwardDynamicUniforms>>>,
     #[resource] base_uniforms_group: &Arc<Mutex<UniformGroup<Render2DForwardDynamicGroup>>>,
 ) {
-    debug!("running system render_2d_uniforms");
+    debug!("running system render_2d_dynamic_uniform_loader");
 
     let mut base_uniforms = base_uniforms.lock().unwrap();
     let mut base_uniforms_group = base_uniforms_group.lock().unwrap();
@@ -71,7 +71,7 @@ pub fn render(
     #[resource] queue: &Arc<wgpu::Queue>,
 ) {
     let start_time = Instant::now();
-    debug!("running system forward_render_2d (graph node)");
+    debug!("running system render_2d_forward_dynamic (graph node)");
     let node = Arc::clone(&state.node);
 
     let render_target = state.render_target.lock().unwrap();

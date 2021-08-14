@@ -17,7 +17,9 @@ use crate::{
         graph::NodeState,
         uniform::{
             generic::GenericUniform,
-            group::{GroupBuilder, GroupState, UniformGroup, UniformGroupBuilder},
+            group::{
+                GroupBuilder, GroupState, GroupStateBuilder, UniformGroup, UniformGroupBuilder,
+            },
             Uniform,
         },
     },
@@ -100,19 +102,29 @@ pub fn load(
     world: &mut SubWorld,
     command_buffer: &mut CommandBuffer,
     #[resource] device: &Arc<wgpu::Device>,
-    #[resource] group_builder: &Arc<Mutex<UniformGroupBuilder<Render3DForwardUniformGroup>>>,
+    #[resource] queue: &Arc<wgpu::Queue>,
+    #[resource] group_builder: &Arc<Mutex<GroupStateBuilder<Render3DForwardUniformGroup>>>,
 ) {
+    debug!("running system render_3d_forward_basic_uniform_loader (graph node)");
+
     // Add a GroupState to any Render3D component without one
     let group_builder = group_builder.lock().unwrap();
     let mut query = <(Entity, &Render3D, &Position3D)>::query().filter(!component::<GroupState>());
     query.for_each(world, |(entity, builder_3d, pos_3d)| {
-        debug!("allocating uniform group state for new render_3d component");
-        command_buffer.add_component(*entity, group_builder.single_state(&device).unwrap());
+        debug!(
+            "allocating uniform group state for new render_3d component: {}",
+            builder_3d.name
+        );
+        command_buffer.add_component(*entity, group_builder.single_state(device, queue).unwrap());
     });
 
     // Load all Render3D components into their GroupStates
     let mut query = <(&Render3D, &Position3D, &GroupState)>::query();
     query.par_for_each(world, |(render_3d, pos_3d, group_state)| {
+        debug!(
+            "loading uniform group state for existing render_3d component: {}",
+            render_3d.name
+        );
         let source = &[Render3DUniforms::from(render_3d)];
         group_state.write_buffer(0, bytemuck::cast_slice(source));
     });
@@ -128,7 +140,7 @@ pub fn render(
     #[resource] device: &Arc<wgpu::Device>,
     #[resource] queue: &Arc<wgpu::Queue>,
 ) {
-    debug!("running system forward_render_3d (graph node)");
+    debug!("running system render_3d_forward_basic (graph node)");
     let start_time = Instant::now();
     let node = Arc::clone(&state.node);
 

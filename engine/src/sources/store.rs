@@ -35,8 +35,12 @@ impl TextureStoreBuilder {
         }
     }
 
-    pub fn begin_group(&mut self, group: TextureGroup) {
-        self.load_group = group;
+    pub fn begin_group_2d(&mut self) {
+        self.load_group = TextureGroup::Render2D;
+    }
+
+    pub fn begin_group_3d(&mut self) {
+        self.load_group = TextureGroup::Render3D;
     }
 
     pub fn load(&mut self, path: &str) -> Uuid {

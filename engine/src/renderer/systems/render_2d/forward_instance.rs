@@ -87,7 +87,7 @@ pub struct Render2DUniformGroup {}
 #[read_component(Attractor2D)]
 #[write_component(Velocity2D)]
 pub fn attractor(world: &mut SubWorld) {
-    debug!("running system render_2d_instance_loader");
+    debug!("running system render_2d_instance_attractor");
 
     let attractors: Vec<(f32, (f32, f32))> = <(&Attractor2D, &Position2D)>::query()
         .iter(world)

@@ -9,8 +9,8 @@ use uuid::Uuid;
 use crate::{
     buffer::{IndexBuffer, Vertex2D, VertexBuffer},
     constants::{
-        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, ID, INSTANCE_2D_NODE_ID, METRICS_UI_IMGUI_ID,
-        RENDER_UI_SYSTEM_ID, UNIT_CUBE_IND_BUFFER_ID, UNIT_CUBE_VRT_BUFFER_ID,
+        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, FORWARD_3D_NODE_ID, ID, INSTANCE_2D_NODE_ID,
+        METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID, UNIT_CUBE_IND_BUFFER_ID, UNIT_CUBE_VRT_BUFFER_ID,
         UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
     },
     renderer::buffer::Vertex3D,
@@ -256,6 +256,9 @@ impl GraphBuilder {
                             .binder
                             .dyn_offset_state
                             .clone(),
+
+                        // Register all node systems with metrics, and
+                        // give them a system reporter
                         reporter: metrics_ui.register_system_id(&node.name, *node_id),
                     },
                 )
@@ -301,11 +304,8 @@ impl GraphBuilder {
         // ));
 
         sub_schedule.add_boxed(
-            Arc::clone(&nodes.get(&ID(INSTANCE_2D_NODE_ID)).unwrap().system),
-            node_states
-                .get(&ID(INSTANCE_2D_NODE_ID))
-                .unwrap()
-                .to_owned(),
+            Arc::clone(&nodes.get(&ID(FORWARD_3D_NODE_ID)).unwrap().system),
+            node_states.get(&ID(FORWARD_3D_NODE_ID)).unwrap().to_owned(),
         );
 
         sub_schedule.flush();

@@ -19,8 +19,10 @@ pub fn camera_3d(
     #[resource] camera: &Arc<Mutex<Camera3D>>,
     #[resource] camera_uniform: &Arc<Mutex<GenericUniform<Camera3DUniforms>>>,
 ) {
-    let camera = camera.lock().unwrap();
+    let mut camera = camera.lock().unwrap();
     let mut camera_uniforms = camera_uniform.lock().unwrap();
+
+    // camera.eye.x -= 0.1;
 
     let mat = camera.build_view_proj();
     camera_uniforms.mut_ref().view_proj = [

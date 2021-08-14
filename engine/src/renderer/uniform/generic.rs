@@ -7,7 +7,7 @@ use std::{
 };
 use wgpu::util::DeviceExt;
 
-use super::{group::BufferMode, UniformBuilder};
+use super::{group::BufferMode, BufferBuilder, UniformBuilder};
 use crate::sources::ResourceBuilder;
 
 pub struct GenericUniformBuilder<U: Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug> {
@@ -92,6 +92,16 @@ where
         };
     }
 
+    // Used by UniformGroupBuilder to store dynamic buffer info
+    fn dynamic_size(&self) -> u64 {
+        self.size as u64
+    }
+}
+
+impl<U> BufferBuilder for GenericUniformBuilder<U>
+where
+    U: Send + Sync + Copy + Clone + bytemuck::Pod + bytemuck::Zeroable + Debug,
+{
     fn single_buffer(&self, device: &wgpu::Device) -> BufferState {
         let source = &[self.source.unwrap()];
         let source_bytes = bytemuck::cast_slice(source);
@@ -105,11 +115,6 @@ where
             element_size: source_size as u64,
             mode: BufferMode::Single,
         }
-    }
-
-    // Used by UniformGroupBuilder to store dynamic buffer info
-    fn dynamic_size(&self) -> u64 {
-        self.size as u64
     }
 }
 

@@ -30,9 +30,10 @@ use winit_input_helper::WinitInputHelper;
 use crate::{
     constants::{
         CAMERA_2D_BIND_GROUP_ID, CAMERA_3D_BIND_GROUP_ID, DEFAULT_SCREEN_HEIGHT,
-        DEFAULT_SCREEN_WIDTH, DEFAULT_TEXTURE_BUFFER_FORMAT, FORWARD_2D_NODE_ID, ID,
-        INSTANCE_2D_NODE_ID, INSTANCE_3D_NODE_ID, LIGHTING_2D_BIND_GROUP_ID,
-        RENDER_2D_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID, RENDER_3D_BIND_GROUP_ID,
+        DEFAULT_SCREEN_WIDTH, DEFAULT_TEXTURE_BUFFER_FORMAT, FORWARD_2D_NODE_ID,
+        FORWARD_3D_NODE_ID, ID, INSTANCE_2D_NODE_ID, INSTANCE_3D_NODE_ID,
+        LIGHTING_2D_BIND_GROUP_ID, RENDER_2D_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID,
+        RENDER_3D_BIND_GROUP_ID, RENDER_3D_COMMON_TEXTURE_ID,
     },
     renderer::{
         buffer::{instance::*, *},
@@ -82,22 +83,7 @@ impl Engine {
     }
 
     pub fn with_instance_group<I: Instance>(mut self, group: InstanceGroup<I>) -> Self {
-        // MAKE THE INSTANCE BUFFERS OWNED BY THE RENDA GRAPH
-
-        // Each instance group has both a type (impl Instance) and an ID
-        // The type corresponds to the actual instance data struct, e.g. Render2DInstance
-        // The ID corresponds to one specific group, as the user could have many different
-        // Render2DInstance groups each with many Render2DInstances
-        //
-        // One instance buffer is created per group type (not per group)
-        // This instance buffer is a resource which OWNS a list of all the groups of its type,
-        // so that the appropriate system can iterate through and render them.
-
-        // If this group's type already has an instance buffer, register the group with it
-        // Otherwise, create a new instance buffer.
-
         debug!("processing instance group: {}", type_name::<I>());
-
         let mut maybe_buffer = self.legion.resources.get_mut::<InstanceBuffer<I>>();
         let mut maybe_resource: Option<InstanceBuffer<I>> = None;
 
@@ -209,10 +195,20 @@ impl EngineBuilder {
 
         info!("loading textures");
         let mut texture_store_builder = TextureStoreBuilder::new();
+        texture_store_builder.begin_group_2d();
         texture_store_builder.load_id(
             Uuid::from_str(RENDER_2D_COMMON_TEXTURE_ID).unwrap(),
             &base_dir
                 .join("src/sources/static/test.png")
+                .into_os_string()
+                .into_string()
+                .unwrap(),
+        );
+        texture_store_builder.begin_group_3d();
+        texture_store_builder.load_id(
+            Uuid::from_str(RENDER_3D_COMMON_TEXTURE_ID).unwrap(),
+            &base_dir
+                .join("src/sources/static/arrow.jpg")
                 .into_os_string()
                 .into_string()
                 .unwrap(),
@@ -317,12 +313,17 @@ impl EngineBuilder {
         .with_shared_uniform_group(Arc::clone(&lighting_2d_uniform_builder))
         .with_system(render_2d::forward_instance::render_system);
 
+        // Todo: replace this with something better
+        resources.insert(instance_buffer::<
+            render_2d::forward_instance::Render2DInstance,
+        >(&gpu_mut.device, &gpu_mut.queue));
+
         let node_3d_forward_basic = NodeBuilder::new(
             "render_3d_basic_node".to_owned(),
             0,
             ShaderSource::WGSL(include_str!("renderer/shaders/render_3d.wgsl").to_owned()),
         )
-        .with_id(ID(INSTANCE_3D_NODE_ID))
+        .with_id(ID(FORWARD_3D_NODE_ID))
         .with_vertex_layout(VERTEX3D_BUFFER_LAYOUT)
         .with_texture_group(TextureGroup::Render3D)
         .with_shared_uniform_group(Arc::clone(&render_3d_uniform_builder))
@@ -341,6 +342,7 @@ impl EngineBuilder {
             // Uniform loading systems
             .flush()
             .add_system(render_2d::forward_instance::load_system())
+            .add_system(render_3d::forward_basic::load_system())
             .add_system(camera_2d_uniform_system())
             .add_system(camera_3d_uniform_system())
             .add_system(lighting_2d_uniform_system());
@@ -418,4 +420,11 @@ impl LegionState {
     pub fn execute(&mut self) {
         self.schedule.execute(&mut self.world, &mut self.resources);
     }
+}
+
+fn instance_buffer<I: Instance>(
+    device: &wgpu::Device,
+    queue: &Arc<wgpu::Queue>,
+) -> InstanceBuffer<I> {
+    InstanceBuffer::<I>::new(device, Arc::clone(&queue), DEFAULT_MAX_INSTANCES_PER_BUFFER)
 }

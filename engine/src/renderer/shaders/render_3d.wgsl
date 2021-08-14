@@ -55,7 +55,7 @@ fn main(
     // var snapped: vec2<f32> = vec2<f32>(round(world_space.x), round(world_space.y));
     //var camera_space: vec2<f32> = snap2grid(world_space + camera_uniforms.view.xy, i32(1)) / camera_uniforms.view.zw;
 
-    var some_space: vec4<f32> = render_3d_uniforms.model * vec4<f32>(in.position, 1.0);
+    var some_space: vec4<f32> = camera_uniforms.view_proj * render_3d_uniforms.model * vec4<f32>(in.position, 1.0);
 
     var out: VertexOutput;
     out.uvs = in.uvs;
@@ -90,6 +90,8 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     // var lighting_4: f32 = point_light_2d(world_pos.xy, light_uniforms.light_4);
     // var lighting: f32 = lighting_0 + lighting_1 + lighting_2 + lighting_3 + lighting_4;
     var lighting: f32 = 1.0;
+    
+    return vec4<f32>(1.0, 1.0, 0.0, 1.0);
 
-    return vec4<f32>(sample_final.rgb * lighting, 1.0);
+    // return vec4<f32>(sample_final.rgb * lighting, 1.0);
 }

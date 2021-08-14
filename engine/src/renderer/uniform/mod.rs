@@ -24,6 +24,9 @@ where
 pub trait UniformBuilder: ResourceBuilder {
     // -> (buffer, source size, max dynamic offsets per render pass)
     fn build_buffer(&mut self, device: &wgpu::Device, mode: BufferMode) -> BufferState;
-    fn single_buffer(&self, device: &wgpu::Device) -> BufferState;
     fn dynamic_size(&self) -> u64;
+}
+
+pub trait BufferBuilder: Send + Sync {
+    fn single_buffer(&self, device: &wgpu::Device) -> BufferState;
 }
