@@ -17,9 +17,7 @@ use crate::{
         graph::NodeState,
         uniform::{
             generic::GenericUniform,
-            group::{
-                GroupBuilder, GroupState, SingleStateBuilder, UniformGroup, UniformGroupBuilder,
-            },
+            group::{GroupBuilder, GroupState, UniformGroup, UniformGroupBuilder},
             Uniform,
         },
     },

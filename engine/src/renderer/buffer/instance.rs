@@ -5,7 +5,7 @@ use std::{
 use uuid::Uuid;
 use wgpu::util::DeviceExt;
 
-use crate::renderer::uniform::generic::BufferState;
+use crate::renderer::uniform::{generic::BufferState, group::BufferMode};
 
 pub struct InstanceBuffer<I: Instance> {
     pub state: BufferState,
@@ -30,7 +30,7 @@ where
                     usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
                 }),
                 element_size: source_size as u64,
-                max_elements: max_elements as u64,
+                mode: BufferMode::Dynamic(max_elements),
             },
             groups: vec![],
             queue,

@@ -10,8 +10,10 @@ use crate::{
     buffer::{IndexBuffer, Vertex2D, VertexBuffer},
     constants::{
         DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, ID, INSTANCE_2D_NODE_ID, METRICS_UI_IMGUI_ID,
-        RENDER_UI_SYSTEM_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
+        RENDER_UI_SYSTEM_ID, UNIT_CUBE_IND_BUFFER_ID, UNIT_CUBE_VRT_BUFFER_ID,
+        UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
     },
+    renderer::buffer::Vertex3D,
     sources::{
         metrics::{EngineMetrics, SystemReporter},
         schedule::{LocalReporterSystem, StatelessSystem, SubSchedule},
@@ -21,12 +23,12 @@ use crate::{
     texture::Texture,
 };
 
+use super::systems::{graph::*, ui::*};
+
 use self::{
     node::{NodeBuilder, NodeBuilderTrait, RenderNode},
     target::RenderTarget,
 };
-
-use super::systems::{graph::*, ui::*};
 
 pub mod node;
 pub mod target;
@@ -194,6 +196,8 @@ impl GraphBuilder {
             IndexBuffer::new(&[0, 2, 1, 3, 2, 0], &device),
         );
 
+        let unit_cube_buffers = unit_cube_buffers(&device);
+
         debug!("loading common buffers");
         let mut common_buffers: HashMap<Uuid, Arc<(wgpu::Buffer, u32)>> = HashMap::new();
         common_buffers.insert(
@@ -203,6 +207,14 @@ impl GraphBuilder {
         common_buffers.insert(
             Uuid::from_str(UNIT_SQUARE_IND_BUFFER_ID).unwrap(),
             Arc::clone(&unit_square_buffers.1.buffer),
+        );
+        common_buffers.insert(
+            Uuid::from_str(UNIT_CUBE_VRT_BUFFER_ID).unwrap(),
+            Arc::clone(&unit_cube_buffers.0.buffer),
+        );
+        common_buffers.insert(
+            Uuid::from_str(UNIT_CUBE_IND_BUFFER_ID).unwrap(),
+            Arc::clone(&unit_cube_buffers.1.buffer),
         );
 
         // Build all NodeStates; each render node's system has this internal state,
@@ -341,4 +353,171 @@ impl GraphBuilder {
             })
             .collect::<Vec<Uuid>>()
     }
+}
+
+fn unit_cube_buffers(device: &wgpu::Device) -> (VertexBuffer, IndexBuffer) {
+    (
+        VertexBuffer::new_3d(
+            "unit_cube",
+            &[
+                Vertex3D {
+                    position: [-0.5, -0.5, -0.5],
+                    uvs: [0.0, 0.0],
+                },
+                Vertex3D {
+                    position: [0.5, -0.5, -0.5],
+                    uvs: [1.0, 0.0],
+                },
+                Vertex3D {
+                    position: [0.5, 0.5, -0.5],
+                    uvs: [1.0, 1.0],
+                },
+                Vertex3D {
+                    position: [0.5, 0.5, -0.5],
+                    uvs: [1.0, 1.0],
+                },
+                Vertex3D {
+                    position: [-0.5, 0.5, -0.5],
+                    uvs: [0.0, 1.0],
+                },
+                Vertex3D {
+                    position: [-0.5, -0.5, -0.5],
+                    uvs: [0.0, 0.0],
+                },
+                // ------ //
+                Vertex3D {
+                    position: [-0.5, -0.5, 0.5],
+                    uvs: [0.0, 0.0],
+                },
+                Vertex3D {
+                    position: [0.5, -0.5, 0.5],
+                    uvs: [1.0, 0.0],
+                },
+                Vertex3D {
+                    position: [0.5, 0.5, 0.5],
+                    uvs: [1.0, 1.0],
+                },
+                Vertex3D {
+                    position: [0.5, 0.5, 0.5],
+                    uvs: [1.0, 1.0],
+                },
+                Vertex3D {
+                    position: [-0.5, 0.5, 0.5],
+                    uvs: [0.0, 1.0],
+                },
+                Vertex3D {
+                    position: [-0.5, -0.5, 0.5],
+                    uvs: [0.0, 0.0],
+                },
+                // ------ //
+                Vertex3D {
+                    position: [-0.5, 0.5, 0.5],
+                    uvs: [1.0, 0.0],
+                },
+                Vertex3D {
+                    position: [-0.5, 0.5, -0.5],
+                    uvs: [1.0, 1.0],
+                },
+                Vertex3D {
+                    position: [-0.5, -0.5, -0.5],
+                    uvs: [0.0, 1.0],
+                },
+                Vertex3D {
+                    position: [-0.5, -0.5, -0.5],
+                    uvs: [0.0, 1.0],
+                },
+                Vertex3D {
+                    position: [-0.5, -0.5, 0.5],
+                    uvs: [0.0, 0.0],
+                },
+                Vertex3D {
+                    position: [-0.5, 0.5, 0.5],
+                    uvs: [1.0, 0.0],
+                },
+                // ------ //
+                Vertex3D {
+                    position: [0.5, 0.5, 0.5],
+                    uvs: [1.0, 0.0],
+                },
+                Vertex3D {
+                    position: [0.5, 0.5, -0.5],
+                    uvs: [1.0, 1.0],
+                },
+                Vertex3D {
+                    position: [0.5, -0.5, -0.5],
+                    uvs: [0.0, 1.0],
+                },
+                Vertex3D {
+                    position: [0.5, -0.5, -0.5],
+                    uvs: [0.0, 1.0],
+                },
+                Vertex3D {
+                    position: [0.5, -0.5, 0.5],
+                    uvs: [0.0, 0.0],
+                },
+                Vertex3D {
+                    position: [0.5, 0.5, 0.5],
+                    uvs: [1.0, 0.0],
+                },
+                // ------ //
+                Vertex3D {
+                    position: [-0.5, -0.5, -0.5],
+                    uvs: [0.0, 1.0],
+                },
+                Vertex3D {
+                    position: [0.5, -0.5, -0.5],
+                    uvs: [1.0, 1.0],
+                },
+                Vertex3D {
+                    position: [0.5, -0.5, 0.5],
+                    uvs: [1.0, 0.0],
+                },
+                Vertex3D {
+                    position: [0.5, -0.5, 0.5],
+                    uvs: [1.0, 0.0],
+                },
+                Vertex3D {
+                    position: [-0.5, -0.5, 0.5],
+                    uvs: [0.0, 0.0],
+                },
+                Vertex3D {
+                    position: [-0.5, -0.5, -0.5],
+                    uvs: [0.0, 1.0],
+                },
+                // ------ //
+                Vertex3D {
+                    position: [-0.5, 0.5, -0.5],
+                    uvs: [0.0, 1.0],
+                },
+                Vertex3D {
+                    position: [0.5, 0.5, -0.5],
+                    uvs: [1.0, 1.0],
+                },
+                Vertex3D {
+                    position: [0.5, 0.5, 0.5],
+                    uvs: [1.0, 0.0],
+                },
+                Vertex3D {
+                    position: [0.5, 0.5, 0.5],
+                    uvs: [1.0, 0.0],
+                },
+                Vertex3D {
+                    position: [-0.5, 0.5, 0.5],
+                    uvs: [0.0, 0.0],
+                },
+                Vertex3D {
+                    position: [-0.5, 0.5, -0.5],
+                    uvs: [0.0, 1.0],
+                },
+            ],
+            device,
+        ),
+        IndexBuffer::new(
+            &[
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+                23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+            ],
+            device,
+        ),
+    )
 }

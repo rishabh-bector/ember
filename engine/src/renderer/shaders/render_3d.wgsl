@@ -47,29 +47,20 @@ struct VertexOutput {
     [[location(1)]] world_pos: vec3<f32>;
 };
 
-fn multiply_vec4_as_mat2(in: vec2<f32>, mat2: vec4<f32>) -> vec2<f32> {
-    return vec2<f32>(
-        mat2.r*in.x+mat2.b*in.x, 
-        mat2.g*in.y+mat2.a*in.y, 
-    );
-} 
-
-fn snap2grid(in: vec2<f32>, grid_size: i32) -> vec2<f32> {
-    return vec2<f32>(f32(i32(in.x/f32(grid_size))*grid_size), f32(i32(in.y/f32(grid_size))*grid_size));
-}
-
 [[stage(vertex)]]
 fn main(
     in: VertexInput,
 ) -> VertexOutput {
-    var world_space: vec2<f32> = in.position * render_2d_uniforms.model.zw + render_2d_uniforms.model.xy;
+    //var world_space: vec2<f32> = in.position * render_3d_uniforms.model.zw + render_3d_uniforms.model.xy;
     // var snapped: vec2<f32> = vec2<f32>(round(world_space.x), round(world_space.y));
-    var camera_space: vec2<f32> = snap2grid(world_space + camera_uniforms.view.xy, i32(1)) / camera_uniforms.view.zw;
+    //var camera_space: vec2<f32> = snap2grid(world_space + camera_uniforms.view.xy, i32(1)) / camera_uniforms.view.zw;
+
+    var some_space: vec4<f32> = render_3d_uniforms.model * vec4<f32>(in.position, 1.0);
 
     var out: VertexOutput;
     out.uvs = in.uvs;
-    out.clip_position = vec4<f32>(camera_space, 0.0, 1.0);
-    out.world_pos = world_space;
+    out.clip_position = some_space; //vec4<f32>(camera_space, 0.0, 1.0);
+    out.world_pos = some_space.xyz;
 
     return out;
 }
@@ -88,18 +79,17 @@ fn point_light_2d(pos: vec2<f32>, light: vec4<f32>) -> f32 {
 }
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    var world_pos: vec2<f32> = in.world_pos;
-    
+fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {    
     var sample_texture: vec4<f32> = textureSample(texture0, sampler0, in.uvs);
-    var sample_final: vec4<f32> = (render_2d_uniforms.color * render_2d_uniforms.mix) + ((1.0 - render_2d_uniforms.mix) * sample_texture);
+    var sample_final: vec4<f32> = (render_3d_uniforms.color * render_3d_uniforms.mix) + ((1.0 - render_3d_uniforms.mix) * sample_texture);
 
-    var lighting_0: f32 = point_light_2d(world_pos.xy, light_uniforms.light_0);
-    var lighting_1: f32 = point_light_2d(world_pos.xy, light_uniforms.light_1);
-    var lighting_2: f32 = point_light_2d(world_pos.xy, light_uniforms.light_2);
-    var lighting_3: f32 = point_light_2d(world_pos.xy, light_uniforms.light_3);
-    var lighting_4: f32 = point_light_2d(world_pos.xy, light_uniforms.light_4);
-    var lighting: f32 = lighting_0 + lighting_1 + lighting_2 + lighting_3 + lighting_4;
+    // var lighting_0: f32 = point_light_2d(world_pos.xy, light_uniforms.light_0);
+    // var lighting_1: f32 = point_light_2d(world_pos.xy, light_uniforms.light_1);
+    // var lighting_2: f32 = point_light_2d(world_pos.xy, light_uniforms.light_2);
+    // var lighting_3: f32 = point_light_2d(world_pos.xy, light_uniforms.light_3);
+    // var lighting_4: f32 = point_light_2d(world_pos.xy, light_uniforms.light_4);
+    // var lighting: f32 = lighting_0 + lighting_1 + lighting_2 + lighting_3 + lighting_4;
+    var lighting: f32 = 1.0;
 
     return vec4<f32>(sample_final.rgb * lighting, 1.0);
 }

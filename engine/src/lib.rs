@@ -350,6 +350,7 @@ impl EngineBuilder {
         info!("building render graph");
         let mut graph_schedule = SubSchedule::new();
         let (render_graph, metrics) = GraphBuilder::new()
+            .with_node(node_2d_forward_instance)
             .with_master_node(node_3d_forward_basic)
             .with_ui_master()
             .build(

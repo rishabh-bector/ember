@@ -35,6 +35,21 @@ impl BufferMode {
         }
         false
     }
+
+    pub fn is_dynamic(&self) -> bool {
+        if let BufferMode::Dynamic(_) = &self {
+            return true;
+        }
+        false
+    }
+
+    pub fn limit(&self) -> u32 {
+        match &self {
+            BufferMode::Single => 1,
+            BufferMode::Dynamic(l) => *l,
+            BufferMode::Instance(l) => *l,
+        }
+    }
 }
 
 pub struct DynamicOffsets {
@@ -268,12 +283,11 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
 
         let entries: Vec<wgpu::BindGroupLayoutEntry> = (0..buffer_states.len())
             .map(|i| {
-                let has_dynamic_offset = buffer_states[i].max_elements != 1;
-                let min_binding_size = NonZeroU64::new(match has_dynamic_offset {
-                    false => buffer_states[i].element_size as u64,
-                    true => DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE,
-                })
-                .unwrap();
+                let has_dynamic_offset = buffer_states[i].mode.is_dynamic();
+                let min_binding_size = match has_dynamic_offset {
+                    false => None, // buffer_states[i].element_size as u64,
+                    true => Some(NonZeroU64::new(DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE)).unwrap(),
+                };
 
                 wgpu::BindGroupLayoutEntry {
                     binding: i as u32,
@@ -281,7 +295,7 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset,
-                        min_binding_size: Some(min_binding_size),
+                        min_binding_size,
                     },
                     count: None,
                 }
@@ -300,15 +314,15 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
                 entries: &(0..buffer_states.len())
                     .map(|i| {
                         let mut buffer_binding = buffer_states[i].buffer.as_entire_buffer_binding();
-                        let has_dynamic_offset = buffer_states[i].max_elements != 1;
+                        let has_dynamic_offset = buffer_states[i].mode.is_dynamic();
 
-                        buffer_binding.size = Some(
-                            NonZeroU64::new(match has_dynamic_offset {
-                                false => buffer_states[i].element_size as u64,
-                                true => DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE,
-                            })
-                            .unwrap(),
-                        );
+                        // buffer_binding.size = Some(
+                        //     NonZeroU64::new(match has_dynamic_offset {
+                        //         false => buffer_states[i].element_size as u64,
+                        //         true => DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE,
+                        //     })
+                        //     .unwrap(),
+                        // );
 
                         wgpu::BindGroupEntry {
                             binding: i as u32,
@@ -324,7 +338,10 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
             dynamic_offsets: DynamicOffsets {
                 state: std::iter::repeat(0).take(buffer_states.len()).collect(),
                 sizes: buffer_states.iter().map(|s| s.element_size).collect(),
-                limits: buffer_states.iter().map(|s| s.max_elements).collect(),
+                limits: buffer_states
+                    .iter()
+                    .map(|s| s.mode.limit() as u64)
+                    .collect(),
             },
             default_state: GroupState {
                 buffers: Arc::new(buffer_states.into_iter().map(|s| s.buffer).collect()),
@@ -358,15 +375,11 @@ impl<N> GroupBuilder for UniformGroupBuilder<N> {
     }
 }
 
-pub trait SingleStateBuilder {
-    fn single_state(&self, device: &wgpu::Device) -> Result<GroupState>;
-}
-
-impl<N> SingleStateBuilder for UniformGroupBuilder<N>
+impl<N> UniformGroupBuilder<N>
 where
     N: Send + Sync + 'static,
 {
-    fn single_state(&self, device: &wgpu::Device) -> Result<GroupState> {
+    pub fn single_state(&self, device: &wgpu::Device) -> Result<GroupState> {
         debug!(
             "UniformGroupBuilder: new state {} with {} bind entries",
             type_name::<N>(),
@@ -393,20 +406,27 @@ where
             label: Some(&format!("uniform_bind_group_layout: {}", type_name::<N>())),
         });
 
-        let bind_group = Some(Arc::new(
+        let bind_group = Arc::new(
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &bind_group_layout,
                 entries: &(0..buffer_states.len())
                     .map(|i| {
                         let mut buffer_binding = buffer_states[i].buffer.as_entire_buffer_binding();
-                        let has_dynamic_offset = buffer_states[i].max_elements != 1;
+                        let has_dynamic_offset = buffer_states[i].mode.is_dynamic();
 
-                        buffer_binding.size = Some(
-                            NonZeroU64::new(match has_dynamic_offset {
-                                false => buffer_states[i].element_size as u64,
-                                true => DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE,
-                            })
-                            .unwrap(),
+                        // buffer_binding.size = Some(
+                        //     NonZeroU64::new(match has_dynamic_offset {
+                        //         false => buffer_states[i].element_size as u64,
+                        //         true => DEFAULT_DYNAMIC_BUFFER_MIN_BINDING_SIZE,
+                        //     })
+                        //     .unwrap(),
+                        // );
+
+                        info!(
+                            "pisswasser {} - {:?} {}",
+                            type_name::<N>(),
+                            buffer_binding.size,
+                            buffer_states[i].element_size
                         );
 
                         wgpu::BindGroupEntry {
@@ -417,22 +437,13 @@ where
                     .collect::<Vec<BindGroupEntry>>(),
                 label: Some(&format!("uniform_bind_group: {}", type_name::<N>())),
             }),
-        ));
+        );
 
         Ok(GroupState {
             buffers: Arc::new(buffer_states.into_iter().map(|s| s.buffer).collect()),
-            bind_group: Arc::clone(&self.bind_group.as_ref().unwrap()),
+            bind_group: Arc::clone(&bind_group),
             queue: Arc::clone(&self.dest.as_ref().unwrap().lock().unwrap().queue),
         })
-    }
-}
-
-impl<N> SingleStateBuilder for MutexGuard<'_, UniformGroupBuilder<N>>
-where
-    N: 'static,
-{
-    fn single_state(&self, device: &wgpu::Device) -> Result<GroupState> {
-        self.single_state(device)
     }
 }
 

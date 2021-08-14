@@ -42,8 +42,8 @@ where
 
 pub struct BufferState {
     pub buffer: wgpu::Buffer,
+    pub mode: BufferMode,
     pub element_size: u64,
-    pub max_elements: u64,
 }
 
 impl<U> UniformBuilder for GenericUniformBuilder<U>
@@ -68,7 +68,7 @@ where
                         usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
                     }),
                     element_size: source_size as u64,
-                    max_elements: 1,
+                    mode: BufferMode::Single,
                 }
             }
             BufferMode::Dynamic(max_elements) => {
@@ -83,7 +83,7 @@ where
                         usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
                     }),
                     element_size: source_size as u64,
-                    max_elements: max_elements as u64,
+                    mode: BufferMode::Dynamic(max_elements),
                 }
             }
             _ => {
@@ -103,7 +103,7 @@ where
                 usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
             }),
             element_size: source_size as u64,
-            max_elements: 1,
+            mode: BufferMode::Single,
         }
     }
 
