@@ -607,6 +607,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "example1"
+version = "0.1.0"
+dependencies = [
+ "ember",
+]
+
+[[package]]
 name = "external-memory"
 version = "0.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

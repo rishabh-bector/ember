@@ -10,11 +10,6 @@ extern crate vertex_traits;
 use anyhow::Result;
 use constants::DEFAULT_MAX_INSTANCES_PER_BUFFER;
 use legion::{Resources, Schedule, World};
-use renderer::{
-    graph::RenderGraph,
-    instance::{Instance, InstanceBuffer, InstanceGroup},
-};
-use sources::{metrics::EngineReporter, store::TextureStore};
 use std::{
     any::type_name,
     env,
@@ -24,7 +19,6 @@ use std::{
     time::{Duration, Instant},
 };
 use uuid::Uuid;
-
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -35,26 +29,29 @@ use winit_input_helper::WinitInputHelper;
 
 use crate::{
     constants::{
-        CAMERA_2D_BIND_GROUP_ID, DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH,
-        DEFAULT_TEXTURE_BUFFER_FORMAT, FORWARD_2D_NODE_ID, ID, INSTANCE_2D_NODE_ID,
-        LIGHTING_2D_BIND_GROUP_ID, RENDER_2D_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID,
+        CAMERA_2D_BIND_GROUP_ID, CAMERA_3D_BIND_GROUP_ID, DEFAULT_SCREEN_HEIGHT,
+        DEFAULT_SCREEN_WIDTH, DEFAULT_TEXTURE_BUFFER_FORMAT, FORWARD_2D_NODE_ID, ID,
+        INSTANCE_2D_NODE_ID, INSTANCE_3D_NODE_ID, LIGHTING_2D_BIND_GROUP_ID,
+        RENDER_2D_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID, RENDER_3D_BIND_GROUP_ID,
     },
     renderer::{
-        buffer::*,
-        graph::GraphBuilder,
-        node::*,
+        buffer::{instance::*, *},
+        graph::{
+            node::{NodeBuilder, ShaderSource},
+            GraphBuilder, RenderGraph,
+        },
         systems::*,
         uniform::{generic::GenericUniformBuilder, group::UniformGroup},
         *,
     },
     sources::{
-        camera::Camera2D,
-        metrics::EngineMetrics,
+        camera::{Camera2D, Camera3D},
+        metrics::{EngineMetrics, EngineReporter},
         schedule::{Schedulable, SubSchedule},
-        store::TextureStoreBuilder,
+        store::{TextureGroup, TextureStore, TextureStoreBuilder},
         ui::UI,
     },
-    systems::{camera_2d::*, lighting_2d::*, physics_2d::*},
+    systems::{camera_2d::*, camera_3d::*, lighting_2d::*, physics_2d::*},
 };
 
 pub fn engine() -> EngineBuilder {
@@ -179,10 +176,6 @@ impl EngineBuilder {
     pub fn default(self) -> Result<(Engine, EventLoop<()>)> {
         pretty_env_logger::init();
         info!("building engine");
-        // panic!(
-        //     "{}",
-        //     std::mem::size_of::<render_2d::forward_instance::Render2DInstance>()
-        // );
 
         let base_dir = option_env!("CARGO_MANIFEST_DIR").map_or_else(
             || {
@@ -238,7 +231,7 @@ impl EngineBuilder {
 
         info!("building uniforms");
 
-        let render_2d_dynamic_uniforms = Arc::new(Mutex::new(
+        let render_2d_dynamic_uniform_builder = Arc::new(Mutex::new(
             UniformGroup::<render_2d::forward_dynamic::Render2DForwardDynamicGroup>::builder()
                 .with_uniform(GenericUniformBuilder::from_source(
                     render_2d::forward_dynamic::Render2DForwardDynamicUniforms {
@@ -249,30 +242,41 @@ impl EngineBuilder {
                         __padding: [0.0; 23],
                     },
                 ))
-                .with_id(Uuid::from_str(RENDER_2D_BIND_GROUP_ID).unwrap())
+                .with_id(ID(RENDER_2D_BIND_GROUP_ID))
                 .mode_instance(),
         ));
 
-        let _render_2d_instance_uniforms = Arc::new(Mutex::new(
-            UniformGroup::<render_2d::forward_dynamic::Render2DForwardDynamicGroup>::builder()
+        let render_3d_uniform_builder = Arc::new(Mutex::new(
+            UniformGroup::<render_3d::forward_basic::Render3DForwardUniformGroup>::builder()
                 .with_uniform(GenericUniformBuilder::from_source(
-                    render_2d::forward_instance::Render2DInstance::default(),
+                    render_3d::forward_basic::Render3DUniforms {
+                        model: Default::default(),
+                        color: [1.0, 1.0, 1.0, 1.0],
+                        mix: 1.0,
+                    },
                 ))
-                .with_id(Uuid::from_str(RENDER_2D_BIND_GROUP_ID).unwrap())
-                .mode_instance(),
+                .with_id(ID(RENDER_3D_BIND_GROUP_ID)),
         ));
 
-        let camera_2d_uniforms = Arc::new(Mutex::new(
+        let camera_2d_uniform_builder = Arc::new(Mutex::new(
             UniformGroup::<Camera2DUniformGroup>::builder()
                 .with_uniform(GenericUniformBuilder::from_source(Camera2DUniforms {
                     view: [1.0, 1.0, 1.0, 1.0],
                     _padding: [0.0; 32],
                     __padding: [0.0; 28],
                 }))
-                .with_id(Uuid::from_str(CAMERA_2D_BIND_GROUP_ID).unwrap()),
+                .with_id(ID(CAMERA_2D_BIND_GROUP_ID)),
         ));
 
-        let lighting_2d_uniforms = Arc::new(Mutex::new(
+        let camera_3d_uniform_builder = Arc::new(Mutex::new(
+            UniformGroup::<Camera3DUniformGroup>::builder()
+                .with_uniform(GenericUniformBuilder::from_source(Camera3DUniforms {
+                    view_proj: Default::default(),
+                }))
+                .with_id(ID(CAMERA_3D_BIND_GROUP_ID)),
+        ));
+
+        let lighting_2d_uniform_builder = Arc::new(Mutex::new(
             UniformGroup::<Lighting2DUniformGroup>::builder()
                 .with_uniform(GenericUniformBuilder::from_source(Lighting2DUniforms {
                     light_0: Default::default(),
@@ -282,7 +286,7 @@ impl EngineBuilder {
                     light_4: Default::default(),
                     global: [0.1, 1.0, 1.0, 1.0],
                 }))
-                .with_id(Uuid::from_str(LIGHTING_2D_BIND_GROUP_ID).unwrap()),
+                .with_id(ID(LIGHTING_2D_BIND_GROUP_ID)),
         ));
 
         info!("building render graph nodes");
@@ -294,10 +298,10 @@ impl EngineBuilder {
         )
         .with_id(ID(FORWARD_2D_NODE_ID))
         .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
-        .with_texture_group(sources::store::TextureGroup::Render2D)
-        .with_shared_uniform_group(Arc::clone(&render_2d_dynamic_uniforms))
-        .with_shared_uniform_group(Arc::clone(&camera_2d_uniforms))
-        .with_shared_uniform_group(Arc::clone(&lighting_2d_uniforms))
+        .with_texture_group(TextureGroup::Render2D)
+        .with_shared_uniform_group(Arc::clone(&render_2d_dynamic_uniform_builder))
+        .with_shared_uniform_group(Arc::clone(&camera_2d_uniform_builder))
+        .with_shared_uniform_group(Arc::clone(&lighting_2d_uniform_builder))
         .with_system(render_2d::forward_dynamic::render_system);
 
         let node_2d_forward_instance = NodeBuilder::new(
@@ -308,10 +312,22 @@ impl EngineBuilder {
         .with_id(ID(INSTANCE_2D_NODE_ID))
         .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
         .with_vertex_layout(render_2d::forward_instance::RENDER2DINSTANCE_BUFFER_LAYOUT)
-        .with_texture_group(sources::store::TextureGroup::Render2D)
-        .with_shared_uniform_group(Arc::clone(&camera_2d_uniforms))
-        .with_shared_uniform_group(Arc::clone(&lighting_2d_uniforms))
+        .with_texture_group(TextureGroup::Render2D)
+        .with_shared_uniform_group(Arc::clone(&camera_2d_uniform_builder))
+        .with_shared_uniform_group(Arc::clone(&lighting_2d_uniform_builder))
         .with_system(render_2d::forward_instance::render_system);
+
+        let node_3d_forward_basic = NodeBuilder::new(
+            "render_3d_basic_node".to_owned(),
+            0,
+            ShaderSource::WGSL(include_str!("renderer/shaders/render_3d.wgsl").to_owned()),
+        )
+        .with_id(ID(INSTANCE_3D_NODE_ID))
+        .with_vertex_layout(VERTEX3D_BUFFER_LAYOUT)
+        .with_texture_group(TextureGroup::Render3D)
+        .with_shared_uniform_group(Arc::clone(&render_3d_uniform_builder))
+        .with_shared_uniform_group(Arc::clone(&camera_3d_uniform_builder))
+        .with_system(render_3d::forward_basic::render_system);
 
         info!("scheduling systems");
         let mut schedule = Schedule::builder();
@@ -319,12 +335,14 @@ impl EngineBuilder {
             // Main engine systems
             .add_system(physics_2d_system())
             .add_system(camera_2d_system())
+            .add_system(camera_3d_system())
             .add_system(lighting_2d_system())
+            .add_system(render_2d::forward_instance::attractor_system())
             // Uniform loading systems
             .flush()
-            .add_system(render_2d::forward_instance::attractor_system())
             .add_system(render_2d::forward_instance::load_system())
             .add_system(camera_2d_uniform_system())
+            .add_system(camera_3d_uniform_system())
             .add_system(lighting_2d_uniform_system());
 
         let metrics_ui = EngineMetrics::new();
@@ -332,7 +350,7 @@ impl EngineBuilder {
         info!("building render graph");
         let mut graph_schedule = SubSchedule::new();
         let (render_graph, metrics) = GraphBuilder::new()
-            .with_master_node(node_2d_forward_instance)
+            .with_master_node(node_3d_forward_basic)
             .with_ui_master()
             .build(
                 Arc::clone(&gpu_mut.device),
@@ -351,7 +369,12 @@ impl EngineBuilder {
         let schedule = schedule.build();
         resources.insert(Arc::clone(&render_graph));
 
-        let camera = Arc::new(Mutex::new(Camera2D::default(
+        let camera_2d = Arc::new(Mutex::new(Camera2D::default(
+            DEFAULT_SCREEN_WIDTH as f32,
+            DEFAULT_SCREEN_HEIGHT as f32,
+        )));
+
+        let camera_3d = Arc::new(Mutex::new(Camera3D::default(
             DEFAULT_SCREEN_WIDTH as f32,
             DEFAULT_SCREEN_HEIGHT as f32,
         )));
@@ -359,10 +382,11 @@ impl EngineBuilder {
         drop(gpu_mut);
         resources.insert(Arc::clone(&gpu));
         resources.insert(Arc::clone(&window));
-        resources.insert(Arc::clone(&camera));
+        resources.insert(Arc::clone(&camera_2d));
+        resources.insert(Arc::clone(&camera_3d));
+        resources.insert(Arc::clone(&render_3d_uniform_builder));
 
         info!("ready to start!");
-
         Ok((
             Engine {
                 reporter: EngineReporter::new(Arc::clone(&metrics.fps)),

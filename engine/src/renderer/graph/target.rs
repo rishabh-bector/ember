@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::{systems::render_2d::create_render_pass, texture::Texture};
+use crate::renderer::{buffer::texture::Texture, systems::render_2d::create_render_pass};
 
 pub enum RenderTarget {
     Empty,

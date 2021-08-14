@@ -17,3 +17,10 @@ pub struct Sprite {
     pub height: usize,
     pub pixels: Vec<u8>,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Position3D {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}

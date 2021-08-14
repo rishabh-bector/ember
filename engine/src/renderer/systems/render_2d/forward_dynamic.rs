@@ -52,7 +52,7 @@ pub fn load(
         base_uniforms.mut_ref().model = [pos.x, pos.y, render_2d.width, render_2d.height];
         base_uniforms.mut_ref().color = render_2d.color;
         base_uniforms.mut_ref().mix = render_2d.mix;
-        base_uniforms_group.load_dynamic_uniform(base_uniforms.as_bytes());
+        // base_uniforms_group.load_dynamic_uniform(base_uniforms.as_bytes());
         count += 1;
     }
     *base_uniforms_group.entity_count.lock().unwrap() = count;

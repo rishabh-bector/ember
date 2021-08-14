@@ -1,6 +1,8 @@
 use std::sync::Arc;
-
 use wgpu::util::DeviceExt;
+
+pub mod instance;
+pub mod texture;
 
 // Vertex Layout Builder
 // - Automatically generate vertex buffer layouts
@@ -39,11 +41,11 @@ pub struct VertexBuffer {
 }
 
 impl VertexBuffer {
-    pub fn new_2d(vertices: &[Vertex2D], device: &wgpu::Device) -> Self {
+    pub fn new_2d(name: &str, vertices: &[Vertex2D], device: &wgpu::Device) -> Self {
         VertexBuffer {
             buffer: Arc::new((
                 device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("2D Vertex Buffer"),
+                    label: Some(&format!("2D Vertex Buffer: {}", name)),
                     contents: bytemuck::cast_slice(vertices),
                     usage: wgpu::BufferUsage::VERTEX,
                 }),
@@ -53,11 +55,11 @@ impl VertexBuffer {
         }
     }
 
-    pub fn _new_3d(vertices: &[Vertex3D], device: &wgpu::Device) -> Self {
+    pub fn new_3d(name: &str, vertices: &[Vertex3D], device: &wgpu::Device) -> Self {
         VertexBuffer {
             buffer: Arc::new((
                 device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("3D Vertex Buffer"),
+                    label: Some(&format!("3D Vertex Buffer: {}", name)),
                     contents: bytemuck::cast_slice(vertices),
                     usage: wgpu::BufferUsage::VERTEX,
                 }),

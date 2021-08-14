@@ -6,11 +6,15 @@ use std::{
 };
 use uuid::Uuid;
 
-use super::{graph::NodeState, uniform::group::GroupResourceBuilder};
-use crate::sources::{
-    schedule::{NodeSystem, SubSchedulable},
-    store::{TextureGroup, TextureStore},
+use crate::{
+    renderer::uniform::group::GroupResourceBuilder,
+    sources::{
+        schedule::{NodeSystem, SubSchedulable},
+        store::{TextureGroup, TextureStore},
+    },
 };
+
+use super::NodeState;
 
 pub struct RenderNode {
     pub id: Uuid,

@@ -1,47 +1,5 @@
-use std::sync::Arc;
-
 use anyhow::*;
-
-// User defines GpuStateBuilder, specifying:
-//      - available uniform groups via builders (impl GroupBuilder + ResourceBuilder)
-//      - available texture groups via builders
-//
-// Builders are used to:
-//      - easily create GPU resources with generic type abstractions, without
-//        forcing the user to create boxes themselves
-//          - UniformGroups with custom types
-//
-//      - easily create fully defined (no optional fields) resources which
-//        depend on post-init resources, via the user passing everything
-//        into the top-level builder, GpuStateBuilder (eventually to be EngineBuilder)
-//
-// GpuStateBuilder.build():
-//
-//      - GpuStateBuilder inits device/queue from window
-//
-//      - GpuStateBuilder builds each pipeline builder:
-//
-//        Each PipelineBuilder needs to know all bind group layouts of each layout type:
-//          1. Uniform group layouts (shared by pipelines, one per <Resource>, like a Camera)
-//          2. Texture group layouts (shared by pipelines, one global with a texture + sampler)
-//
-//        Requirements, type 1:
-//          - Users must be able to create custom uniform groups, to pass into their custom pipelines
-//          - These can be of a custom type, and depend on general GPU resources, like wgpu::Device
-//
-//          Therefore, a user-defined builder is passed into GpuStateBuilder, which creates the
-//          uniform group, returns its data to PipelineBuilder and adds itself to legion resources
-//          container, so that the user can modify their uniform sources
-//
-//        Requirements, type 2:
-//          - Users must be able to pass in texture paths (or already-loaded images); and
-//          - Define pipelines which use texture bind group layouts; and
-//          - Access built textures
-//
-//          Textures are passed into GpuStateBuilder via the TextureStore, which is made with a list
-//          of textures (will eventually be an argument to EngineBuilder); TextureStore also creates
-//          the global bind group layout, used by the PipelineBuilders, builds textures, and becomes a
-//          resource.
+use std::sync::Arc;
 
 pub struct Texture {
     pub texture: wgpu::Texture,

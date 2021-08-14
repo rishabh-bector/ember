@@ -4,11 +4,7 @@ use winit::window::Window;
 
 pub mod buffer;
 pub mod graph;
-pub mod instance;
-pub mod node;
 pub mod systems;
-pub mod target;
-pub mod texture;
 pub mod uniform;
 
 pub struct GpuState {

@@ -55,11 +55,12 @@ pub fn lighting_2d(
 
 #[system]
 pub fn lighting_2d_uniform(
+    #[resource] queue: &Arc<wgpu::Queue>,
     #[resource] lighting_uniforms: &Arc<Mutex<GenericUniform<Lighting2DUniforms>>>,
     #[resource] lighting_uniforms_group: &Arc<Mutex<UniformGroup<Lighting2DUniformGroup>>>,
 ) {
-    lighting_uniforms_group
-        .lock()
-        .unwrap()
-        .load_buffer(0, lighting_uniforms.lock().unwrap().as_bytes());
+    lighting_uniforms.lock().unwrap().write_buffer(
+        &queue,
+        lighting_uniforms_group.lock().unwrap().default_buffer(0),
+    );
 }

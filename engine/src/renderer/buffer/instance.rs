@@ -1,4 +1,3 @@
-
 use std::{
     any::type_name,
     sync::{Arc, Mutex},
@@ -6,9 +5,7 @@ use std::{
 use uuid::Uuid;
 use wgpu::util::DeviceExt;
 
-
-
-use super::uniform::generic::BufferState;
+use crate::renderer::uniform::generic::BufferState;
 
 pub struct InstanceBuffer<I: Instance> {
     pub state: BufferState,

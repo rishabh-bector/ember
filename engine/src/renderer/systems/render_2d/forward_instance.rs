@@ -10,8 +10,10 @@ use crate::{
         UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
     },
     renderer::{
+        buffer::instance::{
+            Instance, InstanceBuffer, InstanceGroup, InstanceGroupBinder, InstanceId,
+        },
         graph::NodeState,
-        instance::{Instance, InstanceBuffer, InstanceGroup, InstanceGroupBinder, InstanceId},
     },
 };
 

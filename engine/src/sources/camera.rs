@@ -23,7 +23,7 @@ impl Camera3D {
         }
     }
 
-    pub fn build_matrices(&self) -> cgmath::Matrix4<f32> {
+    pub fn build_view_proj(&self) -> cgmath::Matrix4<f32> {
         let view = cgmath::Matrix4::look_at_rh(self.eye, self.target, self.up);
         let proj = cgmath::perspective(cgmath::Deg(self.fov), self.aspect, self.z_near, self.z_far);
         return OPENGL_TO_WGPU_MATRIX * proj * view;

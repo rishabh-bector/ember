@@ -16,6 +16,7 @@ pub struct Render2D {
     pub texture: Uuid,
     pub mix: f32,
 
+    // Todo: make these into a Size2D component
     pub width: f32,
     pub height: f32,
 

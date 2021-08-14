@@ -1,6 +1,9 @@
 use std::sync::{Arc, Mutex};
 
-use crate::renderer::{graph::RenderGraph, target::RenderTarget, GpuState};
+use crate::renderer::{
+    graph::{target::RenderTarget, RenderGraph},
+    GpuState,
+};
 
 #[system]
 pub fn begin_render_graph(

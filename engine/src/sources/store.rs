@@ -9,7 +9,7 @@ use std::{
 use uuid::Uuid;
 use wgpu::BindGroup;
 
-use crate::renderer::texture::Texture;
+use crate::renderer::buffer::texture::Texture;
 
 pub struct TextureStore {
     pub textures: HashMap<TextureGroup, HashMap<Uuid, Texture>>,
@@ -26,7 +26,7 @@ impl TextureStoreBuilder {
     pub fn new() -> Self {
         let mut to_load: HashMap<TextureGroup, Vec<(Uuid, String)>> = HashMap::new();
         to_load.insert(TextureGroup::Render2D, vec![]);
-        to_load.insert(TextureGroup::_Base3D, vec![]);
+        to_load.insert(TextureGroup::Render3D, vec![]);
         Self {
             to_load,
             load_group: TextureGroup::Render2D,
@@ -136,5 +136,5 @@ impl TextureStore {
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextureGroup {
     Render2D,
-    _Base3D,
+    Render3D,
 }

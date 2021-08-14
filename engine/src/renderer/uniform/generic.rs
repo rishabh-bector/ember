@@ -92,6 +92,21 @@ where
         };
     }
 
+    fn single_buffer(&self, device: &wgpu::Device) -> BufferState {
+        let source = &[self.source.unwrap()];
+        let source_bytes = bytemuck::cast_slice(source);
+        let source_size = source_bytes.len();
+        BufferState {
+            buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("Single Uniform Buffer: {}", type_name::<U>())),
+                contents: source_bytes,
+                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            }),
+            element_size: source_size as u64,
+            max_elements: 1,
+        }
+    }
+
     // Used by UniformGroupBuilder to store dynamic buffer info
     fn dynamic_size(&self) -> u64 {
         self.size as u64

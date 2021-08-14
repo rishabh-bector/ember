@@ -30,13 +30,14 @@ pub fn camera_2d(
 // TODO: Make this a macro?
 #[system]
 pub fn camera_2d_uniform(
+    #[resource] queue: &Arc<wgpu::Queue>,
     #[resource] camera_uniform: &Arc<Mutex<GenericUniform<Camera2DUniforms>>>,
     #[resource] camera_uniform_group: &Arc<Mutex<UniformGroup<Camera2DUniformGroup>>>,
 ) {
-    camera_uniform_group
-        .lock()
-        .unwrap()
-        .load_buffer(0, camera_uniform.lock().unwrap().as_bytes());
+    camera_uniform.lock().unwrap().write_buffer(
+        &queue,
+        camera_uniform_group.lock().unwrap().default_buffer(0),
+    );
 }
 
 pub fn _flatten(mat: Matrix2<f32>) -> [f32; 4] {

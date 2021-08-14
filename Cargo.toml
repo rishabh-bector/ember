@@ -4,5 +4,6 @@ members = [
     "engine",
     "vertex_traits",
     "vertex_layout_derive",
-    "examples/example0"
+    "examples/example0",
+    "examples/example1"
 ]

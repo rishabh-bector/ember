@@ -21,11 +21,15 @@ use crate::{
     texture::Texture,
 };
 
-use super::{
+use self::{
     node::{NodeBuilder, NodeBuilderTrait, RenderNode},
-    systems::{graph::*, ui::*},
     target::RenderTarget,
 };
+
+use super::systems::{graph::*, ui::*};
+
+pub mod node;
+pub mod target;
 
 pub enum UIMode {
     Disabled,
@@ -166,6 +170,7 @@ impl GraphBuilder {
 
         let unit_square_buffers = (
             VertexBuffer::new_2d(
+                "unit_square",
                 &[
                     Vertex2D {
                         position: [-1.0, -1.0],
