@@ -15,7 +15,7 @@ use std::{
     env,
     path::PathBuf,
     str::FromStr,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
 use uuid::Uuid;
@@ -71,7 +71,7 @@ pub struct Engine {
     graph: Arc<RenderGraph>,
     store: Arc<Mutex<TextureStore>>,
     window: Arc<Window>,
-    input: WinitInputHelper,
+    input: Arc<RwLock<WinitInputHelper>>,
     legion: LegionState,
     metrics: Arc<EngineMetrics>,
     reporter: EngineReporter,
@@ -137,15 +137,16 @@ impl Engine {
                 .unwrap()
                 .handle_event(context.io_mut(), &self.window, &event);
 
-            if self.input.update(&event) {
-                if self.input.key_pressed(VirtualKeyCode::Escape) || self.input.quit() {
+            if self.input.write().unwrap().update(&event) {
+                let input = self.input.read().unwrap();
+                if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
                     debug!("shutting down");
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
 
                 // Window resizing
-                if let Some(physical_size) = self.input.resolution() {
+                if let Some(physical_size) = input.resolution() {
                     let _ = &self.gpu.lock().unwrap().resize(physical_size);
                 }
 
@@ -370,21 +371,27 @@ impl EngineBuilder {
         info!("scheduling render graph");
         graph_schedule.schedule(&mut schedule);
         let schedule = schedule.build();
-        resources.insert(Arc::clone(&render_graph));
 
+        // resource
         let camera_2d = Arc::new(Mutex::new(Camera2D::default(
             DEFAULT_SCREEN_WIDTH as f32,
             DEFAULT_SCREEN_HEIGHT as f32,
         )));
 
+        // resource
         let camera_3d = Arc::new(Mutex::new(Camera3D::default(
             DEFAULT_SCREEN_WIDTH as f32,
             DEFAULT_SCREEN_HEIGHT as f32,
         )));
 
+        // resource
+        let input_helper = Arc::new(RwLock::new(WinitInputHelper::new()));
+
         drop(gpu_mut);
         resources.insert(Arc::clone(&gpu));
         resources.insert(Arc::clone(&window));
+        resources.insert(Arc::clone(&render_graph));
+        resources.insert(Arc::clone(&input_helper));
         resources.insert(Arc::clone(&camera_2d));
         resources.insert(Arc::clone(&camera_3d));
         resources.insert(Arc::clone(&render_3d_uniform_builder));
@@ -393,7 +400,7 @@ impl EngineBuilder {
         Ok((
             Engine {
                 reporter: EngineReporter::new(Arc::clone(&metrics.fps)),
-                input: WinitInputHelper::new(),
+                input: input_helper,
                 legion: LegionState {
                     world: World::default(),
                     schedule,

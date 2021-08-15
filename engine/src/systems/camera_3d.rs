@@ -1,5 +1,6 @@
-use cgmath::Matrix2;
-use std::sync::{Arc, Mutex};
+use cgmath::{Angle, EuclideanSpace, Matrix2, Rad};
+use std::sync::{Arc, Mutex, RwLock};
+use winit_input_helper::WinitInputHelper;
 
 use crate::{
     renderer::uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
@@ -18,11 +19,40 @@ pub struct Camera3DUniforms {
 pub fn camera_3d(
     #[resource] camera: &Arc<Mutex<Camera3D>>,
     #[resource] camera_uniform: &Arc<Mutex<GenericUniform<Camera3DUniforms>>>,
+    #[resource] input: &Arc<RwLock<WinitInputHelper>>,
 ) {
     let mut camera = camera.lock().unwrap();
     let mut camera_uniforms = camera_uniform.lock().unwrap();
+    let input = input.read().unwrap();
 
-    // camera.eye.x -= 0.1;
+    // Mouse movement
+    let (dx, dy) = input.mouse_diff();
+    camera.yaw += dx * camera.sensitivity;
+    camera.pitch += dy * camera.sensitivity;
+
+    if camera.pitch > 89.0 {
+        camera.pitch = 89.0;
+    } else if camera.pitch < -89.0 {
+        camera.pitch = -89.0;
+    }
+
+    camera.dir.x = Angle::cos(Rad(camera.yaw));
+
+    // WASD movement
+    if input.key_held(winit::event::VirtualKeyCode::W) {
+        let delta = (camera.dir * camera.speed).to_vec();
+        camera.pos += delta;
+    } else if input.key_held(winit::event::VirtualKeyCode::S) {
+        let delta = -(camera.dir * camera.speed).to_vec();
+        camera.pos += delta;
+    }
+    if input.key_held(winit::event::VirtualKeyCode::D) {
+        let delta = camera.dir.to_vec().cross(camera.up) * camera.speed;
+        camera.pos += delta;
+    } else if input.key_held(winit::event::VirtualKeyCode::A) {
+        let delta = -(camera.dir.to_vec().cross(camera.up) * camera.speed);
+        camera.pos += delta;
+    }
 
     let mat = camera.build_view_proj();
     camera_uniforms.mut_ref().view_proj = [

@@ -1,11 +1,22 @@
+use cgmath::EuclideanSpace;
+
 use crate::constants::OPENGL_TO_WGPU_MATRIX;
 
 pub struct Camera3D {
-    pub eye: cgmath::Point3<f32>,
-    pub target: cgmath::Point3<f32>,
+    pub speed: f32,
+    pub sensitivity: f32,
+
+    // State
+    pub pos: cgmath::Point3<f32>,
+    pub dir: cgmath::Point3<f32>,
+
+    pub pitch: f32,
+    pub yaw: f32,
+
     pub up: cgmath::Vector3<f32>,
     pub aspect: f32,
     pub fov: f32,
+
     pub z_near: f32,
     pub z_far: f32,
 }
@@ -13,8 +24,12 @@ pub struct Camera3D {
 impl Camera3D {
     pub fn default(screen_width: f32, screen_height: f32) -> Self {
         Self {
-            eye: (0.0, 1.0, 2.0).into(),
-            target: (0.0, 0.0, 0.0).into(),
+            speed: 0.3,
+            sensitivity: 0.1,
+            pos: (0.0, 1.0, 2.0).into(),
+            dir: (0.0, 0.0, -1.0).into(),
+            pitch: 0.0,
+            yaw: -90.0,
             up: cgmath::Vector3::unit_y(),
             aspect: screen_width / screen_height,
             fov: 45.0,
@@ -24,7 +39,7 @@ impl Camera3D {
     }
 
     pub fn build_view_proj(&self) -> cgmath::Matrix4<f32> {
-        let view = cgmath::Matrix4::look_at_rh(self.eye, self.target, self.up);
+        let view = cgmath::Matrix4::look_at_rh(self.pos, self.pos + self.dir.to_vec(), self.up);
         let proj = cgmath::perspective(cgmath::Deg(self.fov), self.aspect, self.z_near, self.z_far);
         return OPENGL_TO_WGPU_MATRIX * proj * view;
     }
