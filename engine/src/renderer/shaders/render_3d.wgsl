@@ -91,7 +91,5 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     // var lighting: f32 = lighting_0 + lighting_1 + lighting_2 + lighting_3 + lighting_4;
     var lighting: f32 = 1.0;
     
-    return vec4<f32>(1.0, 1.0, 0.0, 1.0);
-
-    // return vec4<f32>(sample_final.rgb * lighting, 1.0);
+    return vec4<f32>(sample_final.rgb * lighting, 1.0);
 }

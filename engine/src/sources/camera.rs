@@ -30,7 +30,7 @@ impl Camera3D {
             speed: 0.3,
             sensitivity: 0.0075,
             scroll_sensitivity: 0.5,
-            pos: (0.0, 1.0, 2.0).into(),
+            pos: (0.0, 0.0, 2.0).into(),
             dir: (0.0, 0.0, -1.0).into(),
             pitch: 0.0,
             yaw: -90.0,

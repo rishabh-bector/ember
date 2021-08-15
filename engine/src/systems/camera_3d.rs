@@ -29,13 +29,11 @@ pub fn camera_3d(
     let (dx, dy) = input.mouse_diff();
     camera.yaw += dx * camera.sensitivity;
     camera.pitch -= dy * camera.sensitivity;
-
     if camera.pitch > 89.0 {
         camera.pitch = 89.0;
     } else if camera.pitch < -89.0 {
         camera.pitch = -89.0;
     }
-
     camera.dir.x = Angle::cos(Rad(camera.yaw)) * Angle::cos(Rad(camera.pitch));
     camera.dir.y = Angle::sin(Rad(camera.pitch));
     camera.dir.z = Angle::sin(Rad(camera.yaw)) * Angle::cos(Rad(camera.pitch));

@@ -387,27 +387,27 @@ fn unit_cube_buffers(device: &wgpu::Device) -> (VertexBuffer, IndexBuffer) {
                 // ------ //
                 Vertex3D {
                     position: [-0.5, -0.5, 0.5],
-                    uvs: [0.0, 0.0],
+                    uvs: [0.0, 1.0],
                 },
                 Vertex3D {
                     position: [0.5, -0.5, 0.5],
+                    uvs: [1.0, 1.0],
+                },
+                Vertex3D {
+                    position: [0.5, 0.5, 0.5],
                     uvs: [1.0, 0.0],
                 },
                 Vertex3D {
                     position: [0.5, 0.5, 0.5],
-                    uvs: [1.0, 1.0],
-                },
-                Vertex3D {
-                    position: [0.5, 0.5, 0.5],
-                    uvs: [1.0, 1.0],
+                    uvs: [1.0, 0.0],
                 },
                 Vertex3D {
                     position: [-0.5, 0.5, 0.5],
-                    uvs: [0.0, 1.0],
+                    uvs: [0.0, 0.0],
                 },
                 Vertex3D {
                     position: [-0.5, -0.5, 0.5],
-                    uvs: [0.0, 0.0],
+                    uvs: [0.0, 1.0],
                 },
                 // ------ //
                 Vertex3D {

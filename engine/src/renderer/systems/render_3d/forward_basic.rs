@@ -50,7 +50,7 @@ impl Render3D {
             name: name.to_owned(),
             color: [1.0, 1.0, 1.0, 1.0],
             texture: ID(RENDER_3D_COMMON_TEXTURE_ID),
-            mix: 1.0,
+            mix: 0.0,
             uniforms: Default::default(),
             common_vertex_buffer: ID(UNIT_CUBE_VRT_BUFFER_ID),
             common_index_buffer: ID(UNIT_CUBE_IND_BUFFER_ID),
