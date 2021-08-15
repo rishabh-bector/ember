@@ -5,6 +5,7 @@ use crate::constants::OPENGL_TO_WGPU_MATRIX;
 pub struct Camera3D {
     pub speed: f32,
     pub sensitivity: f32,
+    pub scroll_sensitivity: f32,
 
     // State
     pub pos: cgmath::Point3<f32>,
@@ -19,13 +20,16 @@ pub struct Camera3D {
 
     pub z_near: f32,
     pub z_far: f32,
+
+    pub first: bool,
 }
 
 impl Camera3D {
     pub fn default(screen_width: f32, screen_height: f32) -> Self {
         Self {
             speed: 0.3,
-            sensitivity: 0.1,
+            sensitivity: 0.0075,
+            scroll_sensitivity: 0.5,
             pos: (0.0, 1.0, 2.0).into(),
             dir: (0.0, 0.0, -1.0).into(),
             pitch: 0.0,
@@ -35,6 +39,7 @@ impl Camera3D {
             fov: 45.0,
             z_near: 0.1,
             z_far: 100.0,
+            first: true,
         }
     }
 

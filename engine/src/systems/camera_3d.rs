@@ -28,7 +28,7 @@ pub fn camera_3d(
     // Mouse movement
     let (dx, dy) = input.mouse_diff();
     camera.yaw += dx * camera.sensitivity;
-    camera.pitch += dy * camera.sensitivity;
+    camera.pitch -= dy * camera.sensitivity;
 
     if camera.pitch > 89.0 {
         camera.pitch = 89.0;
@@ -36,7 +36,9 @@ pub fn camera_3d(
         camera.pitch = -89.0;
     }
 
-    camera.dir.x = Angle::cos(Rad(camera.yaw));
+    camera.dir.x = Angle::cos(Rad(camera.yaw)) * Angle::cos(Rad(camera.pitch));
+    camera.dir.y = Angle::sin(Rad(camera.pitch));
+    camera.dir.z = Angle::sin(Rad(camera.yaw)) * Angle::cos(Rad(camera.pitch));
 
     // WASD movement
     if input.key_held(winit::event::VirtualKeyCode::W) {
@@ -53,6 +55,9 @@ pub fn camera_3d(
         let delta = -(camera.dir.to_vec().cross(camera.up) * camera.speed);
         camera.pos += delta;
     }
+
+    // Scroll altitude
+    camera.pos.y += input.scroll_diff() * camera.scroll_sensitivity;
 
     let mat = camera.build_view_proj();
     camera_uniforms.mut_ref().view_proj = [
