@@ -112,7 +112,7 @@ pub fn load(
     let mut query = <(Entity, &Render3D, &Position3D)>::query().filter(!component::<GroupState>());
     query.for_each(world, |(entity, builder_3d, pos_3d)| {
         debug!(
-            "allocating uniform group state for new render_3d component: {}",
+            "allocating buffers for new render_3d component: {}",
             builder_3d.name
         );
         command_buffer.add_component(*entity, group_builder.single_state(device, queue).unwrap());
@@ -149,7 +149,7 @@ pub fn render(
         label: Some("Render3D Encoder"),
     });
     let mut pass = render_target
-        .create_render_pass(&mut encoder, "forward_render_3d", true)
+        .create_render_pass("forward_render_3d", &mut encoder, true)
         .unwrap();
     pass.set_pipeline(&node.pipeline);
 

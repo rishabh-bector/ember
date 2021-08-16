@@ -1,9 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crate::renderer::{
-    graph::{target::RenderTarget, RenderGraph},
-    GpuState,
-};
+use crate::renderer::{graph::RenderGraph, GpuState};
 
 #[system]
 pub fn begin_render_graph(
@@ -12,14 +9,15 @@ pub fn begin_render_graph(
 ) {
     debug!("running system begin_render_graph");
     let gpu = gpu.lock().unwrap();
-    *graph.swap_chain_target.lock().unwrap() =
-        RenderTarget::Master(Arc::new(gpu.swap_chain.get_current_frame().unwrap().output));
+    graph
+        .swap_chain_target
+        .lock()
+        .unwrap()
+        .set_swap_chain(Arc::new(gpu.swap_chain.get_current_frame().unwrap().output));
 }
 
 #[system]
 pub fn end_render_graph(#[resource] graph: &Arc<RenderGraph>) {
     debug!("running system end_render_graph");
-    // release lock on swap chain so that buffer can
-    // be drawn to window
-    *graph.swap_chain_target.lock().unwrap() = RenderTarget::Empty;
+    graph.swap_chain_target.lock().unwrap().release_swap_chain();
 }

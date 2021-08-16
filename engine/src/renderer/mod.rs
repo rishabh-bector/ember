@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use winit::window::Window;
+
+use self::graph::target::RenderTarget;
 
 pub mod buffer;
 pub mod graph;
@@ -8,10 +10,11 @@ pub mod systems;
 pub mod uniform;
 
 pub struct GpuState {
-    pub surface: wgpu::Surface,
     pub device: Arc<wgpu::Device>,
     pub queue: Arc<wgpu::Queue>,
     pub adapter: Arc<wgpu::Adapter>,
+
+    pub surface: wgpu::Surface,
     pub chain_descriptor: wgpu::SwapChainDescriptor,
     pub swap_chain: wgpu::SwapChain,
     pub screen_size: (u32, u32),

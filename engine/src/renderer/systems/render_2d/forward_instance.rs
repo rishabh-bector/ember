@@ -183,7 +183,7 @@ pub fn render(
         label: Some("render_2d_forward_instance_encoder"),
     });
     let mut pass = render_target
-        .create_render_pass(&mut encoder, "render_2d_forward_instance_pass", true)
+        .create_render_pass("render_2d_forward_instance_pass", &mut encoder, true)
         .unwrap();
     pass.set_pipeline(&node.pipeline);
 

@@ -10,7 +10,7 @@ use ember::{
 // Ember example
 
 fn main() {
-    std::env::set_var("RUST_LOG", "debug");
+    std::env::set_var("RUST_LOG", "ember=debug");
     let (mut engine, event_loop) = ember::engine().default().unwrap();
 
     engine.world().push((

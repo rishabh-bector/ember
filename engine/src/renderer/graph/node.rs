@@ -25,6 +25,7 @@ pub struct RenderNode {
     pub pipeline: wgpu::RenderPipeline,
     pub shader_module: wgpu::ShaderModule,
     pub binder: PipelineBinder,
+    pub depth_buffer: bool,
 
     pub system: Arc<Box<dyn SubSchedulable>>,
 }
@@ -53,6 +54,7 @@ pub struct NodeBuilder {
     pub name: String,
     pub graph_inputs: u32,
     pub master: bool,
+    pub depth_buffer: bool,
 
     pub shader_source: ShaderSource,
     pub bind_groups: Vec<BindIndex>,
@@ -72,6 +74,7 @@ impl NodeBuilder {
             name: format!("{}_builder", &name),
             graph_inputs,
             master: false,
+            depth_buffer: false,
             shader_source: shader,
             bind_groups: vec![],
             vertex_buffer_layouts: vec![],
@@ -129,6 +132,11 @@ impl NodeBuilder {
         self.dest_id = id;
         self
     }
+
+    pub fn with_depth_buffer(mut self) -> Self {
+        self.depth_buffer = true;
+        self
+    }
 }
 
 impl NodeBuilderTrait for NodeBuilder {
@@ -145,6 +153,8 @@ impl NodeBuilderTrait for NodeBuilder {
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         texture_store: Arc<Mutex<TextureStore>>,
     ) -> Result<Arc<RenderNode>> {
+        debug!("building node: {}", self.dest_id);
+
         if let Some(node) = &self.dest {
             warn!("{}: this node has already been built; it is probably being referenced more than once in the graph; the existing node will be reused", &self.name);
             return Ok(Arc::clone(&node));
@@ -220,7 +230,19 @@ impl NodeBuilderTrait for NodeBuilder {
                 clamp_depth: false,
                 conservative: false,
             },
-            depth_stencil: None,
+            depth_stencil: match self.depth_buffer {
+                false => None,
+                true => {
+                    debug!("adding depth buffer to pipeline: {}", self.name);
+                    Some(wgpu::DepthStencilState {
+                        format: wgpu::TextureFormat::Depth32Float,
+                        depth_write_enabled: true,
+                        depth_compare: wgpu::CompareFunction::Less,
+                        stencil: wgpu::StencilState::default(),
+                        bias: wgpu::DepthBiasState::default(),
+                    })
+                }
+            },
             multisample: wgpu::MultisampleState {
                 count: 1,
                 mask: !0,
@@ -282,6 +304,7 @@ impl NodeBuilderTrait for NodeBuilder {
             graph_inputs: self.graph_inputs,
             system: Arc::clone(&self.system.as_ref().unwrap()),
             master: self.master,
+            depth_buffer: self.depth_buffer,
             binder,
             pipeline,
             shader_module,

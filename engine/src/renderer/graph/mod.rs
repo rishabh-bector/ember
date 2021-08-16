@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::{
     collections::HashMap,
     str::FromStr,
@@ -13,7 +13,7 @@ use crate::{
         METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID, UNIT_CUBE_IND_BUFFER_ID, UNIT_CUBE_VRT_BUFFER_ID,
         UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
     },
-    renderer::buffer::Vertex3D,
+    renderer::{buffer::Vertex3D, graph::target::DepthBuffer},
     sources::{
         metrics::{EngineMetrics, SystemReporter},
         schedule::{LocalReporterSystem, StatelessSystem, SubSchedule},
@@ -73,6 +73,8 @@ pub struct GraphBuilder {
     pub ui_mode: UIMode,
 }
 
+pub struct MasterDepthBuffer(DepthBuffer);
+
 impl GraphBuilder {
     pub fn new() -> GraphBuilder {
         Self {
@@ -125,12 +127,15 @@ impl GraphBuilder {
         window: &winit::window::Window,
         mut metrics_ui: EngineMetrics,
     ) -> Result<(Arc<RenderGraph>, Arc<EngineMetrics>)> {
+        if self.master_node.is_none() {
+            return Err(anyhow!("render graph requires a master node"));
+        }
+
         debug!("building render graph nodes");
         let nodes = self
             .node_builders
             .iter_mut()
             .map(|(id, builder)| {
-                debug!("building node: {}", builder.id());
                 let node = builder.build(
                     resources,
                     &device,
@@ -147,23 +152,46 @@ impl GraphBuilder {
         let node_targets = nodes
             .iter()
             .map(|(id, node)| {
+                let depth_buffer = match node.depth_buffer {
+                    false => None,
+                    true => {
+                        debug!("building depth buffer for {}", node.name);
+                        Some(Arc::new(DepthBuffer(Texture::depth_buffer(
+                            &format!("{}_depth_target", node.name),
+                            &device,
+                            (2160 as u32, 1350 as u32),
+                            wgpu::TextureFormat::Depth32Float,
+                        ))))
+                    }
+                };
                 Ok((
                     *id,
-                    Arc::new(Mutex::new(RenderTarget::Texture(Arc::new(Texture::blank(
-                        // TODO: Make actual config (I will, part of SHIP: EngineBuilder)
-                        (DEFAULT_SCREEN_WIDTH as u32, DEFAULT_SCREEN_HEIGHT as u32),
-                        &device,
-                        texture_format,
-                        texture_bind_group_layout,
-                        Some(&format!("{}_render_target", node.name)),
-                        true,
-                    )?)))),
+                    Arc::new(Mutex::new(match node.master {
+                        true => RenderTarget::empty_master(depth_buffer),
+                        false => RenderTarget::Texture {
+                            color_buffer: Arc::new(Texture::blank(
+                                // TODO: Make actual config (part of SHIP: EngineBuilder)
+                                (DEFAULT_SCREEN_WIDTH as u32, DEFAULT_SCREEN_HEIGHT as u32),
+                                &device,
+                                texture_format,
+                                texture_bind_group_layout,
+                                Some(&format!("{}_render_target", node.name)),
+                                true,
+                            )?),
+                            depth_buffer,
+                        },
+                    })),
                 ))
             })
             .collect::<Result<HashMap<Uuid, Arc<Mutex<RenderTarget>>>>>()?;
 
+        let swap_chain_target = Arc::clone(
+            &node_targets
+                .get(self.master_node.as_ref().unwrap())
+                .unwrap(),
+        );
+
         // Build UI if enabled
-        let swap_chain_target = Arc::new(Mutex::new(RenderTarget::Empty));
         let ui_target = match &self.ui_mode {
             UIMode::Disabled => Arc::new(Mutex::new(RenderTarget::Empty)),
             UIMode::Master => Arc::clone(&swap_chain_target),
@@ -238,16 +266,12 @@ impl GraphBuilder {
                                         .unwrap()
                                         .lock()
                                         .unwrap()
-                                        .bind_group()
+                                        .get_bind_group()
                                         .unwrap(),
                                 )
                             })
                             .collect::<Vec<Arc<wgpu::BindGroup>>>(),
-                        render_target: if node.master {
-                            Arc::clone(&swap_chain_target)
-                        } else {
-                            Arc::clone(&node_targets.get(&node_id).unwrap())
-                        },
+                        render_target: Arc::clone(&node_targets.get(&node_id).unwrap()),
                         // Cloned for now
                         common_buffers: common_buffers.clone(),
                         dyn_offset_state: nodes
@@ -256,7 +280,6 @@ impl GraphBuilder {
                             .binder
                             .dyn_offset_state
                             .clone(),
-
                         // Register all node systems with metrics, and
                         // give them a system reporter
                         reporter: metrics_ui.register_system_id(&node.name, *node_id),
@@ -264,11 +287,6 @@ impl GraphBuilder {
                 )
             })
             .collect();
-
-        // let reporter_forward_2d =
-        //     metrics_ui.register_system_id("forward_2d", ID(FORWARD_2D_NODE_ID));
-        // let reporter_render_ui =
-        //     metrics_ui.register_system_id("render_ui", ID(RENDER_UI_SYSTEM_ID));
 
         let ui_reporter = metrics_ui.register_system_id("render_ui", ID(RENDER_UI_SYSTEM_ID));
         let metrics_ui = Arc::new(metrics_ui);
@@ -293,17 +311,17 @@ impl GraphBuilder {
         debug!("scheduling render systems");
 
         // Request target from swap chain, store in graph
-        sub_schedule.add_boxed_stateless(Arc::new(Box::new(StatelessSystem::new(
+        sub_schedule.add_stateless(Arc::new(Box::new(StatelessSystem::new(
             begin_render_graph_system,
         ))));
         sub_schedule.flush();
 
         // Run all node systems except master
-        // sub_schedule.add_boxed(Arc::clone(
+        // sub_schedule.add_node(Arc::clone(
         //     &nodes.get(&self.node_builders[0].dest_id).unwrap().system,
         // ));
 
-        sub_schedule.add_boxed(
+        sub_schedule.add_node(
             Arc::clone(&nodes.get(&ID(FORWARD_3D_NODE_ID)).unwrap().system),
             node_states.get(&ID(FORWARD_3D_NODE_ID)).unwrap().to_owned(),
         );
@@ -311,16 +329,16 @@ impl GraphBuilder {
         sub_schedule.flush();
 
         // Run ui system
-        if let UIMode::Master = self.ui_mode {
-            sub_schedule.add_single_threaded_reporter(
-                Arc::new(Box::new(LocalReporterSystem::new(render_ui_system))),
-                ui_reporter,
-            );
-        }
+        // if let UIMode::Master = self.ui_mode {
+        //     sub_schedule.add_single_threaded_reporter(
+        //         Arc::new(Box::new(LocalReporterSystem::new(render_ui_system))),
+        //         ui_reporter,
+        //     );
+        // }
 
         // Release lock on swap chain, end of frame
         sub_schedule.flush();
-        sub_schedule.add_boxed_stateless(Arc::new(Box::new(StatelessSystem::new(
+        sub_schedule.add_stateless(Arc::new(Box::new(StatelessSystem::new(
             end_render_graph_system,
         ))));
 
@@ -360,31 +378,32 @@ fn unit_cube_buffers(device: &wgpu::Device) -> (VertexBuffer, IndexBuffer) {
         VertexBuffer::new_3d(
             "unit_cube",
             &[
+                // Back face //
                 Vertex3D {
-                    position: [-0.5, -0.5, -0.5],
+                    position: [0.5, 0.5, -0.5],
                     uvs: [0.0, 0.0],
                 },
                 Vertex3D {
                     position: [0.5, -0.5, -0.5],
-                    uvs: [1.0, 0.0],
-                },
-                Vertex3D {
-                    position: [0.5, 0.5, -0.5],
-                    uvs: [1.0, 1.0],
-                },
-                Vertex3D {
-                    position: [0.5, 0.5, -0.5],
-                    uvs: [1.0, 1.0],
-                },
-                Vertex3D {
-                    position: [-0.5, 0.5, -0.5],
                     uvs: [0.0, 1.0],
                 },
                 Vertex3D {
                     position: [-0.5, -0.5, -0.5],
+                    uvs: [1.0, 1.0],
+                },
+                Vertex3D {
+                    position: [-0.5, -0.5, -0.5],
+                    uvs: [1.0, 1.0],
+                },
+                Vertex3D {
+                    position: [-0.5, 0.5, -0.5],
+                    uvs: [1.0, 0.0],
+                },
+                Vertex3D {
+                    position: [0.5, 0.5, -0.5],
                     uvs: [0.0, 0.0],
                 },
-                // ------ //
+                // Front face //
                 Vertex3D {
                     position: [-0.5, -0.5, 0.5],
                     uvs: [0.0, 1.0],
@@ -409,14 +428,14 @@ fn unit_cube_buffers(device: &wgpu::Device) -> (VertexBuffer, IndexBuffer) {
                     position: [-0.5, -0.5, 0.5],
                     uvs: [0.0, 1.0],
                 },
-                // ------ //
+                // Left face //
                 Vertex3D {
                     position: [-0.5, 0.5, 0.5],
                     uvs: [1.0, 0.0],
                 },
                 Vertex3D {
                     position: [-0.5, 0.5, -0.5],
-                    uvs: [1.0, 1.0],
+                    uvs: [0.0, 0.0],
                 },
                 Vertex3D {
                     position: [-0.5, -0.5, -0.5],
@@ -428,38 +447,38 @@ fn unit_cube_buffers(device: &wgpu::Device) -> (VertexBuffer, IndexBuffer) {
                 },
                 Vertex3D {
                     position: [-0.5, -0.5, 0.5],
-                    uvs: [0.0, 0.0],
+                    uvs: [1.0, 1.0],
                 },
                 Vertex3D {
                     position: [-0.5, 0.5, 0.5],
                     uvs: [1.0, 0.0],
                 },
-                // ------ //
+                // Right face //
                 Vertex3D {
-                    position: [0.5, 0.5, 0.5],
-                    uvs: [1.0, 0.0],
-                },
-                Vertex3D {
-                    position: [0.5, 0.5, -0.5],
+                    position: [0.5, -0.5, -0.5],
                     uvs: [1.0, 1.0],
                 },
                 Vertex3D {
-                    position: [0.5, -0.5, -0.5],
-                    uvs: [0.0, 1.0],
+                    position: [0.5, 0.5, -0.5],
+                    uvs: [1.0, 0.0],
                 },
                 Vertex3D {
-                    position: [0.5, -0.5, -0.5],
-                    uvs: [0.0, 1.0],
-                },
-                Vertex3D {
-                    position: [0.5, -0.5, 0.5],
+                    position: [0.5, 0.5, 0.5],
                     uvs: [0.0, 0.0],
                 },
                 Vertex3D {
                     position: [0.5, 0.5, 0.5],
-                    uvs: [1.0, 0.0],
+                    uvs: [0.0, 0.0],
                 },
-                // ------ //
+                Vertex3D {
+                    position: [0.5, -0.5, 0.5],
+                    uvs: [0.0, 1.0],
+                },
+                Vertex3D {
+                    position: [0.5, -0.5, -0.5],
+                    uvs: [1.0, 1.0],
+                },
+                // Bottom face //
                 Vertex3D {
                     position: [-0.5, -0.5, -0.5],
                     uvs: [0.0, 1.0],
@@ -484,30 +503,30 @@ fn unit_cube_buffers(device: &wgpu::Device) -> (VertexBuffer, IndexBuffer) {
                     position: [-0.5, -0.5, -0.5],
                     uvs: [0.0, 1.0],
                 },
-                // ------ //
+                // Top face //
                 Vertex3D {
-                    position: [-0.5, 0.5, -0.5],
-                    uvs: [0.0, 1.0],
-                },
-                Vertex3D {
-                    position: [0.5, 0.5, -0.5],
+                    position: [0.5, 0.5, 0.5],
                     uvs: [1.0, 1.0],
                 },
                 Vertex3D {
-                    position: [0.5, 0.5, 0.5],
+                    position: [0.5, 0.5, -0.5],
                     uvs: [1.0, 0.0],
                 },
                 Vertex3D {
-                    position: [0.5, 0.5, 0.5],
-                    uvs: [1.0, 0.0],
-                },
-                Vertex3D {
-                    position: [-0.5, 0.5, 0.5],
+                    position: [-0.5, 0.5, -0.5],
                     uvs: [0.0, 0.0],
                 },
                 Vertex3D {
                     position: [-0.5, 0.5, -0.5],
+                    uvs: [0.0, 0.0],
+                },
+                Vertex3D {
+                    position: [-0.5, 0.5, 0.5],
                     uvs: [0.0, 1.0],
+                },
+                Vertex3D {
+                    position: [0.5, 0.5, 0.5],
+                    uvs: [1.0, 1.0],
                 },
             ],
             device,

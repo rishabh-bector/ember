@@ -116,6 +116,7 @@ impl Engine {
 
     pub fn start(mut self, event_loop: EventLoop<()>) {
         info!("starting engine");
+        self.window.set_cursor_visible(false);
 
         let metrics_last_updated = Arc::new(Mutex::new(Instant::now()));
         event_loop.run(move |event, _, control_flow| {
@@ -183,6 +184,7 @@ impl EngineBuilder {
                 .with_title("Hello World")
                 .with_inner_size(size)
                 .with_min_inner_size(size)
+                .with_max_inner_size(size)
                 .build(&event_loop)?
         });
 
@@ -329,6 +331,7 @@ impl EngineBuilder {
         .with_texture_group(TextureGroup::Render3D)
         .with_shared_uniform_group(Arc::clone(&render_3d_uniform_builder))
         .with_shared_uniform_group(Arc::clone(&camera_3d_uniform_builder))
+        .with_depth_buffer()
         .with_system(render_3d::forward_basic::render_system);
 
         info!("scheduling systems");

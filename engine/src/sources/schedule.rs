@@ -2,7 +2,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use legion::systems::{Builder as ScheduleBuilder, ParallelRunnable, Runnable};
 
-use crate::renderer::graph::NodeState;
+use crate::renderer::graph::{target::DepthBuffer, NodeState};
 
 use super::metrics::SystemReporter;
 
@@ -10,7 +10,7 @@ pub enum Step {
     Stateless {
         builder: Arc<Box<dyn Schedulable>>,
     },
-    System {
+    Node {
         builder: Arc<Box<dyn SubSchedulable>>,
         state: NodeState,
     },
@@ -33,28 +33,14 @@ impl SubSchedule {
         Self { steps: vec![] }
     }
 
-    pub fn add_system<
-        F: Fn(NodeState) -> S + Send + Sync + 'static,
-        S: ParallelRunnable + 'static,
-    >(
-        &mut self,
-        system: NodeSystem<F, S>,
-        state: NodeState,
-    ) {
-        self.steps.push(Step::System {
-            builder: Arc::new(Box::new(system)),
-            state,
-        });
-    }
-
-    pub fn add_boxed(&mut self, system: Arc<Box<dyn SubSchedulable>>, state: NodeState) {
-        self.steps.push(Step::System {
+    pub fn add_node(&mut self, system: Arc<Box<dyn SubSchedulable>>, state: NodeState) {
+        self.steps.push(Step::Node {
             builder: system,
             state,
         });
     }
 
-    pub fn add_boxed_stateless(&mut self, system: Arc<Box<dyn Schedulable>>) {
+    pub fn add_stateless(&mut self, system: Arc<Box<dyn Schedulable>>) {
         self.steps.push(Step::Stateless { builder: system });
     }
 
@@ -89,7 +75,7 @@ impl Schedulable for SubSchedule {
                 Step::Flush => {
                     schedule.flush();
                 }
-                Step::System { builder, state } => builder.schedule(schedule, state.clone()),
+                Step::Node { builder, state } => builder.schedule(schedule, state.clone()),
                 Step::Stateless { builder } => builder.schedule(schedule),
                 Step::Local { builder } => builder.schedule(schedule),
                 Step::LocalReporter { builder, state } => builder.schedule(schedule, state.clone()),

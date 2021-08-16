@@ -443,9 +443,8 @@ where
                 layout: &bind_group_layout,
                 entries: &(0..buffer_states.len())
                     .map(|i| {
-                        let mut buffer_binding = buffer_states[i].buffer.as_entire_buffer_binding();
-                        let has_dynamic_offset = buffer_states[i].mode.is_dynamic();
-
+                        // let mut buffer_binding = buffer_states[i].buffer.as_entire_buffer_binding();
+                        // let has_dynamic_offset = buffer_states[i].mode.is_dynamic();
                         // buffer_binding.size = Some(
                         //     NonZeroU64::new(match has_dynamic_offset {
                         //         false => buffer_states[i].element_size as u64,
@@ -453,17 +452,11 @@ where
                         //     })
                         //     .unwrap(),
                         // );
-
-                        info!(
-                            "pisswasser {} - {:?} {}",
-                            type_name::<N>(),
-                            buffer_binding.size,
-                            buffer_states[i].element_size
-                        );
-
                         wgpu::BindGroupEntry {
                             binding: i as u32,
-                            resource: wgpu::BindingResource::Buffer(buffer_binding),
+                            resource: wgpu::BindingResource::Buffer(
+                                buffer_states[i].buffer.as_entire_buffer_binding(),
+                            ),
                         }
                     })
                     .collect::<Vec<BindGroupEntry>>(),
