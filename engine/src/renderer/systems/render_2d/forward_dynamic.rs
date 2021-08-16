@@ -8,7 +8,7 @@ use crate::{
     components::Position2D,
     constants::{
         CAMERA_2D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID, RENDER_2D_BIND_GROUP_ID,
-        RENDER_2D_COMMON_TEXTURE_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
+        RENDER_2D_COMMON_TEXTURE_ID,
     },
     renderer::{
         graph::NodeState,
@@ -95,18 +95,19 @@ pub fn render(
         &[],
     );
 
-    pass.set_vertex_buffer(
-        0,
-        state.common_buffers[&ID(UNIT_SQUARE_VRT_BUFFER_ID)]
-            .0
-            .slice(..),
-    );
-    pass.set_index_buffer(
-        state.common_buffers[&ID(UNIT_SQUARE_IND_BUFFER_ID)]
-            .0
-            .slice(..),
-        wgpu::IndexFormat::Uint16,
-    );
+    // common buffers are no more!
+    // pass.set_vertex_buffer(
+    //     0,
+    //     state.common_buffers[&ID(UNIT_SQUARE_VRT_BUFFER_ID)]
+    //         .0
+    //         .slice(..),
+    // );
+    // pass.set_index_buffer(
+    //     state.common_buffers[&ID(UNIT_SQUARE_IND_BUFFER_ID)]
+    //         .0
+    //         .slice(..),
+    //     wgpu::IndexFormat::Uint16,
+    // );
 
     // Dynamic bindings
 
@@ -133,11 +134,11 @@ pub fn render(
             &dyn_offset_state,
         );
 
-        pass.draw_indexed(
-            0..state.common_buffers[&ID(UNIT_SQUARE_IND_BUFFER_ID)].1,
-            0,
-            0..1,
-        );
+        // pass.draw_indexed(
+        //     0..state.common_buffers[&ID(UNIT_SQUARE_IND_BUFFER_ID)].1,
+        //     0,
+        //     0..1,
+        // );
 
         for i in 0..dyn_offset_state.len() {
             dyn_offset_state[i] += group_info[i].0 as u32;

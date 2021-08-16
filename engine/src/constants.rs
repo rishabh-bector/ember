@@ -32,11 +32,10 @@ pub const METRICS_UI_IMGUI_ID: &str = "cb7550b5-e8a7-49b0-954a-c156f69db093";
 // Common textures
 pub const RENDER_2D_COMMON_TEXTURE_ID: &str = "8a22d465-7935-41e5-9e90-686ef5632c54";
 pub const RENDER_3D_COMMON_TEXTURE_ID: &str = "c5b9b417-e676-453b-8673-be2110924346";
-// Common shapes
-pub const UNIT_SQUARE_VRT_BUFFER_ID: &str = "6fd0eeb3-9847-4a26-9eec-370e9839cbd3";
-pub const UNIT_SQUARE_IND_BUFFER_ID: &str = "96743a38-58cf-4c9d-afad-565d434409aa";
-pub const UNIT_CUBE_VRT_BUFFER_ID: &str = "3e88d654-7c24-4f78-ac01-d4d6df681edb";
-pub const UNIT_CUBE_IND_BUFFER_ID: &str = "85603817-f080-4a3b-959f-c629da179da5";
+// Primitive meshes
+pub const PRIMITIVE_MESH_GROUP_ID: &str = "437b63d4-5c7d-49e9-958b-8f68b4931355";
+pub const UNIT_SQUARE_MESH_ID: &str = "6fd0eeb3-9847-4a26-9eec-370e9839cbd3";
+pub const UNIT_CUBE_MESH_ID: &str = "85603817-f080-4a3b-959f-c629da179da5";
 //
 ///
 

@@ -127,3 +127,8 @@ impl IndexBuffer {
         }
     }
 }
+
+pub struct Mesh {
+    pub vertices: VertexBuffer,
+    pub indices: IndexBuffer,
+}

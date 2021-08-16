@@ -9,11 +9,11 @@ use crate::{
     components::Position3D,
     constants::{
         CAMERA_2D_BIND_GROUP_ID, CAMERA_3D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID,
-        RENDER_2D_COMMON_TEXTURE_ID, RENDER_3D_COMMON_TEXTURE_ID, UNIT_CUBE_IND_BUFFER_ID,
-        UNIT_CUBE_VRT_BUFFER_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
+        RENDER_2D_COMMON_TEXTURE_ID, RENDER_3D_COMMON_TEXTURE_ID,
     },
     legion::IntoQuery,
     renderer::{
+        buffer::Mesh,
         graph::NodeState,
         uniform::{
             generic::GenericUniform,
@@ -23,6 +23,7 @@ use crate::{
             Uniform,
         },
     },
+    sources::primitives::unit_cube,
 };
 
 // Todo: go through all todo comments and make tickets for them
@@ -36,11 +37,6 @@ pub struct Render3D {
     pub texture: Uuid,
     pub mix: f32,
 
-    // Todo: make these into a "Geometry" component,
-    // with a global(?) store
-    pub common_vertex_buffer: Uuid,
-    pub common_index_buffer: Uuid,
-
     pub uniforms: Render3DUniforms,
 }
 
@@ -52,8 +48,6 @@ impl Render3D {
             texture: ID(RENDER_3D_COMMON_TEXTURE_ID),
             mix: 0.0,
             uniforms: Default::default(),
-            common_vertex_buffer: ID(UNIT_CUBE_VRT_BUFFER_ID),
-            common_index_buffer: ID(UNIT_CUBE_IND_BUFFER_ID),
         }
     }
 }
@@ -133,6 +127,7 @@ pub fn load(
 #[system]
 #[read_component(Render3D)]
 #[read_component(Position3D)]
+#[read_component(Mesh)]
 #[read_component(GroupState)]
 pub fn render(
     world: &mut SubWorld,
@@ -164,29 +159,15 @@ pub fn render(
     //     &[],
     // );
 
-    let mut query = <(&Render3D, &GroupState)>::query();
-    for (render_3d, group_state) in query.iter(world) {
+    let mut query = <(&Render3D, &Mesh, &GroupState)>::query();
+    for (render_3d, mesh, group_state) in query.iter(world) {
         pass.set_bind_group(0, &node.binder.texture_groups[&render_3d.texture], &[]);
         pass.set_bind_group(1, &group_state.bind_group, &[]);
 
-        pass.set_vertex_buffer(
-            0,
-            state.common_buffers[&render_3d.common_vertex_buffer]
-                .0
-                .slice(..),
-        );
-        pass.set_index_buffer(
-            state.common_buffers[&render_3d.common_index_buffer]
-                .0
-                .slice(..),
-            wgpu::IndexFormat::Uint16,
-        );
+        pass.set_vertex_buffer(0, mesh.vertices.buffer.0.slice(..));
+        pass.set_index_buffer(mesh.indices.buffer.0.slice(..), wgpu::IndexFormat::Uint16);
 
-        pass.draw_indexed(
-            0..state.common_buffers[&render_3d.common_index_buffer].1,
-            0,
-            0..1,
-        );
+        pass.draw_indexed(0..mesh.indices.buffer.1, 0, 0..1);
     }
 
     debug!("done recording; submitting render pass");

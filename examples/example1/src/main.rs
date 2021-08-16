@@ -20,6 +20,7 @@ fn main() {
             y: 0.0,
             z: 0.0,
         },
+        engine.registry.new_primitive(),
     ));
 
     engine.start(event_loop);

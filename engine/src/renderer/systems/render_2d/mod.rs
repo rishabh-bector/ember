@@ -1,9 +1,7 @@
 use std::str::FromStr;
 use uuid::Uuid;
 
-use crate::constants::{
-    ID, RENDER_2D_COMMON_TEXTURE_ID, UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
-};
+use crate::constants::{ID, RENDER_2D_COMMON_TEXTURE_ID, UNIT_SQUARE_MESH_ID};
 
 pub mod forward_dynamic;
 pub mod forward_instance;
@@ -20,8 +18,7 @@ pub struct Render2D {
     pub width: f32,
     pub height: f32,
 
-    pub common_vertex_buffer: Uuid,
-    pub common_index_buffer: Uuid,
+    pub mesh: Uuid,
 }
 
 impl Render2D {
@@ -37,8 +34,7 @@ impl Render2D {
             width,
             height,
             texture: Uuid::from_str(RENDER_2D_COMMON_TEXTURE_ID).unwrap(),
-            common_vertex_buffer: ID(UNIT_SQUARE_VRT_BUFFER_ID),
-            common_index_buffer: ID(UNIT_SQUARE_IND_BUFFER_ID),
+            mesh: ID(UNIT_SQUARE_MESH_ID),
         }
     }
 
@@ -50,8 +46,7 @@ impl Render2D {
             width,
             height,
             texture,
-            common_vertex_buffer: ID(UNIT_SQUARE_VRT_BUFFER_ID),
-            common_index_buffer: ID(UNIT_SQUARE_IND_BUFFER_ID),
+            mesh: ID(UNIT_SQUARE_MESH_ID),
         }
     }
 }

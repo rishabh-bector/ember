@@ -5,7 +5,13 @@ use std::{
 use uuid::Uuid;
 use wgpu::util::DeviceExt;
 
-use crate::renderer::uniform::{generic::BufferState, group::BufferMode};
+use crate::{
+    constants::ID,
+    renderer::{
+        buffer::Mesh,
+        uniform::{generic::BufferState, group::BufferMode},
+    },
+};
 
 pub struct InstanceBuffer<I: Instance> {
     pub state: BufferState,
@@ -48,15 +54,15 @@ where
 }
 
 // A group of components which can be rendered with one instanced draw call.
-// These share textures and vertex/index buffers.
+// These share textures and meshes.
 pub struct InstanceGroup<T: Instance> {
     pub id: u32,
-
     pub instances: Vec<T>,
     next_id: InstanceId,
 
     pub texture: Uuid,
-    pub geometry: (Uuid, Uuid),
+    pub mesh_group: Uuid,
+    pub mesh: Uuid,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -73,13 +79,14 @@ impl<T> InstanceGroup<T>
 where
     T: Instance,
 {
-    pub fn new(id: u32, texture: Uuid, geometry: (Uuid, Uuid)) -> Self {
+    pub fn new(id: u32, mesh_group: Uuid, mesh: Uuid, texture: Uuid) -> Self {
         Self {
             id,
             instances: vec![],
             next_id: InstanceId(id, 0),
+            mesh_group,
+            mesh,
             texture,
-            geometry,
         }
     }
 
@@ -103,7 +110,7 @@ pub trait InstanceGroupBinder {
     fn num_instances(&self) -> usize;
     fn buffer_bytes(&self) -> &[u8];
     fn texture(&self) -> Uuid;
-    fn geometry(&self) -> (Uuid, Uuid);
+    fn mesh(&self) -> (Uuid, Uuid);
 }
 
 impl<T> InstanceGroupBinder for InstanceGroup<T>
@@ -122,7 +129,7 @@ where
         self.texture
     }
 
-    fn geometry(&self) -> (Uuid, Uuid) {
-        self.geometry
+    fn mesh(&self) -> (Uuid, Uuid) {
+        (self.mesh_group, self.mesh)
     }
 }

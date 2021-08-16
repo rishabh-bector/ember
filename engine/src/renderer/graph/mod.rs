@@ -10,14 +10,13 @@ use crate::{
     buffer::{IndexBuffer, Vertex2D, VertexBuffer},
     constants::{
         DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, FORWARD_3D_NODE_ID, ID, INSTANCE_2D_NODE_ID,
-        METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID, UNIT_CUBE_IND_BUFFER_ID, UNIT_CUBE_VRT_BUFFER_ID,
-        UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
+        METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID,
     },
     renderer::{buffer::Vertex3D, graph::target::DepthBuffer},
     sources::{
         metrics::{EngineMetrics, SystemReporter},
+        registry::Registry,
         schedule::{LocalReporterSystem, StatelessSystem, SubSchedule},
-        store::Registry,
         ui::{ImguiWindow, UIBuilder},
     },
     texture::Texture,
@@ -47,8 +46,7 @@ pub struct NodeState {
 
     // uniform group id -> [(element size, buffer size)]
     pub dyn_offset_state: HashMap<Uuid, (Arc<Mutex<u64>>, Vec<(u64, u64)>)>,
-    pub common_buffers: HashMap<Uuid, Arc<(wgpu::Buffer, u32)>>,
-
+    // pub common_buffers: HashMap<Uuid, Arc<(wgpu::Buffer, u32)>>,
     pub reporter: SystemReporter,
 }
 
@@ -121,7 +119,7 @@ impl GraphBuilder {
         queue: Arc<wgpu::Queue>,
         resources: &mut legion::Resources,
         sub_schedule: &mut SubSchedule,
-        registry: Arc<Registry>,
+        registry: &Registry,
         window: &winit::window::Window,
         mut metrics_ui: EngineMetrics,
     ) -> Result<(Arc<RenderGraph>, Arc<EngineMetrics>)> {
@@ -134,12 +132,7 @@ impl GraphBuilder {
             .node_builders
             .iter_mut()
             .map(|(id, builder)| {
-                let node = builder.build(
-                    resources,
-                    &device,
-                    Arc::clone(&queue),
-                    Arc::clone(&registry),
-                )?;
+                let node = builder.build(resources, &device, Arc::clone(&queue), registry)?;
                 Ok((*id, node))
             })
             .collect::<Result<HashMap<Uuid, Arc<RenderNode>>>>()?;
@@ -195,52 +188,52 @@ impl GraphBuilder {
             UIMode::Node(id) => Arc::clone(&node_targets.get(id).unwrap()),
         };
 
-        let unit_square_buffers = (
-            VertexBuffer::new_2d(
-                "unit_square",
-                &[
-                    Vertex2D {
-                        position: [-1.0, -1.0],
-                        uvs: [0.0, 1.0],
-                    },
-                    Vertex2D {
-                        position: [-1.0, 1.0],
-                        uvs: [0.0, 0.0],
-                    },
-                    Vertex2D {
-                        position: [1.0, 1.0],
-                        uvs: [1.0, 0.0],
-                    },
-                    Vertex2D {
-                        position: [1.0, -1.0],
-                        uvs: [1.0, 1.0],
-                    },
-                ],
-                &device,
-            ),
-            IndexBuffer::new(&[0, 2, 1, 3, 2, 0], &device),
-        );
+        // let unit_square_buffers = (
+        //     VertexBuffer::new_2d(
+        //         "unit_square",
+        //         &[
+        //             Vertex2D {
+        //                 position: [-1.0, -1.0],
+        //                 uvs: [0.0, 1.0],
+        //             },
+        //             Vertex2D {
+        //                 position: [-1.0, 1.0],
+        //                 uvs: [0.0, 0.0],
+        //             },
+        //             Vertex2D {
+        //                 position: [1.0, 1.0],
+        //                 uvs: [1.0, 0.0],
+        //             },
+        //             Vertex2D {
+        //                 position: [1.0, -1.0],
+        //                 uvs: [1.0, 1.0],
+        //             },
+        //         ],
+        //         &device,
+        //     ),
+        //     IndexBuffer::new(&[0, 2, 1, 3, 2, 0], &device),
+        // );
 
-        let unit_cube_buffers = unit_cube_buffers(&device);
+        // let unit_cube_buffers = unit_cube_buffers(&device);
 
-        debug!("loading common buffers");
-        let mut common_buffers: HashMap<Uuid, Arc<(wgpu::Buffer, u32)>> = HashMap::new();
-        common_buffers.insert(
-            Uuid::from_str(UNIT_SQUARE_VRT_BUFFER_ID).unwrap(),
-            Arc::clone(&unit_square_buffers.0.buffer),
-        );
-        common_buffers.insert(
-            Uuid::from_str(UNIT_SQUARE_IND_BUFFER_ID).unwrap(),
-            Arc::clone(&unit_square_buffers.1.buffer),
-        );
-        common_buffers.insert(
-            Uuid::from_str(UNIT_CUBE_VRT_BUFFER_ID).unwrap(),
-            Arc::clone(&unit_cube_buffers.0.buffer),
-        );
-        common_buffers.insert(
-            Uuid::from_str(UNIT_CUBE_IND_BUFFER_ID).unwrap(),
-            Arc::clone(&unit_cube_buffers.1.buffer),
-        );
+        // debug!("loading common buffers");
+        // let mut common_buffers: HashMap<Uuid, Arc<(wgpu::Buffer, u32)>> = HashMap::new();
+        // common_buffers.insert(
+        //     Uuid::from_str(UNIT_SQUARE_VRT_BUFFER_ID).unwrap(),
+        //     Arc::clone(&unit_square_buffers.0.buffer),
+        // );
+        // common_buffers.insert(
+        //     Uuid::from_str(UNIT_SQUARE_IND_BUFFER_ID).unwrap(),
+        //     Arc::clone(&unit_square_buffers.1.buffer),
+        // );
+        // common_buffers.insert(
+        //     Uuid::from_str(UNIT_CUBE_VRT_BUFFER_ID).unwrap(),
+        //     Arc::clone(&unit_cube_buffers.0.buffer),
+        // );
+        // common_buffers.insert(
+        //     Uuid::from_str(UNIT_CUBE_IND_BUFFER_ID).unwrap(),
+        //     Arc::clone(&unit_cube_buffers.1.buffer),
+        // );
 
         // Build all NodeStates; each render node's system has this internal state,
         // allowing it to access the target bind groups of its inputs
@@ -270,7 +263,7 @@ impl GraphBuilder {
                             .collect::<Vec<Arc<wgpu::BindGroup>>>(),
                         render_target: Arc::clone(&node_targets.get(&node_id).unwrap()),
                         // Cloned for now
-                        common_buffers: common_buffers.clone(),
+                        // common_buffers: common_buffers.clone(),
                         dyn_offset_state: nodes
                             .get(node_id)
                             .unwrap()
@@ -368,172 +361,4 @@ impl GraphBuilder {
             })
             .collect::<Vec<Uuid>>()
     }
-}
-
-fn unit_cube_buffers(device: &wgpu::Device) -> (VertexBuffer, IndexBuffer) {
-    (
-        VertexBuffer::new_3d(
-            "unit_cube",
-            &[
-                // Back face //
-                Vertex3D {
-                    position: [0.5, 0.5, -0.5],
-                    uvs: [0.0, 0.0],
-                },
-                Vertex3D {
-                    position: [0.5, -0.5, -0.5],
-                    uvs: [0.0, 1.0],
-                },
-                Vertex3D {
-                    position: [-0.5, -0.5, -0.5],
-                    uvs: [1.0, 1.0],
-                },
-                Vertex3D {
-                    position: [-0.5, -0.5, -0.5],
-                    uvs: [1.0, 1.0],
-                },
-                Vertex3D {
-                    position: [-0.5, 0.5, -0.5],
-                    uvs: [1.0, 0.0],
-                },
-                Vertex3D {
-                    position: [0.5, 0.5, -0.5],
-                    uvs: [0.0, 0.0],
-                },
-                // Front face //
-                Vertex3D {
-                    position: [-0.5, -0.5, 0.5],
-                    uvs: [0.0, 1.0],
-                },
-                Vertex3D {
-                    position: [0.5, -0.5, 0.5],
-                    uvs: [1.0, 1.0],
-                },
-                Vertex3D {
-                    position: [0.5, 0.5, 0.5],
-                    uvs: [1.0, 0.0],
-                },
-                Vertex3D {
-                    position: [0.5, 0.5, 0.5],
-                    uvs: [1.0, 0.0],
-                },
-                Vertex3D {
-                    position: [-0.5, 0.5, 0.5],
-                    uvs: [0.0, 0.0],
-                },
-                Vertex3D {
-                    position: [-0.5, -0.5, 0.5],
-                    uvs: [0.0, 1.0],
-                },
-                // Left face //
-                Vertex3D {
-                    position: [-0.5, 0.5, 0.5],
-                    uvs: [1.0, 0.0],
-                },
-                Vertex3D {
-                    position: [-0.5, 0.5, -0.5],
-                    uvs: [0.0, 0.0],
-                },
-                Vertex3D {
-                    position: [-0.5, -0.5, -0.5],
-                    uvs: [0.0, 1.0],
-                },
-                Vertex3D {
-                    position: [-0.5, -0.5, -0.5],
-                    uvs: [0.0, 1.0],
-                },
-                Vertex3D {
-                    position: [-0.5, -0.5, 0.5],
-                    uvs: [1.0, 1.0],
-                },
-                Vertex3D {
-                    position: [-0.5, 0.5, 0.5],
-                    uvs: [1.0, 0.0],
-                },
-                // Right face //
-                Vertex3D {
-                    position: [0.5, -0.5, -0.5],
-                    uvs: [1.0, 1.0],
-                },
-                Vertex3D {
-                    position: [0.5, 0.5, -0.5],
-                    uvs: [1.0, 0.0],
-                },
-                Vertex3D {
-                    position: [0.5, 0.5, 0.5],
-                    uvs: [0.0, 0.0],
-                },
-                Vertex3D {
-                    position: [0.5, 0.5, 0.5],
-                    uvs: [0.0, 0.0],
-                },
-                Vertex3D {
-                    position: [0.5, -0.5, 0.5],
-                    uvs: [0.0, 1.0],
-                },
-                Vertex3D {
-                    position: [0.5, -0.5, -0.5],
-                    uvs: [1.0, 1.0],
-                },
-                // Bottom face //
-                Vertex3D {
-                    position: [-0.5, -0.5, -0.5],
-                    uvs: [0.0, 1.0],
-                },
-                Vertex3D {
-                    position: [0.5, -0.5, -0.5],
-                    uvs: [1.0, 1.0],
-                },
-                Vertex3D {
-                    position: [0.5, -0.5, 0.5],
-                    uvs: [1.0, 0.0],
-                },
-                Vertex3D {
-                    position: [0.5, -0.5, 0.5],
-                    uvs: [1.0, 0.0],
-                },
-                Vertex3D {
-                    position: [-0.5, -0.5, 0.5],
-                    uvs: [0.0, 0.0],
-                },
-                Vertex3D {
-                    position: [-0.5, -0.5, -0.5],
-                    uvs: [0.0, 1.0],
-                },
-                // Top face //
-                Vertex3D {
-                    position: [0.5, 0.5, 0.5],
-                    uvs: [1.0, 1.0],
-                },
-                Vertex3D {
-                    position: [0.5, 0.5, -0.5],
-                    uvs: [1.0, 0.0],
-                },
-                Vertex3D {
-                    position: [-0.5, 0.5, -0.5],
-                    uvs: [0.0, 0.0],
-                },
-                Vertex3D {
-                    position: [-0.5, 0.5, -0.5],
-                    uvs: [0.0, 0.0],
-                },
-                Vertex3D {
-                    position: [-0.5, 0.5, 0.5],
-                    uvs: [0.0, 1.0],
-                },
-                Vertex3D {
-                    position: [0.5, 0.5, 0.5],
-                    uvs: [1.0, 1.0],
-                },
-            ],
-            device,
-        ),
-        IndexBuffer::new(
-            &[
-                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-                23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
-            ],
-            device,
-        ),
-    )
 }

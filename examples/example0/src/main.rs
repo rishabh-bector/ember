@@ -1,5 +1,6 @@
 use ember::{
     components::{Position2D, Velocity2D},
+    constants::{ID, UNIT_SQUARE_MESH_ID},
     renderer::systems::render_2d::forward_instance::{Attractor2D, Render2DInstance},
     systems::lighting_2d::Light2D,
 };
@@ -11,7 +12,7 @@ fn main() {
     std::env::set_var("RUST_LOG", "info");
     let (mut engine, event_loop) = ember::engine().default().unwrap();
 
-    let mut particle_group = Render2DInstance::default_group();
+    let mut particle_group = Render2DInstance::default_group(ID(UNIT_SQUARE_MESH_ID));
 
     // engine.world().push((
     //     Render2D::solid_rect("background", 1440.0, 900.0, [0.02, 0.02, 0.05, 1.0]),

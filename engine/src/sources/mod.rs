@@ -2,8 +2,9 @@ use legion::Resources;
 
 pub mod camera;
 pub mod metrics;
+pub mod primitives;
+pub mod registry;
 pub mod schedule;
-pub mod store;
 pub mod ui;
 
 pub trait ResourceBuilder {

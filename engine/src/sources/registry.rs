@@ -9,22 +9,38 @@ use std::{
 use uuid::Uuid;
 use wgpu::BindGroup;
 
-use crate::renderer::buffer::texture::Texture;
+use crate::{
+    constants::{ID, PRIMITIVE_MESH_GROUP_ID, UNIT_CUBE_MESH_ID, UNIT_SQUARE_MESH_ID},
+    renderer::buffer::{texture::Texture, Mesh, VertexBuffer},
+};
+
+use super::primitives::{unit_cube, unit_square, PrimitiveMesh};
 
 pub struct Registry {
-    pub textures: RwLock<TextureRegistry>,
+    pub textures: Arc<RwLock<TextureRegistry>>,
+    pub meshes: Arc<RwLock<MeshRegistry>>,
 }
 
 impl Registry {
     pub fn build(
-        device: &wgpu::Device,
+        device: Arc<wgpu::Device>,
         queue: &wgpu::Queue,
         texture_format: wgpu::TextureFormat,
         texture_builder: TextureRegistryBuilder,
+        mesh_builder: MeshRegistryBuilder,
     ) -> Result<Registry> {
         Ok(Registry {
-            textures: RwLock::new(texture_builder.build(device, queue, texture_format)?),
+            textures: Arc::new(RwLock::new(texture_builder.build(
+                &device,
+                queue,
+                texture_format,
+            )?)),
+            meshes: Arc::new(RwLock::new(mesh_builder.build(device))),
         })
+    }
+
+    pub fn new_primitive(&self, primitive: PrimitiveMesh) -> Mesh {
+        self.meshes.read().unwrap().new_primitive(primitive)
     }
 }
 
@@ -50,9 +66,8 @@ pub struct TextureRegistryBuilder {
 
 impl TextureRegistryBuilder {
     pub fn new() -> Self {
-        let mut to_load: HashMap<TextureGroup, Vec<(Uuid, String)>> = HashMap::new();
         Self {
-            to_load,
+            to_load: HashMap::new(),
             bind_group_layout: Rc::new(None),
         }
     }
@@ -138,4 +153,76 @@ impl TextureRegistryBuilder {
 pub enum TextureGroup {
     Render2D,
     Render3D,
+}
+
+pub struct MeshRegistry {
+    pub groups: HashMap<Uuid, MeshGroup>,
+    pub device: Arc<wgpu::Device>,
+}
+
+impl MeshRegistry {
+    pub fn new_primitive(&self, primitive: PrimitiveMesh) -> Mesh {
+        primitive.build(&self.device)
+    }
+}
+
+pub struct MeshRegistryBuilder {
+    pub to_load: HashMap<Uuid, Vec<(Uuid, String)>>,
+}
+
+impl MeshRegistryBuilder {
+    pub fn new() -> Self {
+        Self {
+            to_load: HashMap::new(),
+        }
+    }
+
+    pub fn load(&mut self, path: &str) -> Uuid {
+        let id = Uuid::new_v4();
+        match self.to_load.get_mut(&ID(PRIMITIVE_MESH_GROUP_ID)) {
+            Some(paths) => paths.push((id, path.to_owned())),
+            None => {
+                self.to_load
+                    .insert(ID(PRIMITIVE_MESH_GROUP_ID), vec![(id, path.to_owned())]);
+            }
+        }
+        id
+    }
+
+    pub fn load_id(&mut self, id: Uuid, path: &str) {
+        match self.to_load.get_mut(&ID(PRIMITIVE_MESH_GROUP_ID)) {
+            Some(paths) => paths.push((id, path.to_owned())),
+            None => {
+                self.to_load
+                    .insert(ID(PRIMITIVE_MESH_GROUP_ID), vec![(id, path.to_owned())]);
+            }
+        }
+    }
+
+    pub fn build(&self, device: Arc<wgpu::Device>) -> MeshRegistry {
+        let mut primitive_meshes: HashMap<Uuid, Mesh> = HashMap::new();
+        primitive_meshes.insert(ID(UNIT_SQUARE_MESH_ID), unit_square(&device));
+        primitive_meshes.insert(ID(UNIT_CUBE_MESH_ID), unit_cube(&device));
+
+        let mut groups: HashMap<Uuid, MeshGroup> = HashMap::new();
+        groups.insert(
+            ID(PRIMITIVE_MESH_GROUP_ID),
+            MeshGroup {
+                name: "primitives".to_owned(),
+                meshes: primitive_meshes,
+            },
+        );
+
+        MeshRegistry {
+            groups,
+            device: Arc::clone(&device),
+        }
+    }
+}
+
+pub struct MeshGroup {
+    pub name: String,
+    pub meshes: HashMap<Uuid, Mesh>,
+    // pub material: <T: MaterialTrait>
+    // Todo: Come up with some common material trait?
 }

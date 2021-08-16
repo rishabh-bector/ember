@@ -48,8 +48,8 @@ use crate::{
     sources::{
         camera::{Camera2D, Camera3D},
         metrics::{EngineMetrics, EngineReporter},
+        registry::{MeshRegistryBuilder, Registry, TextureGroup, TextureRegistryBuilder},
         schedule::{Schedulable, SubSchedule},
-        store::{Registry, TextureGroup, TextureRegistryBuilder},
         ui::UI,
     },
     systems::{camera_2d::*, camera_3d::*, lighting_2d::*, physics_2d::*},
@@ -69,7 +69,7 @@ pub mod systems;
 pub struct Engine {
     gpu: Arc<Mutex<GpuState>>,
     graph: Arc<RenderGraph>,
-    registry: Arc<Registry>,
+    registry: Registry,
     window: Arc<Window>,
     input: Arc<RwLock<WinitInputHelper>>,
     legion: LegionState,
@@ -227,16 +227,17 @@ impl EngineBuilder {
             device_preferred_format
         );
 
-        let registry = Arc::new(
-            Registry::build(
-                &gpu_mut.device,
-                &gpu_mut.queue,
-                device_preferred_format,
-                texture_registry_builder,
-            )
-            .unwrap(),
-        );
-        resources.insert(Arc::clone(&registry));
+        let mesh_registry_builder = MeshRegistryBuilder::new();
+        let registry = Registry::build(
+            Arc::clone(&gpu_mut.device),
+            &gpu_mut.queue,
+            device_preferred_format,
+            texture_registry_builder,
+            mesh_registry_builder,
+        )
+        .unwrap();
+        resources.insert(Arc::clone(&registry.textures));
+        resources.insert(Arc::clone(&registry.meshes));
 
         info!("building uniforms");
 
@@ -374,7 +375,7 @@ impl EngineBuilder {
                 Arc::clone(&gpu_mut.queue),
                 &mut resources,
                 &mut graph_schedule,
-                Arc::clone(&registry),
+                &registry,
                 &window,
                 metrics_ui,
             )?;

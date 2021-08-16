@@ -1,18 +1,26 @@
 use cgmath::{Angle, InnerSpace, Rad, Vector2};
 use legion::{world::SubWorld, IntoQuery};
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::{Arc, RwLock},
+    time::Instant,
+};
+use uuid::Uuid;
 
 use crate::{
     components::{Position2D, Velocity2D},
     constants::{
-        CAMERA_2D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID,
-        UNIT_SQUARE_IND_BUFFER_ID, UNIT_SQUARE_VRT_BUFFER_ID,
+        CAMERA_2D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID, PRIMITIVE_MESH_GROUP_ID,
+        RENDER_2D_COMMON_TEXTURE_ID,
     },
     renderer::{
         buffer::instance::{
             Instance, InstanceBuffer, InstanceGroup, InstanceGroupBinder, InstanceId,
         },
         graph::NodeState,
+    },
+    sources::{
+        primitives::unit_square,
+        registry::{MeshRegistry, TextureRegistry},
     },
 };
 
@@ -38,11 +46,12 @@ impl Render2DInstance {
         }
     }
 
-    pub fn default_group() -> InstanceGroup<Render2DInstance> {
+    pub fn default_group(mesh: Uuid) -> InstanceGroup<Render2DInstance> {
         InstanceGroup::new(
             0,
+            ID(PRIMITIVE_MESH_GROUP_ID),
+            mesh,
             ID(RENDER_2D_COMMON_TEXTURE_ID),
-            (ID(UNIT_SQUARE_VRT_BUFFER_ID), ID(UNIT_SQUARE_IND_BUFFER_ID)),
         )
     }
 
@@ -169,6 +178,7 @@ pub fn load(world: &SubWorld, #[resource] instance_buffer: &InstanceBuffer<Rende
 #[system]
 pub fn render(
     #[state] state: &mut NodeState,
+    #[resource] mesh_registry: &Arc<RwLock<MeshRegistry>>,
     #[resource] instance_buffer: &InstanceBuffer<Render2DInstance>,
     #[resource] device: &Arc<wgpu::Device>,
     #[resource] queue: &Arc<wgpu::Queue>,
@@ -176,6 +186,7 @@ pub fn render(
     let start_time = Instant::now();
     debug!("running system render_2d_forward_instance (graph node)");
     let node = Arc::clone(&state.node);
+    let mesh_registry = mesh_registry.read().unwrap();
 
     let render_target = state.render_target.lock().unwrap();
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -215,23 +226,20 @@ pub fn render(
         instance_buffer.load_group(group.buffer_bytes());
 
         // Bind geometry; every instance in a group shares one vertex/index buffer
-        pass.set_vertex_buffer(0, state.common_buffers[&group.geometry().0].0.slice(..));
+        let mesh = &mesh_registry.groups[&group.mesh_group].meshes[&group.mesh];
+        pass.set_vertex_buffer(0, mesh.vertices.buffer.0.slice(..));
+        pass.set_index_buffer(mesh.indices.buffer.0.slice(..), wgpu::IndexFormat::Uint16);
+
+        // All instances
         pass.set_vertex_buffer(1, instance_buffer.state.buffer.slice(..));
-        pass.set_index_buffer(
-            state.common_buffers[&group.geometry().1].0.slice(..),
-            wgpu::IndexFormat::Uint16,
-        );
 
         // Batch draw instance group
-        pass.draw_indexed(
-            0..state.common_buffers[&group.geometry().1].1,
-            0,
-            0..group.num_instances() as _,
-        );
+        pass.draw_indexed(0..mesh.indices.buffer.1, 0, 0..group.num_instances() as _);
     }
 
     debug!("done recording; submitting render pass");
     drop(pass);
+    drop(mesh_registry);
     queue.submit(std::iter::once(encoder.finish()));
 
     debug!("render_2d_forward_instance pass submitted");

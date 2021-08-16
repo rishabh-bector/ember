@@ -9,8 +9,8 @@ use uuid::Uuid;
 use crate::{
     renderer::uniform::group::GroupResourceBuilder,
     sources::{
+        registry::{Registry, TextureGroup},
         schedule::{NodeSystem, SubSchedulable},
-        store::{Registry, TextureGroup},
     },
 };
 
@@ -149,7 +149,7 @@ impl NodeBuilderTrait for NodeBuilder {
         resources: &mut Resources,
         device: &wgpu::Device,
         queue: Arc<wgpu::Queue>,
-        registry: Arc<Registry>,
+        registry: &Registry,
     ) -> Result<Arc<RenderNode>> {
         debug!("building node: {}", self.dest_id);
 
@@ -320,7 +320,7 @@ pub trait NodeBuilderTrait {
         resources: &mut Resources,
         device: &wgpu::Device,
         queue: Arc<wgpu::Queue>,
-        registry: Arc<Registry>,
+        registry: &Registry,
     ) -> Result<Arc<RenderNode>>;
 }
 
