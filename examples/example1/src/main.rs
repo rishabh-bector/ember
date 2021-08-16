@@ -4,6 +4,7 @@ use ember::{
         render_2d::forward_instance::{Attractor2D, Render2DInstance},
         render_3d::forward_basic::Render3D,
     },
+    sources::primitives::PrimitiveMesh,
     systems::lighting_2d::Light2D,
 };
 
@@ -13,6 +14,7 @@ fn main() {
     std::env::set_var("RUST_LOG", "ember=debug");
     let (mut engine, event_loop) = ember::engine().default().unwrap();
 
+    let cube_mesh = engine.mesh(PrimitiveMesh::UnitCube);
     engine.world().push((
         Render3D::default("test"),
         Position3D {
@@ -20,7 +22,7 @@ fn main() {
             y: 0.0,
             z: 0.0,
         },
-        engine.registry.new_primitive(),
+        cube_mesh,
     ));
 
     engine.start(event_loop);

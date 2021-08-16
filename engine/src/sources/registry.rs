@@ -38,10 +38,6 @@ impl Registry {
             meshes: Arc::new(RwLock::new(mesh_builder.build(device))),
         })
     }
-
-    pub fn new_primitive(&self, primitive: PrimitiveMesh) -> Mesh {
-        self.meshes.read().unwrap().new_primitive(primitive)
-    }
 }
 
 pub struct TextureRegistry {
