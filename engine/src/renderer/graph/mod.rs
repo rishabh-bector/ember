@@ -17,7 +17,7 @@ use crate::{
     sources::{
         metrics::{EngineMetrics, SystemReporter},
         schedule::{LocalReporterSystem, StatelessSystem, SubSchedule},
-        store::TextureStore,
+        store::Registry,
         ui::{ImguiWindow, UIBuilder},
     },
     texture::Texture,
@@ -121,9 +121,7 @@ impl GraphBuilder {
         queue: Arc<wgpu::Queue>,
         resources: &mut legion::Resources,
         sub_schedule: &mut SubSchedule,
-        texture_format: wgpu::TextureFormat,
-        texture_bind_group_layout: &wgpu::BindGroupLayout,
-        texture_store: Arc<Mutex<TextureStore>>,
+        registry: Arc<Registry>,
         window: &winit::window::Window,
         mut metrics_ui: EngineMetrics,
     ) -> Result<(Arc<RenderGraph>, Arc<EngineMetrics>)> {
@@ -140,15 +138,14 @@ impl GraphBuilder {
                     resources,
                     &device,
                     Arc::clone(&queue),
-                    texture_format,
-                    &texture_bind_group_layout,
-                    Arc::clone(&texture_store),
+                    Arc::clone(&registry),
                 )?;
                 Ok((*id, node))
             })
             .collect::<Result<HashMap<Uuid, Arc<RenderNode>>>>()?;
 
         debug!("creating render graph node_targets");
+        let texture_registry = registry.textures.read().unwrap();
         let node_targets = nodes
             .iter()
             .map(|(id, node)| {
@@ -173,8 +170,8 @@ impl GraphBuilder {
                                 // TODO: Make actual config (part of SHIP: EngineBuilder)
                                 (DEFAULT_SCREEN_WIDTH as u32, DEFAULT_SCREEN_HEIGHT as u32),
                                 &device,
-                                texture_format,
-                                texture_bind_group_layout,
+                                texture_registry.format,
+                                &texture_registry.bind_layout,
                                 Some(&format!("{}_render_target", node.name)),
                                 true,
                             )?),

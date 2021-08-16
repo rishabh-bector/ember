@@ -13,7 +13,7 @@ use crate::{
     renderer::{
         graph::NodeState,
         systems::render_2d::Render2D,
-        uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
+        uniform::{generic::GenericUniform, group::UniformGroup},
     },
 };
 

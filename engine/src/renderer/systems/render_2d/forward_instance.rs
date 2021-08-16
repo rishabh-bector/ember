@@ -1,5 +1,4 @@
-use cgmath::num_traits::Pow;
-use cgmath::{Angle, InnerSpace, Rad, Vector2, VectorSpace};
+use cgmath::{Angle, InnerSpace, Rad, Vector2};
 use legion::{world::SubWorld, IntoQuery};
 use std::{sync::Arc, time::Instant};
 

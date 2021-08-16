@@ -10,7 +10,7 @@ use crate::{
     renderer::uniform::group::GroupResourceBuilder,
     sources::{
         schedule::{NodeSystem, SubSchedulable},
-        store::{TextureGroup, TextureStore},
+        store::{Registry, TextureGroup},
     },
 };
 
@@ -149,9 +149,7 @@ impl NodeBuilderTrait for NodeBuilder {
         resources: &mut Resources,
         device: &wgpu::Device,
         queue: Arc<wgpu::Queue>,
-        texture_format: wgpu::TextureFormat,
-        texture_bind_group_layout: &wgpu::BindGroupLayout,
-        texture_store: Arc<Mutex<TextureStore>>,
+        registry: Arc<Registry>,
     ) -> Result<Arc<RenderNode>> {
         debug!("building node: {}", self.dest_id);
 
@@ -189,11 +187,12 @@ impl NodeBuilderTrait for NodeBuilder {
             })
             .collect::<Result<Vec<Option<wgpu::BindGroupLayout>>>>()?;
 
+        let texture_registry = registry.textures.read().unwrap();
         let layout_refs = bind_group_layouts
             .into_iter()
             .map(|opt_uniform| match opt_uniform {
                 Some(u) => &u,
-                None => texture_bind_group_layout,
+                None => &texture_registry.bind_layout,
             })
             .collect::<Vec<&wgpu::BindGroupLayout>>();
 
@@ -216,7 +215,7 @@ impl NodeBuilderTrait for NodeBuilder {
                 module: &shader_module,
                 entry_point: "main",
                 targets: &[wgpu::ColorTargetState {
-                    format: texture_format,
+                    format: registry.textures.read().unwrap().format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrite::ALL,
                 }],
@@ -275,7 +274,7 @@ impl NodeBuilderTrait for NodeBuilder {
 
         let mut texture_groups: HashMap<Uuid, Arc<wgpu::BindGroup>> = HashMap::new();
         for group in &texture_groups_needed {
-            texture_groups.extend(texture_store.lock().unwrap().bind_group(group));
+            texture_groups.extend(registry.textures.read().unwrap().texture_group(group));
         }
 
         let mut uniform_groups: HashMap<Uuid, Arc<wgpu::BindGroup>> = HashMap::new();
@@ -321,9 +320,7 @@ pub trait NodeBuilderTrait {
         resources: &mut Resources,
         device: &wgpu::Device,
         queue: Arc<wgpu::Queue>,
-        texture_format: wgpu::TextureFormat,
-        texture_bind_group_layout: &wgpu::BindGroupLayout,
-        texture_store: Arc<Mutex<TextureStore>>,
+        registry: Arc<Registry>,
     ) -> Result<Arc<RenderNode>>;
 }
 

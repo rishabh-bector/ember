@@ -49,7 +49,7 @@ use crate::{
         camera::{Camera2D, Camera3D},
         metrics::{EngineMetrics, EngineReporter},
         schedule::{Schedulable, SubSchedule},
-        store::{TextureGroup, TextureStore, TextureStoreBuilder},
+        store::{Registry, TextureGroup, TextureRegistryBuilder},
         ui::UI,
     },
     systems::{camera_2d::*, camera_3d::*, lighting_2d::*, physics_2d::*},
@@ -69,7 +69,7 @@ pub mod systems;
 pub struct Engine {
     gpu: Arc<Mutex<GpuState>>,
     graph: Arc<RenderGraph>,
-    store: Arc<Mutex<TextureStore>>,
+    registry: Arc<Registry>,
     window: Arc<Window>,
     input: Arc<RwLock<WinitInputHelper>>,
     legion: LegionState,
@@ -197,36 +197,46 @@ impl EngineBuilder {
         let gpu_mut = gpu.lock().unwrap();
 
         info!("loading textures");
-        let mut texture_store_builder = TextureStoreBuilder::new();
-        texture_store_builder.begin_group_2d();
-        texture_store_builder.load_id(
+
+        let mut texture_registry_builder = TextureRegistryBuilder::new();
+        texture_registry_builder.load_id(
             Uuid::from_str(RENDER_2D_COMMON_TEXTURE_ID).unwrap(),
             &base_dir
                 .join("src/sources/static/test.png")
                 .into_os_string()
                 .into_string()
                 .unwrap(),
+            TextureGroup::Render2D,
         );
-        texture_store_builder.begin_group_3d();
-        texture_store_builder.load_id(
+        texture_registry_builder.load_id(
             Uuid::from_str(RENDER_3D_COMMON_TEXTURE_ID).unwrap(),
             &base_dir
                 .join("src/sources/static/arrow.jpg")
                 .into_os_string()
                 .into_string()
                 .unwrap(),
+            TextureGroup::Render3D,
         );
+
         let device_preferred_format = gpu_mut
             .adapter
             .get_swap_chain_preferred_format(&gpu_mut.surface)
             .unwrap_or(DEFAULT_TEXTURE_BUFFER_FORMAT);
-        debug!("texture store format: {:?}", device_preferred_format);
-        let (texture_store, texture_bind_group_layout) = texture_store_builder.build(
-            &gpu_mut.device,
-            &gpu_mut.queue,
-            &device_preferred_format,
-        )?;
-        texture_store_builder.build_to_resources(&mut resources);
+        debug!(
+            "device preferred texture format: {:?}",
+            device_preferred_format
+        );
+
+        let registry = Arc::new(
+            Registry::build(
+                &gpu_mut.device,
+                &gpu_mut.queue,
+                device_preferred_format,
+                texture_registry_builder,
+            )
+            .unwrap(),
+        );
+        resources.insert(Arc::clone(&registry));
 
         info!("building uniforms");
 
@@ -364,9 +374,7 @@ impl EngineBuilder {
                 Arc::clone(&gpu_mut.queue),
                 &mut resources,
                 &mut graph_schedule,
-                device_preferred_format,
-                &texture_bind_group_layout,
-                Arc::clone(&texture_store),
+                Arc::clone(&registry),
                 &window,
                 metrics_ui,
             )?;
@@ -410,7 +418,7 @@ impl EngineBuilder {
                     resources,
                 },
                 graph: render_graph,
-                store: texture_store,
+                registry,
                 window,
                 metrics,
                 gpu,

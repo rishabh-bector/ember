@@ -4,68 +4,86 @@ use legion::Resources;
 use std::{
     collections::HashMap,
     rc::Rc,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 use uuid::Uuid;
 use wgpu::BindGroup;
 
 use crate::renderer::buffer::texture::Texture;
 
-pub struct TextureStore {
+pub struct Registry {
+    pub textures: RwLock<TextureRegistry>,
+}
+
+impl Registry {
+    pub fn build(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        texture_format: wgpu::TextureFormat,
+        texture_builder: TextureRegistryBuilder,
+    ) -> Result<Registry> {
+        Ok(Registry {
+            textures: RwLock::new(texture_builder.build(device, queue, texture_format)?),
+        })
+    }
+}
+
+pub struct TextureRegistry {
     pub textures: HashMap<TextureGroup, HashMap<Uuid, Texture>>,
+    pub bind_layout: wgpu::BindGroupLayout,
+    pub format: wgpu::TextureFormat,
 }
 
-pub struct TextureStoreBuilder {
+impl TextureRegistry {
+    pub fn texture_group(&self, group: &TextureGroup) -> HashMap<Uuid, Arc<BindGroup>> {
+        self.textures[group]
+            .iter()
+            .map(|(id, tex)| (*id, Arc::clone(tex.bind_group.as_ref().unwrap())))
+            .collect()
+    }
+}
+
+pub struct TextureRegistryBuilder {
     pub to_load: HashMap<TextureGroup, Vec<(Uuid, String)>>,
-    pub load_group: TextureGroup,
     pub bind_group_layout: Rc<Option<wgpu::BindGroupLayout>>,
-    pub texture_store: Option<Arc<Mutex<TextureStore>>>,
 }
 
-impl TextureStoreBuilder {
+impl TextureRegistryBuilder {
     pub fn new() -> Self {
         let mut to_load: HashMap<TextureGroup, Vec<(Uuid, String)>> = HashMap::new();
-        to_load.insert(TextureGroup::Render2D, vec![]);
-        to_load.insert(TextureGroup::Render3D, vec![]);
         Self {
             to_load,
-            load_group: TextureGroup::Render2D,
             bind_group_layout: Rc::new(None),
-            texture_store: None,
         }
     }
 
-    pub fn begin_group_2d(&mut self) {
-        self.load_group = TextureGroup::Render2D;
-    }
-
-    pub fn begin_group_3d(&mut self) {
-        self.load_group = TextureGroup::Render3D;
-    }
-
-    pub fn load(&mut self, path: &str) -> Uuid {
+    pub fn load(&mut self, path: &str, group: TextureGroup) -> Uuid {
         let id = Uuid::new_v4();
-        self.to_load
-            .get_mut(&self.load_group)
-            .unwrap()
-            .push((id, path.to_owned()));
+        match self.to_load.get_mut(&group) {
+            Some(paths) => paths.push((id, path.to_owned())),
+            None => {
+                self.to_load.insert(group, vec![(id, path.to_owned())]);
+            }
+        }
         id
     }
 
-    pub fn load_id(&mut self, id: Uuid, path: &str) {
-        self.to_load
-            .get_mut(&self.load_group)
-            .unwrap()
-            .push((id, path.to_owned()));
+    pub fn load_id(&mut self, id: Uuid, path: &str, group: TextureGroup) {
+        match self.to_load.get_mut(&group) {
+            Some(paths) => paths.push((id, path.to_owned())),
+            None => {
+                self.to_load.insert(group, vec![(id, path.to_owned())]);
+            }
+        }
     }
 
     pub fn build(
-        &mut self,
+        &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        texture_format: &wgpu::TextureFormat,
-    ) -> Result<(Arc<Mutex<TextureStore>>, wgpu::BindGroupLayout)> {
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        format: wgpu::TextureFormat,
+    ) -> Result<TextureRegistry> {
+        let bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -101,39 +119,18 @@ impl TextureStoreBuilder {
                         .into_rgba8();
                     Ok((
                         *id,
-                        Texture::load_image(
-                            device,
-                            queue,
-                            *texture_format,
-                            &rgba,
-                            &bind_group_layout,
-                            None,
-                        )?,
+                        Texture::load_image(device, queue, format, &rgba, &bind_layout, None)?,
                     ))
                 })
                 .collect::<Result<HashMap<Uuid, Texture>>>()?;
             textures.insert(*group, group_textures);
         }
 
-        self.texture_store = Some(Arc::new(Mutex::new(TextureStore { textures })));
-        Ok((
-            Arc::clone(self.texture_store.as_ref().unwrap()),
-            bind_group_layout,
-        ))
-    }
-
-    pub fn build_to_resources(&self, resources: &mut Resources) {
-        resources
-            .insert::<Arc<Mutex<TextureStore>>>(Arc::clone(self.texture_store.as_ref().unwrap()));
-    }
-}
-
-impl TextureStore {
-    pub fn bind_group(&self, group: &TextureGroup) -> HashMap<Uuid, Arc<BindGroup>> {
-        self.textures[group]
-            .iter()
-            .map(|(id, tex)| (*id, Arc::clone(tex.bind_group.as_ref().unwrap())))
-            .collect()
+        Ok(TextureRegistry {
+            textures,
+            bind_layout,
+            format,
+        })
     }
 }
 
