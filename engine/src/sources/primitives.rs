@@ -1,15 +1,19 @@
+use std::sync::Arc;
+
 use crate::renderer::buffer::{IndexBuffer, Mesh, Vertex2D, Vertex3D, VertexBuffer};
+
+use super::registry::MeshBuilder;
 
 pub enum PrimitiveMesh {
     UnitSquare,
     UnitCube,
 }
 
-impl PrimitiveMesh {
-    pub fn build(&self, device: &wgpu::Device) -> Mesh {
+impl MeshBuilder for PrimitiveMesh {
+    fn build(&self, device: Arc<wgpu::Device>) -> Mesh {
         match &self {
-            PrimitiveMesh::UnitSquare => unit_square(device),
-            PrimitiveMesh::UnitCube => unit_cube(device),
+            PrimitiveMesh::UnitSquare => unit_square(&device),
+            PrimitiveMesh::UnitCube => unit_cube(&device),
         }
     }
 }

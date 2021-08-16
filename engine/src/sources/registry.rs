@@ -151,14 +151,18 @@ pub enum TextureGroup {
     Render3D,
 }
 
+pub trait MeshBuilder {
+    fn build(&self, device: Arc<wgpu::Device>) -> Mesh;
+}
+
 pub struct MeshRegistry {
     pub groups: HashMap<Uuid, MeshGroup>,
     pub device: Arc<wgpu::Device>,
 }
 
 impl MeshRegistry {
-    pub fn new_primitive(&self, primitive: PrimitiveMesh) -> Mesh {
-        primitive.build(&self.device)
+    pub fn mesh<M: MeshBuilder>(&self, builder: M) -> Mesh {
+        builder.build(Arc::clone(&self.device))
     }
 }
 

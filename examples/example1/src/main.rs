@@ -1,11 +1,6 @@
 use ember::{
-    components::{Position2D, Position3D, Velocity2D},
-    renderer::systems::{
-        render_2d::forward_instance::{Attractor2D, Render2DInstance},
-        render_3d::forward_basic::Render3D,
-    },
+    components::Position3D, renderer::systems::render_3d::forward_basic::Render3D,
     sources::primitives::PrimitiveMesh,
-    systems::lighting_2d::Light2D,
 };
 
 // Ember example
@@ -16,7 +11,7 @@ fn main() {
 
     let cube_mesh = engine.mesh(PrimitiveMesh::UnitCube);
     engine.world().push((
-        Render3D::default("test"),
+        Render3D::default("test_cube"),
         Position3D {
             x: 0.0,
             y: 0.0,

@@ -10,7 +10,7 @@ extern crate vertex_traits;
 use anyhow::Result;
 use constants::DEFAULT_MAX_INSTANCES_PER_BUFFER;
 use legion::{Resources, Schedule, World};
-use sources::primitives::PrimitiveMesh;
+use sources::{primitives::PrimitiveMesh, registry::MeshBuilder};
 use std::{
     any::type_name,
     env,
@@ -115,12 +115,8 @@ impl Engine {
         self
     }
 
-    pub fn mesh(&self, primitive: PrimitiveMesh) -> Mesh {
-        self.registry
-            .meshes
-            .read()
-            .unwrap()
-            .new_primitive(primitive)
+    pub fn mesh<M: MeshBuilder>(&self, mesh_builder: M) -> Mesh {
+        self.registry.meshes.read().unwrap().mesh(mesh_builder)
     }
 
     pub fn start(mut self, event_loop: EventLoop<()>) {
