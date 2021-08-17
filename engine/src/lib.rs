@@ -34,7 +34,8 @@ use crate::{
         DEFAULT_SCREEN_WIDTH, DEFAULT_TEXTURE_BUFFER_FORMAT, FORWARD_2D_NODE_ID,
         FORWARD_3D_NODE_ID, ID, INSTANCE_2D_NODE_ID, INSTANCE_3D_NODE_ID,
         LIGHTING_2D_BIND_GROUP_ID, RENDER_2D_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID,
-        RENDER_3D_BIND_GROUP_ID, RENDER_3D_COMMON_TEXTURE_ID,
+        RENDER_2D_TEXTURE_GROUP, RENDER_3D_BIND_GROUP_ID, RENDER_3D_COMMON_TEXTURE_ID,
+        RENDER_3D_TEXTURE_GROUP,
     },
     renderer::{
         buffer::{instance::*, *},
@@ -49,7 +50,7 @@ use crate::{
     sources::{
         camera::{Camera2D, Camera3D},
         metrics::{EngineMetrics, EngineReporter},
-        registry::{MeshRegistryBuilder, Registry, TextureGroup, TextureRegistryBuilder},
+        registry::{MeshRegistryBuilder, Registry, TextureRegistryBuilder},
         schedule::{Schedulable, SubSchedule},
         ui::UI,
     },
@@ -115,8 +116,8 @@ impl Engine {
         self
     }
 
-    pub fn mesh<M: MeshBuilder>(&self, mesh_builder: M) -> Mesh {
-        self.registry.meshes.read().unwrap().mesh(mesh_builder)
+    pub fn clone_mesh(&self, id: Uuid) -> Mesh {
+        self.registry.meshes.read().unwrap().clone_mesh(id)
     }
 
     pub fn start(mut self, event_loop: EventLoop<()>) {
@@ -202,7 +203,6 @@ impl EngineBuilder {
         let gpu_mut = gpu.lock().unwrap();
 
         info!("loading textures");
-
         let mut texture_registry_builder = TextureRegistryBuilder::new();
         texture_registry_builder.load_id(
             Uuid::from_str(RENDER_2D_COMMON_TEXTURE_ID).unwrap(),
@@ -211,7 +211,7 @@ impl EngineBuilder {
                 .into_os_string()
                 .into_string()
                 .unwrap(),
-            TextureGroup::Render2D,
+            ID(RENDER_2D_TEXTURE_GROUP),
         );
         texture_registry_builder.load_id(
             Uuid::from_str(RENDER_3D_COMMON_TEXTURE_ID).unwrap(),
@@ -220,7 +220,7 @@ impl EngineBuilder {
                 .into_os_string()
                 .into_string()
                 .unwrap(),
-            TextureGroup::Render3D,
+            ID(RENDER_3D_TEXTURE_GROUP),
         );
 
         let device_preferred_format = gpu_mut
@@ -313,7 +313,7 @@ impl EngineBuilder {
         )
         .with_id(ID(FORWARD_2D_NODE_ID))
         .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
-        .with_texture_group(TextureGroup::Render2D)
+        .with_texture_group(ID(RENDER_2D_TEXTURE_GROUP))
         .with_shared_uniform_group(Arc::clone(&render_2d_dynamic_uniform_builder))
         .with_shared_uniform_group(Arc::clone(&camera_2d_uniform_builder))
         .with_shared_uniform_group(Arc::clone(&lighting_2d_uniform_builder))
@@ -327,7 +327,7 @@ impl EngineBuilder {
         .with_id(ID(INSTANCE_2D_NODE_ID))
         .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
         .with_vertex_layout(render_2d::forward_instance::RENDER2DINSTANCE_BUFFER_LAYOUT)
-        .with_texture_group(TextureGroup::Render2D)
+        .with_texture_group(ID(RENDER_2D_TEXTURE_GROUP))
         .with_shared_uniform_group(Arc::clone(&camera_2d_uniform_builder))
         .with_shared_uniform_group(Arc::clone(&lighting_2d_uniform_builder))
         .with_system(render_2d::forward_instance::render_system);
@@ -344,7 +344,7 @@ impl EngineBuilder {
         )
         .with_id(ID(FORWARD_3D_NODE_ID))
         .with_vertex_layout(VERTEX3D_BUFFER_LAYOUT)
-        .with_texture_group(TextureGroup::Render3D)
+        .with_texture_group(ID(RENDER_3D_TEXTURE_GROUP))
         .with_shared_uniform_group(Arc::clone(&render_3d_uniform_builder))
         .with_shared_uniform_group(Arc::clone(&camera_3d_uniform_builder))
         .with_depth_buffer()

@@ -61,8 +61,7 @@ pub struct InstanceGroup<T: Instance> {
     next_id: InstanceId,
 
     pub texture: Uuid,
-    pub mesh_group: Uuid,
-    pub mesh: Uuid,
+    pub mesh: Mesh,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -79,12 +78,11 @@ impl<T> InstanceGroup<T>
 where
     T: Instance,
 {
-    pub fn new(id: u32, mesh_group: Uuid, mesh: Uuid, texture: Uuid) -> Self {
+    pub fn new(id: u32, mesh: Mesh, texture: Uuid) -> Self {
         Self {
             id,
             instances: vec![],
             next_id: InstanceId(id, 0),
-            mesh_group,
             mesh,
             texture,
         }
@@ -110,7 +108,7 @@ pub trait InstanceGroupBinder {
     fn num_instances(&self) -> usize;
     fn buffer_bytes(&self) -> &[u8];
     fn texture(&self) -> Uuid;
-    fn mesh(&self) -> (Uuid, Uuid);
+    fn bind_mesh<'rp>(&self, render_pass: wgpu::RenderPass<'rp>);
 }
 
 impl<T> InstanceGroupBinder for InstanceGroup<T>
@@ -129,7 +127,5 @@ where
         self.texture
     }
 
-    fn mesh(&self) -> (Uuid, Uuid) {
-        (self.mesh_group, self.mesh)
-    }
+    fn bind_mesh<'rp>(&self, render_pass: wgpu::RenderPass<'rp>) {}
 }

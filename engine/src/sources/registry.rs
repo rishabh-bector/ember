@@ -41,14 +41,14 @@ impl Registry {
 }
 
 pub struct TextureRegistry {
-    pub textures: HashMap<TextureGroup, HashMap<Uuid, Texture>>,
+    pub textures: HashMap<Uuid, HashMap<Uuid, Texture>>,
     pub bind_layout: wgpu::BindGroupLayout,
     pub format: wgpu::TextureFormat,
 }
 
 impl TextureRegistry {
-    pub fn texture_group(&self, group: &TextureGroup) -> HashMap<Uuid, Arc<BindGroup>> {
-        self.textures[group]
+    pub fn texture_group(&self, group_id: &Uuid) -> HashMap<Uuid, Arc<BindGroup>> {
+        self.textures[group_id]
             .iter()
             .map(|(id, tex)| (*id, Arc::clone(tex.bind_group.as_ref().unwrap())))
             .collect()
@@ -56,7 +56,7 @@ impl TextureRegistry {
 }
 
 pub struct TextureRegistryBuilder {
-    pub to_load: HashMap<TextureGroup, Vec<(Uuid, String)>>,
+    pub to_load: HashMap<Uuid, Vec<(Uuid, String)>>,
     pub bind_group_layout: Rc<Option<wgpu::BindGroupLayout>>,
 }
 
@@ -68,22 +68,22 @@ impl TextureRegistryBuilder {
         }
     }
 
-    pub fn load(&mut self, path: &str, group: TextureGroup) -> Uuid {
+    pub fn load(&mut self, path: &str, group_id: Uuid) -> Uuid {
         let id = Uuid::new_v4();
-        match self.to_load.get_mut(&group) {
+        match self.to_load.get_mut(&group_id) {
             Some(paths) => paths.push((id, path.to_owned())),
             None => {
-                self.to_load.insert(group, vec![(id, path.to_owned())]);
+                self.to_load.insert(group_id, vec![(id, path.to_owned())]);
             }
         }
         id
     }
 
-    pub fn load_id(&mut self, id: Uuid, path: &str, group: TextureGroup) {
-        match self.to_load.get_mut(&group) {
+    pub fn load_id(&mut self, id: Uuid, path: &str, group_id: Uuid) {
+        match self.to_load.get_mut(&group_id) {
             Some(paths) => paths.push((id, path.to_owned())),
             None => {
-                self.to_load.insert(group, vec![(id, path.to_owned())]);
+                self.to_load.insert(group_id, vec![(id, path.to_owned())]);
             }
         }
     }
@@ -119,7 +119,7 @@ impl TextureRegistryBuilder {
             label: Some("texture_bind_group_layout"),
         });
 
-        let mut textures: HashMap<TextureGroup, HashMap<Uuid, Texture>> = HashMap::new();
+        let mut textures: HashMap<Uuid, HashMap<Uuid, Texture>> = HashMap::new();
         for (group, tex) in &self.to_load {
             let group_textures = tex
                 .into_iter()
@@ -145,24 +145,28 @@ impl TextureRegistryBuilder {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TextureGroup {
-    Render2D,
-    Render3D,
-}
-
-pub trait MeshBuilder {
+pub trait MeshBuilder: Send + Sync {
     fn build(&self, device: Arc<wgpu::Device>) -> Mesh;
 }
 
 pub struct MeshRegistry {
-    pub groups: HashMap<Uuid, MeshGroup>,
+    pub builders: HashMap<Uuid, Arc<dyn MeshBuilder>>,
     pub device: Arc<wgpu::Device>,
 }
 
 impl MeshRegistry {
-    pub fn mesh<M: MeshBuilder>(&self, builder: M) -> Mesh {
-        builder.build(Arc::clone(&self.device))
+    pub fn register<M: MeshBuilder + 'static>(&mut self, builder: M) -> Uuid {
+        let id = Uuid::new_v4();
+        self.builders.insert(id, Arc::new(builder));
+        id
+    }
+
+    pub fn register_id<M: MeshBuilder + 'static>(&mut self, id: Uuid, builder: M) {
+        self.builders.insert(id, Arc::new(builder));
+    }
+
+    pub fn clone_mesh(&self, id: Uuid) -> Mesh {
+        self.builders[&id].build(Arc::clone(&self.device))
     }
 }
 
@@ -200,29 +204,13 @@ impl MeshRegistryBuilder {
     }
 
     pub fn build(&self, device: Arc<wgpu::Device>) -> MeshRegistry {
-        let mut primitive_meshes: HashMap<Uuid, Mesh> = HashMap::new();
-        primitive_meshes.insert(ID(UNIT_SQUARE_MESH_ID), unit_square(&device));
-        primitive_meshes.insert(ID(UNIT_CUBE_MESH_ID), unit_cube(&device));
-
-        let mut groups: HashMap<Uuid, MeshGroup> = HashMap::new();
-        groups.insert(
-            ID(PRIMITIVE_MESH_GROUP_ID),
-            MeshGroup {
-                name: "primitives".to_owned(),
-                meshes: primitive_meshes,
-            },
-        );
+        let mut builders: HashMap<Uuid, Arc<dyn MeshBuilder>> = HashMap::new();
+        builders.insert(ID(UNIT_SQUARE_MESH_ID), Arc::new(PrimitiveMesh::UnitSquare));
+        builders.insert(ID(UNIT_CUBE_MESH_ID), Arc::new(PrimitiveMesh::UnitCube));
 
         MeshRegistry {
-            groups,
+            builders,
             device: Arc::clone(&device),
         }
     }
-}
-
-pub struct MeshGroup {
-    pub name: String,
-    pub meshes: HashMap<Uuid, Mesh>,
-    // pub material: <T: MaterialTrait>
-    // Todo: Come up with some common material trait?
 }

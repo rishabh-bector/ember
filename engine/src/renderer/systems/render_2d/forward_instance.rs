@@ -46,14 +46,9 @@ impl Render2DInstance {
         }
     }
 
-    pub fn default_group(mesh: Uuid) -> InstanceGroup<Render2DInstance> {
-        InstanceGroup::new(
-            0,
-            ID(PRIMITIVE_MESH_GROUP_ID),
-            mesh,
-            ID(RENDER_2D_COMMON_TEXTURE_ID),
-        )
-    }
+    // pub fn default_group(mesh: Uuid) -> InstanceGroup<Render2DInstance> {
+    //     InstanceGroup::new(0, mesh, ID(RENDER_2D_COMMON_TEXTURE_ID))
+    // }
 
     pub fn update_position(&mut self, pos: &Position2D) {
         self.model[0] = pos.x;
@@ -226,15 +221,15 @@ pub fn render(
         instance_buffer.load_group(group.buffer_bytes());
 
         // Bind geometry; every instance in a group shares one vertex/index buffer
-        let mesh = &mesh_registry.groups[&group.mesh_group].meshes[&group.mesh];
-        pass.set_vertex_buffer(0, mesh.vertices.buffer.0.slice(..));
-        pass.set_index_buffer(mesh.indices.buffer.0.slice(..), wgpu::IndexFormat::Uint16);
+        // let mesh = &mesh_registry.meshes[&group.mesh];
+        // pass.set_vertex_buffer(0, mesh.vertices.buffer.0.slice(..));
+        // pass.set_index_buffer(mesh.indices.buffer.0.slice(..), wgpu::IndexFormat::Uint16);
 
-        // All instances
-        pass.set_vertex_buffer(1, instance_buffer.state.buffer.slice(..));
+        // // All instances
+        // pass.set_vertex_buffer(1, instance_buffer.state.buffer.slice(..));
 
-        // Batch draw instance group
-        pass.draw_indexed(0..mesh.indices.buffer.1, 0, 0..group.num_instances() as _);
+        // // Batch draw instance group
+        // pass.draw_indexed(0..mesh.indices.buffer.1, 0, 0..group.num_instances() as _);
     }
 
     debug!("done recording; submitting render pass");

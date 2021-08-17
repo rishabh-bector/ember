@@ -29,9 +29,12 @@ pub const LIGHTING_2D_BIND_GROUP_ID: &str = "eb964ee1-abc3-435f-ab03-0dceb692661
 pub const LIGHTING_3D_BIND_GROUP_ID: &str = "b08c391a-8726-4665-87c3-cdd5102b175e";
 // Engine imgui windows
 pub const METRICS_UI_IMGUI_ID: &str = "cb7550b5-e8a7-49b0-954a-c156f69db093";
-// Common textures
+// Default texture groups
+pub const RENDER_2D_TEXTURE_GROUP: &str = "0f5dcd4a-66c7-407f-bc34-38e47f4dabde";
+pub const RENDER_3D_TEXTURE_GROUP: &str = "c9ea2067-50f9-43d5-876c-5940a4d191cc";
+// Engine textures
 pub const RENDER_2D_COMMON_TEXTURE_ID: &str = "8a22d465-7935-41e5-9e90-686ef5632c54";
-pub const RENDER_3D_COMMON_TEXTURE_ID: &str = "c5b9b417-e676-453b-8673-be2110924346";
+pub const RENDER_3D_COMMON_TEXTURE_ID: &str = "fb378338-4d98-4b48-bd6d-1ca28515988f";
 // Primitive meshes
 pub const PRIMITIVE_MESH_GROUP_ID: &str = "437b63d4-5c7d-49e9-958b-8f68b4931355";
 pub const UNIT_SQUARE_MESH_ID: &str = "6fd0eeb3-9847-4a26-9eec-370e9839cbd3";
