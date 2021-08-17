@@ -5,3 +5,4 @@ edition = "2018"
 
 [dependencies]
 ember = { path = "../../engine" }
+uuid = "0.8"

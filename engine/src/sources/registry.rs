@@ -79,11 +79,11 @@ impl TextureRegistryBuilder {
         id
     }
 
-    pub fn load_id(&mut self, id: Uuid, path: &str, group_id: Uuid) {
-        match self.to_load.get_mut(&group_id) {
+    pub fn load_id(&mut self, id: Uuid, path: &str, group_id: &Uuid) {
+        match self.to_load.get_mut(group_id) {
             Some(paths) => paths.push((id, path.to_owned())),
             None => {
-                self.to_load.insert(group_id, vec![(id, path.to_owned())]);
+                self.to_load.insert(*group_id, vec![(id, path.to_owned())]);
             }
         }
     }
@@ -94,6 +94,17 @@ impl TextureRegistryBuilder {
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
     ) -> Result<TextureRegistry> {
+        let mut num_textures = 0;
+        &self
+            .to_load
+            .iter()
+            .for_each(|(_, tex)| tex.iter().for_each(|_| num_textures += 1));
+        debug!(
+            "building texture registry: {} groups, {} textures",
+            self.to_load.len(),
+            num_textures
+        );
+
         let bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
@@ -150,23 +161,39 @@ pub trait MeshBuilder: Send + Sync {
 }
 
 pub struct MeshRegistry {
-    pub builders: HashMap<Uuid, Arc<dyn MeshBuilder>>,
+    pub groups: HashMap<Uuid, HashMap<Uuid, Arc<dyn MeshBuilder>>>,
     pub device: Arc<wgpu::Device>,
 }
 
 impl MeshRegistry {
-    pub fn register<M: MeshBuilder + 'static>(&mut self, builder: M) -> Uuid {
+    pub fn register<M: MeshBuilder + 'static>(&mut self, builder: M, group_id: &Uuid) -> Uuid {
         let id = Uuid::new_v4();
-        self.builders.insert(id, Arc::new(builder));
+        match self.groups.get_mut(group_id) {
+            Some(group) => {
+                group.insert(id, Arc::new(builder));
+            }
+            None => {
+                self.groups.insert(*group_id, HashMap::new());
+                self.register(builder, group_id);
+            }
+        }
         id
     }
 
-    pub fn register_id<M: MeshBuilder + 'static>(&mut self, id: Uuid, builder: M) {
-        self.builders.insert(id, Arc::new(builder));
+    pub fn register_id<M: MeshBuilder + 'static>(&mut self, id: Uuid, builder: M, group_id: &Uuid) {
+        match self.groups.get_mut(group_id) {
+            Some(group) => {
+                group.insert(id, Arc::new(builder));
+            }
+            None => {
+                self.groups.insert(*group_id, HashMap::new());
+                self.register_id(id, builder, group_id);
+            }
+        }
     }
 
-    pub fn clone_mesh(&self, id: Uuid) -> Mesh {
-        self.builders[&id].build(Arc::clone(&self.device))
+    pub fn clone_mesh(&self, mesh_id: &Uuid, group_id: &Uuid) -> Mesh {
+        self.groups[group_id][mesh_id].build(Arc::clone(&self.device))
     }
 }
 
@@ -181,35 +208,48 @@ impl MeshRegistryBuilder {
         }
     }
 
-    pub fn load(&mut self, path: &str) -> Uuid {
+    pub fn load(&mut self, path: &str, group_id: &Uuid) -> Uuid {
         let id = Uuid::new_v4();
-        match self.to_load.get_mut(&ID(PRIMITIVE_MESH_GROUP_ID)) {
+        match self.to_load.get_mut(group_id) {
             Some(paths) => paths.push((id, path.to_owned())),
             None => {
-                self.to_load
-                    .insert(ID(PRIMITIVE_MESH_GROUP_ID), vec![(id, path.to_owned())]);
+                self.to_load.insert(*group_id, vec![(id, path.to_owned())]);
             }
         }
         id
     }
 
-    pub fn load_id(&mut self, id: Uuid, path: &str) {
-        match self.to_load.get_mut(&ID(PRIMITIVE_MESH_GROUP_ID)) {
+    pub fn load_id(&mut self, id: Uuid, path: &str, group_id: &Uuid) {
+        match self.to_load.get_mut(group_id) {
             Some(paths) => paths.push((id, path.to_owned())),
             None => {
-                self.to_load
-                    .insert(ID(PRIMITIVE_MESH_GROUP_ID), vec![(id, path.to_owned())]);
+                self.to_load.insert(*group_id, vec![(id, path.to_owned())]);
             }
         }
     }
 
     pub fn build(&self, device: Arc<wgpu::Device>) -> MeshRegistry {
-        let mut builders: HashMap<Uuid, Arc<dyn MeshBuilder>> = HashMap::new();
-        builders.insert(ID(UNIT_SQUARE_MESH_ID), Arc::new(PrimitiveMesh::UnitSquare));
-        builders.insert(ID(UNIT_CUBE_MESH_ID), Arc::new(PrimitiveMesh::UnitCube));
+        let mut num_meshes = 0;
+        &self
+            .to_load
+            .iter()
+            .for_each(|(_, mesh)| mesh.iter().for_each(|_| num_meshes += 1));
+        debug!(
+            "building mesh registry: {} groups, {} meshes",
+            self.to_load.len(),
+            num_meshes
+        );
+
+        let mut groups: HashMap<Uuid, HashMap<Uuid, Arc<dyn MeshBuilder>>> = HashMap::new();
+
+        // Common shapes
+        let mut primitive_group: HashMap<Uuid, Arc<dyn MeshBuilder>> = HashMap::new();
+        primitive_group.insert(ID(UNIT_SQUARE_MESH_ID), Arc::new(PrimitiveMesh::UnitSquare));
+        primitive_group.insert(ID(UNIT_CUBE_MESH_ID), Arc::new(PrimitiveMesh::UnitCube));
+        groups.insert(ID(PRIMITIVE_MESH_GROUP_ID), primitive_group);
 
         MeshRegistry {
-            builders,
+            groups,
             device: Arc::clone(&device),
         }
     }

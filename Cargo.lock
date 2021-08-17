@@ -612,6 +612,7 @@ name = "example1"
 version = "0.1.0"
 dependencies = [
  "ember",
+ "uuid",
 ]
 
 [[package]]

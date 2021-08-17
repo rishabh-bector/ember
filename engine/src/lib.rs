@@ -8,9 +8,8 @@ extern crate vertex_layout_derive;
 extern crate vertex_traits;
 
 use anyhow::Result;
-use constants::DEFAULT_MAX_INSTANCES_PER_BUFFER;
+use constants::{DEFAULT_MAX_INSTANCES_PER_BUFFER, PRIMITIVE_MESH_GROUP_ID};
 use legion::{Resources, Schedule, World};
-use sources::{primitives::PrimitiveMesh, registry::MeshBuilder};
 use std::{
     any::type_name,
     env,
@@ -57,8 +56,11 @@ use crate::{
     systems::{camera_2d::*, camera_3d::*, lighting_2d::*, physics_2d::*},
 };
 
-pub fn engine() -> EngineBuilder {
-    EngineBuilder {}
+pub fn builder() -> EngineBuilder {
+    EngineBuilder {
+        texture_registry_builder: TextureRegistryBuilder::new(),
+        mesh_registry_builder: MeshRegistryBuilder::new(),
+    }
 }
 
 pub mod components;
@@ -116,8 +118,12 @@ impl Engine {
         self
     }
 
-    pub fn clone_mesh(&self, id: Uuid) -> Mesh {
-        self.registry.meshes.read().unwrap().clone_mesh(id)
+    pub fn clone_mesh(&self, mesh_id: &Uuid, group_id: &Uuid) -> Mesh {
+        self.registry
+            .meshes
+            .read()
+            .unwrap()
+            .clone_mesh(mesh_id, group_id)
     }
 
     pub fn start(mut self, event_loop: EventLoop<()>) {
@@ -164,10 +170,29 @@ impl Engine {
     }
 }
 
-pub struct EngineBuilder {}
+pub struct EngineBuilder {
+    texture_registry_builder: TextureRegistryBuilder,
+    mesh_registry_builder: MeshRegistryBuilder,
+}
 
 impl EngineBuilder {
-    pub fn default(self) -> Result<(Engine, EventLoop<()>)> {
+    pub fn with_texture_group(mut self, group: TextureGroup) -> Self {
+        for tex in group.textures {
+            self.texture_registry_builder
+                .load_id(tex.0, &tex.1, &group.id);
+        }
+        self
+    }
+
+    pub fn with_mesh_group(mut self, group: MeshGroup) -> Self {
+        for mesh in group.meshes {
+            self.mesh_registry_builder
+                .load_id(mesh.0, &mesh.1, &group.id);
+        }
+        self
+    }
+
+    pub fn default(mut self) -> Result<(Engine, EventLoop<()>)> {
         pretty_env_logger::init();
         info!("building engine");
 
@@ -182,7 +207,7 @@ impl EngineBuilder {
             |crate_dir| PathBuf::from(crate_dir),
         );
 
-        info!("creating window");
+        info!("building window");
         let event_loop = EventLoop::new();
         let size = LogicalSize::new(DEFAULT_SCREEN_WIDTH as f64, DEFAULT_SCREEN_HEIGHT as f64);
         let window = Arc::new({
@@ -202,25 +227,25 @@ impl EngineBuilder {
         )?));
         let gpu_mut = gpu.lock().unwrap();
 
-        info!("loading textures");
-        let mut texture_registry_builder = TextureRegistryBuilder::new();
-        texture_registry_builder.load_id(
+        info!("building registry");
+
+        self.texture_registry_builder.load_id(
             Uuid::from_str(RENDER_2D_COMMON_TEXTURE_ID).unwrap(),
             &base_dir
                 .join("src/sources/static/test.png")
                 .into_os_string()
                 .into_string()
                 .unwrap(),
-            ID(RENDER_2D_TEXTURE_GROUP),
+            &ID(RENDER_2D_TEXTURE_GROUP),
         );
-        texture_registry_builder.load_id(
+        self.texture_registry_builder.load_id(
             Uuid::from_str(RENDER_3D_COMMON_TEXTURE_ID).unwrap(),
             &base_dir
                 .join("src/sources/static/arrow.jpg")
                 .into_os_string()
                 .into_string()
                 .unwrap(),
-            ID(RENDER_3D_TEXTURE_GROUP),
+            &ID(RENDER_3D_TEXTURE_GROUP),
         );
 
         let device_preferred_format = gpu_mut
@@ -232,13 +257,12 @@ impl EngineBuilder {
             device_preferred_format
         );
 
-        let mesh_registry_builder = MeshRegistryBuilder::new();
         let registry = Registry::build(
             Arc::clone(&gpu_mut.device),
             &gpu_mut.queue,
             device_preferred_format,
-            texture_registry_builder,
-            mesh_registry_builder,
+            self.texture_registry_builder,
+            self.mesh_registry_builder,
         )
         .unwrap();
         resources.insert(Arc::clone(&registry.textures));
@@ -451,4 +475,14 @@ fn instance_buffer<I: Instance>(
     queue: &Arc<wgpu::Queue>,
 ) -> InstanceBuffer<I> {
     InstanceBuffer::<I>::new(device, Arc::clone(&queue), DEFAULT_MAX_INSTANCES_PER_BUFFER)
+}
+
+pub struct TextureGroup {
+    pub id: Uuid,
+    pub textures: Vec<(Uuid, String)>,
+}
+
+pub struct MeshGroup {
+    pub id: Uuid,
+    pub meshes: Vec<(Uuid, String)>,
 }

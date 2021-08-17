@@ -1,8 +1,10 @@
 use ember::{
     components::Position3D,
-    constants::{ID, UNIT_CUBE_MESH_ID},
+    constants::{ID, PRIMITIVE_MESH_GROUP_ID, UNIT_CUBE_MESH_ID},
     renderer::systems::render_3d::forward_basic::Render3D,
+    MeshGroup,
 };
+use uuid::Uuid;
 
 // Ember example
 
@@ -34,9 +36,24 @@ use ember::{
 
 fn main() {
     std::env::set_var("RUST_LOG", "ember=debug");
-    let (mut engine, event_loop) = ember::engine().default().unwrap();
+    let engine_builder = ember::builder();
 
-    let cube_mesh = engine.clone_mesh(ID(UNIT_CUBE_MESH_ID));
+    let airplane_mesh_group_id = Uuid::new_v4();
+    let airplane_mesh_id = Uuid::new_v4();
+    let airplane_mesh_group = MeshGroup {
+        id: airplane_mesh_group_id,
+        meshes: vec![(
+            airplane_mesh_id,
+            "../../engine/src/sources/static/airplane.obj".to_owned(),
+        )],
+    };
+
+    let (mut engine, event_loop) = engine_builder
+        // .with_mesh_group(airplane_mesh_group)
+        .default()
+        .unwrap();
+
+    let airplane_mesh = engine.clone_mesh(&ID(UNIT_CUBE_MESH_ID), &ID(PRIMITIVE_MESH_GROUP_ID));
     engine.world().push((
         Render3D::default("test_cube"),
         Position3D {
@@ -44,7 +61,7 @@ fn main() {
             y: 0.0,
             z: 0.0,
         },
-        cube_mesh,
+        airplane_mesh,
     ));
 
     engine.start(event_loop);
