@@ -28,17 +28,17 @@ impl Camera3D {
     pub fn default(screen_width: f32, screen_height: f32) -> Self {
         Self {
             speed: 0.3,
-            sensitivity: 0.0075,
+            sensitivity: 0.2,
             scroll_sensitivity: 0.5,
-            pos: (0.0, 0.0, 2.0).into(),
-            dir: (0.0, 0.0, -1.0).into(),
+            pos: (0.0, 0.0, -5.0).into(),
+            dir: (0.0, 0.0, 1.0).into(),
             pitch: 0.0,
-            yaw: -90.0,
+            yaw: 90.0,
             up: cgmath::Vector3::unit_y(),
             aspect: screen_width / screen_height,
             fov: 45.0,
-            z_near: 0.1,
-            z_far: 100.0,
+            z_near: 0.01,
+            z_far: 10000.0,
             first: true,
         }
     }

@@ -24,3 +24,23 @@ pub struct Position3D {
     pub y: f32,
     pub z: f32,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Velocity3D {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Scale3D {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+pub struct Rotor3D {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}

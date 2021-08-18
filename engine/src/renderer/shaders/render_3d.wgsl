@@ -55,12 +55,13 @@ fn main(
     // var snapped: vec2<f32> = vec2<f32>(round(world_space.x), round(world_space.y));
     //var camera_space: vec2<f32> = snap2grid(world_space + camera_uniforms.view.xy, i32(1)) / camera_uniforms.view.zw;
 
-    var some_space: vec4<f32> = camera_uniforms.view_proj * render_3d_uniforms.model * vec4<f32>(in.position, 1.0);
+    var world_space: vec4<f32> = render_3d_uniforms.model * vec4<f32>(in.position, 1.0);
+    var camera_space: vec4<f32> = camera_uniforms.view_proj * world_space;
 
     var out: VertexOutput;
     out.uvs = in.uvs;
-    out.clip_position = some_space; //vec4<f32>(camera_space, 0.0, 1.0);
-    out.world_pos = some_space.xyz;
+    out.clip_position = camera_space;
+    out.world_pos = world_space.xyz;
 
     return out;
 }

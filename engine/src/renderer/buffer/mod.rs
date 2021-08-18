@@ -90,7 +90,7 @@ impl VertexBuffer {
         device: &wgpu::Device,
     ) -> (Self, Vec<f32>) {
         let num_vertices = vertices_flat.len() / 3;
-        assert_eq!(num_vertices, uvs_flat.len() / 3);
+        assert_eq!(num_vertices, uvs_flat.len() / 2);
 
         let mut buf: Vec<f32> = vec![];
         for i in 0..num_vertices {

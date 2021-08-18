@@ -1,10 +1,9 @@
 use std::sync::Arc;
-
 use uuid::Uuid;
 
 use crate::sources::registry::MeshBuilder;
 
-use super::buffer::{IndexBuffer, Vertex3D, VertexBuffer};
+use super::buffer::{IndexBuffer, VertexBuffer};
 
 pub struct Mesh {
     pub vertices: Vec<f32>,
@@ -45,21 +44,49 @@ impl ObjLoader {
 
 impl MeshBuilder for ObjLoader {
     fn build(&self, device: Arc<wgpu::Device>) -> Mesh {
-        let (models, _) = tobj::load_obj(&self.path, &tobj::LoadOptions::default()).unwrap();
-        let mesh = &models[0].mesh;
+        debug!("building obj meshes from file: {}", &self.path);
 
-        // Only load one face for now
-        let face_size = mesh.face_arities[0] as usize;
+        let options = tobj::LoadOptions {
+            triangulate: true,
+            single_index: true,
+            ignore_lines: true,
+            ignore_points: true,
+            ..Default::default()
+        };
+        let (models, _) = tobj::load_obj(&self.path, &options).unwrap();
+        debug!("obj contains {} meshes which will be merged", models.len());
 
-        let flat_vertices: &[f32] = &mesh.positions[0..face_size];
-        let flat_uvs: &[f32] = &mesh.texcoords[0..face_size];
+        let mut flat_vertices: Vec<f32> = vec![];
+        let mut flat_uvs: Vec<f32> = vec![];
 
-        let (vertex_buffer, vertices) =
-            VertexBuffer::from_flat_slices(&self.path, flat_vertices, flat_uvs, &device);
-        let indices: Vec<u16> = mesh.indices[0..face_size]
-            .iter()
-            .map(|i| *i as u16)
-            .collect();
+        let mut indices: Vec<u16> = vec![];
+        for i in 0..models.len() {
+            let mesh = &models[i].mesh;
+            debug!(
+                "building mesh {} with {} triangles and {} indices (faces: {})",
+                i,
+                mesh.positions.len() / 3,
+                mesh.indices.len(),
+                mesh.face_arities.len(),
+            );
+
+            let mesh = &models[i].mesh;
+            for index in 0..mesh.positions.len() / 3 {
+                flat_vertices.push(mesh.positions[3 * index]);
+                flat_vertices.push(mesh.positions[3 * index + 1]);
+                flat_vertices.push(mesh.positions[3 * index + 2]);
+                flat_uvs.push(mesh.texcoords[2 * index]);
+                flat_uvs.push(mesh.texcoords[2 * index + 1]);
+            }
+            indices.extend(mesh.indices.iter().map(|i| *i as u16));
+        }
+
+        let (vertex_buffer, vertices) = VertexBuffer::from_flat_slices(
+            &self.path,
+            flat_vertices.as_slice(),
+            flat_uvs.as_slice(),
+            &device,
+        );
 
         Mesh {
             index_buffer: IndexBuffer::new(&indices, &device),
@@ -69,21 +96,3 @@ impl MeshBuilder for ObjLoader {
         }
     }
 }
-
-// pub fn buffer_flat_slices_3d(flat_vertices: &[f32], flat_uvs: &[f32]) -> Vec<Vertex3D> {
-//     let num_vertices = flat_vertices.len() / 3;
-//     assert_eq!(num_vertices, flat_uvs.len() / 3);
-
-//     let mut vec: Vec<Vertex3D> = vec![];
-//     for i in 0..num_vertices {
-//         vec.push(Vertex3D {
-//             position: [
-//                 flat_vertices[i * 3],
-//                 flat_vertices[i * 3 + 1],
-//                 flat_vertices[i * 3 + 2],
-//             ],
-//             uvs: [flat_uvs[i * 2], flat_uvs[i * 2 + 1]],
-//         });
-//     }
-//     vec
-// }

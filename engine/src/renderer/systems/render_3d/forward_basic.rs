@@ -24,6 +24,7 @@ use crate::{
         },
     },
     sources::primitives::unit_cube,
+    systems::camera_3d::matrix2array_4d,
 };
 
 // Todo: go through all todo comments and make tickets for them
@@ -60,27 +61,13 @@ pub struct Render3DUniforms {
     pub mix: f32,
 }
 
-impl Uniform for Render3D {
-    fn write_buffer(&self, queue: &wgpu::Queue, buffer: &wgpu::Buffer) {
-        queue.write_buffer(
-            buffer,
-            0,
-            bytemuck::cast_slice(&[Render3DUniforms::from(self)]),
-        );
-    }
-}
-
-impl From<&Render3D> for Render3DUniforms {
-    fn from(render_3d: &Render3D) -> Self {
+impl From<(&Render3D, &Position3D)> for Render3DUniforms {
+    fn from(entity: (&Render3D, &Position3D)) -> Self {
+        let mat = cgmath::Matrix4::from_translation((entity.1.x, entity.1.y, entity.1.z).into());
         Self {
-            model: [
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0],
-            ],
-            color: render_3d.color,
-            mix: render_3d.mix,
+            model: matrix2array_4d(mat),
+            color: entity.0.color,
+            mix: entity.0.mix,
         }
     }
 }
@@ -119,7 +106,7 @@ pub fn load(
             "loading uniform group state for existing render_3d component: {}",
             render_3d.name
         );
-        let source = &[Render3DUniforms::from(render_3d)];
+        let source = &[Render3DUniforms::from((render_3d, pos_3d))];
         group_state.write_buffer(0, bytemuck::cast_slice(source));
     });
 }

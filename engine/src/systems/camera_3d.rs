@@ -1,10 +1,10 @@
-use cgmath::{Angle, EuclideanSpace, Matrix2, Rad};
+use cgmath::{Angle, Deg, EuclideanSpace, Matrix2, Matrix4, Rad};
 use std::sync::{Arc, Mutex, RwLock};
 use winit_input_helper::WinitInputHelper;
 
 use crate::{
     renderer::uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
-    sources::camera::{Camera2D, Camera3D},
+    sources::camera::Camera3D,
 };
 
 pub struct Camera3DUniformGroup {}
@@ -31,12 +31,13 @@ pub fn camera_3d(
     camera.pitch -= dy * camera.sensitivity;
     if camera.pitch > 89.0 {
         camera.pitch = 89.0;
-    } else if camera.pitch < -89.0 {
-        camera.pitch = -89.0;
+    } else if camera.pitch < -89.9 {
+        camera.pitch = -89.9;
     }
-    camera.dir.x = Angle::cos(Rad(camera.yaw)) * Angle::cos(Rad(camera.pitch));
-    camera.dir.y = Angle::sin(Rad(camera.pitch));
-    camera.dir.z = Angle::sin(Rad(camera.yaw)) * Angle::cos(Rad(camera.pitch));
+
+    camera.dir.x = Angle::cos(Deg(camera.yaw)) * Angle::cos(Deg(camera.pitch));
+    camera.dir.y = Angle::sin(Deg(camera.pitch));
+    camera.dir.z = Angle::sin(Deg(camera.yaw)) * Angle::cos(Deg(camera.pitch));
 
     // WASD movement
     if input.key_held(winit::event::VirtualKeyCode::W) {
@@ -57,13 +58,8 @@ pub fn camera_3d(
     // Scroll altitude
     camera.pos.y += input.scroll_diff() * camera.scroll_sensitivity;
 
-    let mat = camera.build_view_proj();
-    camera_uniforms.mut_ref().view_proj = [
-        [mat.x.x, mat.x.y, mat.x.z, mat.x.w],
-        [mat.y.x, mat.y.y, mat.y.z, mat.y.w],
-        [mat.z.x, mat.z.y, mat.z.z, mat.z.w],
-        [mat.w.x, mat.w.y, mat.w.z, mat.w.w],
-    ];
+    // Build camera matrix
+    camera_uniforms.mut_ref().view_proj = matrix2array_4d(camera.build_view_proj());
 }
 
 // TODO: Make this a macro?
@@ -79,6 +75,15 @@ pub fn camera_3d_uniform(
     );
 }
 
-pub fn _flatten(mat: Matrix2<f32>) -> [f32; 4] {
+pub fn matrix2array_2d(mat: Matrix2<f32>) -> [f32; 4] {
     [mat.x[0], mat.y[0], mat.x[1], mat.y[1]]
+}
+
+pub fn matrix2array_4d(mat: Matrix4<f32>) -> [[f32; 4]; 4] {
+    [
+        [mat.x.x, mat.x.y, mat.x.z, mat.x.w],
+        [mat.y.x, mat.y.y, mat.y.z, mat.y.w],
+        [mat.z.x, mat.z.y, mat.z.z, mat.z.w],
+        [mat.w.x, mat.w.y, mat.w.z, mat.w.w],
+    ]
 }

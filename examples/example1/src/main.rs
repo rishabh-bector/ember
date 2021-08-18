@@ -55,8 +55,8 @@ fn main() {
         Render3D::default("test_cube"),
         Position3D {
             x: 0.0,
-            y: 0.0,
-            z: 0.0,
+            y: 100.0,
+            z: 2000.0,
         },
         airplane_mesh,
     ));
