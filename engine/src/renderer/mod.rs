@@ -6,6 +6,7 @@ use self::graph::target::RenderTarget;
 
 pub mod buffer;
 pub mod graph;
+pub mod mesh;
 pub mod systems;
 pub mod uniform;
 

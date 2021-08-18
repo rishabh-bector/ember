@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use image::io::Reader as ImageReader;
 use legion::Resources;
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::{
     collections::HashMap,
     rc::Rc,
@@ -11,7 +12,10 @@ use wgpu::BindGroup;
 
 use crate::{
     constants::{ID, PRIMITIVE_MESH_GROUP_ID, UNIT_CUBE_MESH_ID, UNIT_SQUARE_MESH_ID},
-    renderer::buffer::{texture::Texture, Mesh, VertexBuffer},
+    renderer::{
+        buffer::{texture::Texture, VertexBuffer},
+        mesh::{Mesh, ObjLoader},
+    },
 };
 
 use super::primitives::{unit_cube, unit_square, PrimitiveMesh};
@@ -240,7 +244,28 @@ impl MeshRegistryBuilder {
             num_meshes
         );
 
-        let mut groups: HashMap<Uuid, HashMap<Uuid, Arc<dyn MeshBuilder>>> = HashMap::new();
+        let base_path = std::env::current_dir().unwrap();
+
+        let mut groups: HashMap<Uuid, HashMap<Uuid, Arc<dyn MeshBuilder>>> = self
+            .to_load
+            .to_owned()
+            .into_par_iter()
+            .map(|(group_id, group)| {
+                (
+                    group_id,
+                    group
+                        .into_par_iter()
+                        .map(|(mesh_id, path)| {
+                            (
+                                mesh_id,
+                                ObjLoader::new(base_path.join(&path).to_str().unwrap().to_owned())
+                                    .arc_dyn(),
+                            )
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
 
         // Common shapes
         let mut primitive_group: HashMap<Uuid, Arc<dyn MeshBuilder>> = HashMap::new();

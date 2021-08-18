@@ -8,7 +8,7 @@ use wgpu::util::DeviceExt;
 use crate::{
     constants::ID,
     renderer::{
-        buffer::Mesh,
+        mesh::Mesh,
         uniform::{generic::BufferState, group::BufferMode},
     },
 };

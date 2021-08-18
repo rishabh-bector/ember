@@ -68,6 +68,55 @@ impl VertexBuffer {
             size: vertices.len() as u32,
         }
     }
+
+    pub fn raw(name: &str, data: &[f32], num_vertices: u32, device: &wgpu::Device) -> Self {
+        VertexBuffer {
+            buffer: Arc::new((
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(&format!("Raw Vertex Buffer: {}", name)),
+                    contents: bytemuck::cast_slice(data),
+                    usage: wgpu::BufferUsage::VERTEX,
+                }),
+                num_vertices,
+            )),
+            size: num_vertices,
+        }
+    }
+
+    pub fn from_flat_slices(
+        name: &str,
+        vertices_flat: &[f32],
+        uvs_flat: &[f32],
+        device: &wgpu::Device,
+    ) -> (Self, Vec<f32>) {
+        let num_vertices = vertices_flat.len() / 3;
+        assert_eq!(num_vertices, uvs_flat.len() / 3);
+
+        let mut buf: Vec<f32> = vec![];
+        for i in 0..num_vertices {
+            buf.push(vertices_flat[i * 3]);
+            buf.push(vertices_flat[i * 3 + 1]);
+            buf.push(vertices_flat[i * 3 + 2]);
+            buf.push(uvs_flat[i * 2]);
+            buf.push(uvs_flat[i * 2 + 1]);
+        }
+
+        (
+            VertexBuffer {
+                buffer: Arc::new((
+                    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some(&format!("3D Vertex Buffer: {}", name)),
+                        contents: bytemuck::cast_slice(buf.as_slice()),
+                        usage: wgpu::BufferUsage::VERTEX,
+                    }),
+                    buf.len() as u32,
+                )),
+                size: buf.len() as u32,
+            },
+            buf,
+        )
+    }
+
     pub fn layout_2d<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex2D>() as wgpu::BufferAddress,
@@ -126,9 +175,4 @@ impl IndexBuffer {
             size: indices.len() as u32,
         }
     }
-}
-
-pub struct Mesh {
-    pub vertices: VertexBuffer,
-    pub indices: IndexBuffer,
 }

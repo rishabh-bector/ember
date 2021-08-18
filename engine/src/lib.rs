@@ -8,7 +8,6 @@ extern crate vertex_layout_derive;
 extern crate vertex_traits;
 
 use anyhow::Result;
-use constants::{DEFAULT_MAX_INSTANCES_PER_BUFFER, PRIMITIVE_MESH_GROUP_ID};
 use legion::{Resources, Schedule, World};
 use std::{
     any::type_name,
@@ -28,23 +27,17 @@ use winit::{
 use winit_input_helper::WinitInputHelper;
 
 use crate::{
-    constants::{
-        CAMERA_2D_BIND_GROUP_ID, CAMERA_3D_BIND_GROUP_ID, DEFAULT_SCREEN_HEIGHT,
-        DEFAULT_SCREEN_WIDTH, DEFAULT_TEXTURE_BUFFER_FORMAT, FORWARD_2D_NODE_ID,
-        FORWARD_3D_NODE_ID, ID, INSTANCE_2D_NODE_ID, INSTANCE_3D_NODE_ID,
-        LIGHTING_2D_BIND_GROUP_ID, RENDER_2D_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID,
-        RENDER_2D_TEXTURE_GROUP, RENDER_3D_BIND_GROUP_ID, RENDER_3D_COMMON_TEXTURE_ID,
-        RENDER_3D_TEXTURE_GROUP,
-    },
+    constants::*,
     renderer::{
         buffer::{instance::*, *},
         graph::{
             node::{NodeBuilder, ShaderSource},
             GraphBuilder, RenderGraph,
         },
+        mesh::Mesh,
         systems::*,
         uniform::{generic::GenericUniformBuilder, group::UniformGroup},
-        *,
+        GpuState, GpuStateBuilder,
     },
     sources::{
         camera::{Camera2D, Camera3D},
@@ -129,6 +122,7 @@ impl Engine {
     pub fn start(mut self, event_loop: EventLoop<()>) {
         info!("starting engine");
         self.window.set_cursor_visible(false);
+        let _ = self.window.set_cursor_grab(true);
 
         let metrics_last_updated = Arc::new(Mutex::new(Instant::now()));
         event_loop.run(move |event, _, control_flow| {

@@ -1,8 +1,5 @@
 use ember::{
-    components::Position3D,
-    constants::{ID, PRIMITIVE_MESH_GROUP_ID, UNIT_CUBE_MESH_ID},
-    renderer::systems::render_3d::forward_basic::Render3D,
-    MeshGroup,
+    components::Position3D, renderer::systems::render_3d::forward_basic::Render3D, MeshGroup,
 };
 use uuid::Uuid;
 
@@ -44,16 +41,16 @@ fn main() {
         id: airplane_mesh_group_id,
         meshes: vec![(
             airplane_mesh_id,
-            "../../engine/src/sources/static/airplane.obj".to_owned(),
+            "./engine/src/sources/static/airplane.obj".to_owned(),
         )],
     };
 
     let (mut engine, event_loop) = engine_builder
-        // .with_mesh_group(airplane_mesh_group)
+        .with_mesh_group(airplane_mesh_group)
         .default()
         .unwrap();
 
-    let airplane_mesh = engine.clone_mesh(&ID(UNIT_CUBE_MESH_ID), &ID(PRIMITIVE_MESH_GROUP_ID));
+    let airplane_mesh = engine.clone_mesh(&airplane_mesh_id, &airplane_mesh_group_id);
     engine.world().push((
         Render3D::default("test_cube"),
         Position3D {

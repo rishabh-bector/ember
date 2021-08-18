@@ -7,12 +7,14 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    buffer::{IndexBuffer, Vertex2D, VertexBuffer},
     constants::{
         DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, FORWARD_3D_NODE_ID, ID, INSTANCE_2D_NODE_ID,
         METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID,
     },
-    renderer::{buffer::Vertex3D, graph::target::DepthBuffer},
+    renderer::{
+        buffer::{IndexBuffer, Vertex2D, VertexBuffer},
+        graph::target::DepthBuffer,
+    },
     sources::{
         metrics::{EngineMetrics, SystemReporter},
         registry::Registry,

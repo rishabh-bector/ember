@@ -13,8 +13,8 @@ use crate::{
     },
     legion::IntoQuery,
     renderer::{
-        buffer::Mesh,
         graph::NodeState,
+        mesh::Mesh,
         uniform::{
             generic::GenericUniform,
             group::{
@@ -164,10 +164,13 @@ pub fn render(
         pass.set_bind_group(0, &node.binder.texture_groups[&render_3d.texture], &[]);
         pass.set_bind_group(1, &group_state.bind_group, &[]);
 
-        pass.set_vertex_buffer(0, mesh.vertices.buffer.0.slice(..));
-        pass.set_index_buffer(mesh.indices.buffer.0.slice(..), wgpu::IndexFormat::Uint16);
+        pass.set_vertex_buffer(0, mesh.vertex_buffer.buffer.0.slice(..));
+        pass.set_index_buffer(
+            mesh.index_buffer.buffer.0.slice(..),
+            wgpu::IndexFormat::Uint16,
+        );
 
-        pass.draw_indexed(0..mesh.indices.buffer.1, 0, 0..1);
+        pass.draw_indexed(0..mesh.index_buffer.buffer.1, 0, 0..1);
     }
 
     debug!("done recording; submitting render pass");
