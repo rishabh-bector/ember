@@ -137,7 +137,7 @@ impl TextureRegistryBuilder {
         let mut textures: HashMap<Uuid, HashMap<Uuid, Texture>> = HashMap::new();
         for (group, tex) in &self.to_load {
             let group_textures = tex
-                .into_iter()
+                .into_par_iter()
                 .map(|(id, path)| {
                     let rgba = ImageReader::open(&path)
                         .map_err(|err| anyhow!("error loading texture {}: - {}", path, err))?

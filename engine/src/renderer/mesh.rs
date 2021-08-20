@@ -61,6 +61,10 @@ impl MeshBuilder for ObjLoader {
 
         let mut indices: Vec<u16> = vec![];
         for i in 0..models.len() {
+            if i != 0 {
+                continue;
+            }
+
             let mesh = &models[i].mesh;
             debug!(
                 "building mesh {} with {} triangles and {} indices (faces: {})",

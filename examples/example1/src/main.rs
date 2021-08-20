@@ -41,7 +41,7 @@ fn main() {
         id: airplane_mesh_group_id,
         meshes: vec![(
             airplane_mesh_id,
-            "./engine/src/sources/static/airplane.obj".to_owned(),
+            "./engine/src/sources/static/sphere.obj".to_owned(),
         )],
     };
 
@@ -55,8 +55,8 @@ fn main() {
         Render3D::default("test_cube"),
         Position3D {
             x: 0.0,
-            y: 100.0,
-            z: 2000.0,
+            y: 0.0,
+            z: 0.0,
         },
         airplane_mesh,
     ));
