@@ -79,37 +79,37 @@ impl Engine {
         &mut self.legion.world
     }
 
-    pub fn with_instance_group<I: Instance>(mut self, group: InstanceGroup<I>) -> Self {
-        debug!("processing instance group: {}", type_name::<I>());
-        let mut maybe_buffer = self.legion.resources.get_mut::<InstanceBuffer<I>>();
-        let mut maybe_resource: Option<InstanceBuffer<I>> = None;
+    // pub fn with_instance_group<I: Instance>(mut self, group: InstanceGroup<I>) -> Self {
+    //     debug!("processing instance group: {}", type_name::<I>());
+    //     let mut maybe_buffer = self.legion.resources.get_mut::<InstanceBuffer<I>>();
+    //     let mut maybe_resource: Option<InstanceBuffer<I>> = None;
 
-        match maybe_buffer.as_mut() {
-            Some(instance_buf) => {
-                debug!("adding to existing instance buffer");
-                instance_buf.insert_group(group);
-            }
-            None => {
-                debug!("instance buffer not found; creating");
-                let queue = Arc::clone(&self.gpu.lock().unwrap().queue);
-                let mut instance_buf = InstanceBuffer::<I>::new(
-                    &self.gpu.lock().unwrap().device,
-                    queue,
-                    DEFAULT_MAX_INSTANCES_PER_BUFFER,
-                );
-                instance_buf.insert_group(group);
-                maybe_resource = Some(instance_buf);
-            }
-        }
+    //     match maybe_buffer.as_mut() {
+    //         Some(instance_buf) => {
+    //             debug!("adding to existing instance buffer");
+    //             instance_buf.insert_group(group);
+    //         }
+    //         None => {
+    //             debug!("instance buffer not found; creating");
+    //             let queue = Arc::clone(&self.gpu.lock().unwrap().queue);
+    //             let mut instance_buf = InstanceBuffer::<I>::new(
+    //                 &self.gpu.lock().unwrap().device,
+    //                 queue,
+    //                 DEFAULT_MAX_INSTANCES_PER_BUFFER,
+    //             );
+    //             instance_buf.insert_group(group);
+    //             maybe_resource = Some(instance_buf);
+    //         }
+    //     }
 
-        drop(maybe_buffer);
-        if let Some(instance_buf) = maybe_resource {
-            debug!("adding instance buffer {} to resources", type_name::<I>());
-            self.legion.resources.insert(instance_buf);
-        }
+    //     drop(maybe_buffer);
+    //     if let Some(instance_buf) = maybe_resource {
+    //         debug!("adding instance buffer {} to resources", type_name::<I>());
+    //         self.legion.resources.insert(instance_buf);
+    //     }
 
-        self
-    }
+    //     self
+    // }
 
     pub fn clone_mesh(&self, mesh_id: &Uuid, group_id: &Uuid) -> Mesh {
         self.registry
@@ -123,8 +123,9 @@ impl Engine {
         info!("starting engine");
         self.window.set_cursor_visible(false);
         let _ = self.window.set_cursor_grab(true);
-
         let metrics_last_updated = Arc::new(Mutex::new(Instant::now()));
+
+        // top-level event loop; hijacks thread
         event_loop.run(move |event, _, control_flow| {
             if let Event::RedrawRequested(_) = event {
                 debug!("executing all systems");
@@ -152,12 +153,9 @@ impl Engine {
                     return;
                 }
 
-                // Window resizing
                 if let Some(physical_size) = input.resolution() {
                     let _ = &self.gpu.lock().unwrap().resize(physical_size);
                 }
-
-                // Request a redraw
                 self.window.request_redraw();
             }
         });
@@ -376,7 +374,7 @@ impl EngineBuilder {
             .add_system(camera_2d_system())
             .add_system(camera_3d_system())
             .add_system(lighting_2d_system())
-            .add_system(render_2d::forward_instance::attractor_system())
+            // .add_system(render_2d::forward_instance::attractor_system())
             // Uniform loading systems
             .flush()
             .add_system(render_2d::forward_instance::load_system())

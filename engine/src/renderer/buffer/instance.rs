@@ -1,6 +1,8 @@
 use std::{
     any::type_name,
-    sync::{Arc, Mutex},
+    marker::PhantomData,
+    rc::Rc,
+    sync::{Arc, Mutex, RwLock},
 };
 use uuid::Uuid;
 use wgpu::util::DeviceExt;
@@ -15,8 +17,8 @@ use crate::{
 
 pub struct InstanceBuffer<I: Instance> {
     pub state: BufferState,
-    pub groups: Vec<Arc<Mutex<InstanceGroup<I>>>>,
     pub queue: Arc<wgpu::Queue>,
+    marker: PhantomData<I>,
 }
 
 impl<I> InstanceBuffer<I>
@@ -38,14 +40,9 @@ where
                 element_size: source_size as u64,
                 mode: BufferMode::Dynamic(max_elements),
             },
-            groups: vec![],
             queue,
+            marker: PhantomData,
         }
-    }
-
-    pub fn insert_group(&mut self, mut group: InstanceGroup<I>) {
-        group.id = self.groups.len() as u32;
-        self.groups.push(Arc::new(Mutex::new(group)));
     }
 
     pub fn load_group(&self, bytes: &[u8]) {
@@ -55,13 +52,12 @@ where
 
 // A group of components which can be rendered with one instanced draw call.
 // These share textures and meshes.
-pub struct InstanceGroup<T: Instance> {
+pub struct InstanceGroup<I: Instance> {
     pub id: u32,
-    pub instances: Vec<T>,
-    next_id: InstanceId,
-
+    pub instances: Vec<I>,
+    pub components: Arc<RwLock<Vec<Vec<Arc<dyn InstanceMutator<I>>>>>>,
     pub texture: Uuid,
-    pub mesh: Mesh,
+    next_id: InstanceId,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -70,27 +66,35 @@ pub struct InstanceId(pub u32, pub u32);
 pub trait Instance: bytemuck::Pod + bytemuck::Zeroable + Clone + Default {
     fn id(&self) -> (u32, u32);
     fn size() -> usize;
-
     fn set_id(&mut self, group_id: u32, inst_id: u32);
 }
 
-impl<T> InstanceGroup<T>
+pub trait InstanceMutator<I: Instance>: Send + Sync {
+    fn mutate(&self, instance: &mut I);
+}
+
+impl<I> InstanceGroup<I>
 where
-    T: Instance,
+    I: Instance,
 {
-    pub fn new(id: u32, mesh: Mesh, texture: Uuid) -> Self {
+    pub fn new(id: u32, texture: Uuid) -> Self {
         Self {
-            id,
-            instances: vec![],
             next_id: InstanceId(id, 0),
-            mesh,
+            instances: vec![],
+            components: Arc::new(RwLock::new(vec![])),
             texture,
+            id,
         }
     }
 
-    pub fn insert(&mut self, mut instance: T) -> InstanceId {
+    pub fn push(
+        &mut self,
+        mut instance: I,
+        instance_components: Vec<Arc<dyn InstanceMutator<I>>>,
+    ) -> InstanceId {
         instance.set_id(self.id, self.next_id.1);
         self.instances.push(instance);
+        self.components.write().unwrap().push(instance_components);
 
         let old_id = self.next_id;
         self.next_id.1 += 1;
@@ -111,9 +115,9 @@ pub trait InstanceGroupBinder {
     fn bind_mesh<'rp>(&self, render_pass: wgpu::RenderPass<'rp>);
 }
 
-impl<T> InstanceGroupBinder for InstanceGroup<T>
+impl<I> InstanceGroupBinder for InstanceGroup<I>
 where
-    T: Instance + bytemuck::Pod,
+    I: Instance + bytemuck::Pod,
 {
     fn num_instances(&self) -> usize {
         self.instances.len()

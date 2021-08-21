@@ -8,8 +8,8 @@ use uuid::Uuid;
 
 use crate::{
     constants::{
-        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, FORWARD_3D_NODE_ID, ID, INSTANCE_2D_NODE_ID,
-        METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID,
+        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, FORWARD_2D_NODE_ID, FORWARD_3D_NODE_ID, ID,
+        INSTANCE_2D_NODE_ID, METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID,
     },
     renderer::{
         buffer::{IndexBuffer, Vertex2D, VertexBuffer},
@@ -314,8 +314,11 @@ impl GraphBuilder {
         // ));
 
         sub_schedule.add_node(
-            Arc::clone(&nodes.get(&ID(FORWARD_3D_NODE_ID)).unwrap().system),
-            node_states.get(&ID(FORWARD_3D_NODE_ID)).unwrap().to_owned(),
+            Arc::clone(&nodes.get(&ID(INSTANCE_2D_NODE_ID)).unwrap().system),
+            node_states
+                .get(&ID(INSTANCE_2D_NODE_ID))
+                .unwrap()
+                .to_owned(),
         );
 
         sub_schedule.flush();

@@ -12,16 +12,6 @@ pub struct Mesh {
     pub index_buffer: IndexBuffer,
 }
 
-impl Mesh {
-    pub fn vertex_buffer(&self) -> Arc<(wgpu::Buffer, u32)> {
-        Arc::clone(&self.vertex_buffer.buffer)
-    }
-
-    pub fn index_buffer(&self) -> Arc<(wgpu::Buffer, u32)> {
-        Arc::clone(&self.index_buffer.buffer)
-    }
-}
-
 pub struct ObjLoader {
     pub id: Uuid,
     pub path: String,

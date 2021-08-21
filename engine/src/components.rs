@@ -1,7 +1,37 @@
+use crate::renderer::{
+    buffer::instance::InstanceMutator, systems::render_2d::forward_instance::Render2DInstance,
+};
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Position2D {
     pub x: f32,
     pub y: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Transform2D {
+    pub position: [f32; 2],
+    pub scale: [f32; 2],
+    pub angle: f32,
+}
+
+impl Default for Transform2D {
+    fn default() -> Self {
+        Self {
+            position: [0.0, 0.0],
+            scale: [1.0, 1.0],
+            angle: 0.0,
+        }
+    }
+}
+
+impl InstanceMutator<Render2DInstance> for Transform2D {
+    fn mutate(&self, instance: &mut Render2DInstance) {
+        instance.model[0] = self.position[0];
+        instance.model[1] = self.position[1];
+        instance.model[2] = self.scale[0];
+        instance.model[3] = self.scale[1];
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

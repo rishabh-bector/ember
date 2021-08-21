@@ -1,5 +1,9 @@
 use cgmath::{Angle, InnerSpace, Rad, Vector2};
 use legion::{world::SubWorld, IntoQuery};
+use rayon::{
+    iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator},
+    slice::ParallelSliceMut,
+};
 use std::{
     sync::{Arc, RwLock},
     time::Instant,
@@ -17,6 +21,7 @@ use crate::{
             Instance, InstanceBuffer, InstanceGroup, InstanceGroupBinder, InstanceId,
         },
         graph::NodeState,
+        mesh::Mesh,
     },
     sources::{
         primitives::unit_square,
@@ -46,9 +51,9 @@ impl Render2DInstance {
         }
     }
 
-    // pub fn default_group(mesh: Uuid) -> InstanceGroup<Render2DInstance> {
-    //     InstanceGroup::new(0, mesh, ID(RENDER_2D_COMMON_TEXTURE_ID))
-    // }
+    pub fn new_default_group() -> InstanceGroup<Render2DInstance> {
+        InstanceGroup::new(0, ID(RENDER_2D_COMMON_TEXTURE_ID))
+    }
 
     pub fn update_position(&mut self, pos: &Position2D) {
         self.model[0] = pos.x;
@@ -81,54 +86,138 @@ pub struct Attractor2D {
     pub force: f32,
 }
 
-// Phantom type
 pub struct Render2DUniformGroup {}
 
 #[system]
-#[read_component(InstanceId)]
-#[read_component(Position2D)]
-#[read_component(Attractor2D)]
-#[write_component(Velocity2D)]
-pub fn attractor(world: &mut SubWorld) {
-    debug!("running system render_2d_instance_attractor");
+#[write_component(InstanceGroup<Render2DInstance>)]
+#[write_component(Mesh)]
+pub fn load(world: &mut SubWorld) {
+    debug!("running system render_2d_instance_loader");
 
-    let attractors: Vec<(f32, (f32, f32))> = <(&Attractor2D, &Position2D)>::query()
-        .iter(world)
-        .map(|(a, p)| (a.force, (p.x, p.y)))
-        .collect();
+    <(&mut InstanceGroup<Render2DInstance>, &Mesh)>::query().par_for_each_mut(
+        world,
+        |(group, _)| {
+            let components = Arc::clone(&group.components);
+            let mutators = components.read().unwrap();
+            group.instances.par_iter_mut().for_each(|instance| {
+                for component in &mutators[instance.id as usize] {
+                    component.mutate(instance);
+                }
+            })
+        },
+    );
 
-    let mut query = <(&InstanceId, &Position2D, &mut Velocity2D)>::query();
-    query.par_for_each_mut(world, |(_inst_id, pos_2d, vel_2d)| {
-        for attractor in &attractors {
-            attractor_2d(attractor, pos_2d, vel_2d);
-        }
-    });
-}
-
-fn attractor_2d(attractor: &(f32, (f32, f32)), pos: &Position2D, vel: &mut Velocity2D) {
-    let line = Vector2::<f32>::new((attractor.1 .0) - pos.x, (attractor.1 .1) - pos.y);
-    let power = attractor.0 / line.magnitude2();
-    let theta: Rad<f32> = Angle::atan2(line.y, line.x);
-    let dvx = power * Angle::cos(theta);
-    let dvy = power * Angle::sin(theta);
-    // info!("DVVVVV {} {}", dvx, dvy);
-    vel.dx += dvx;
-    vel.dy += dvy;
+    // <(&InstanceId, &Position2D)>::query().par_for_each(world, |(inst_id, pos_2d)| {
+    //     groups[inst_id.0 as usize].instances[inst_id.1 as usize].model[0] = pos_2d.x;
+    //     groups[inst_id.0 as usize].instances[inst_id.1 as usize].model[1] = pos_2d.y;
+    // });
 }
 
 #[system]
-#[read_component(InstanceId)]
-#[read_component(Position2D)]
-pub fn load(world: &SubWorld, #[resource] instance_buffer: &InstanceBuffer<Render2DInstance>) {
-    debug!("running system render_2d_instance_loader");
+#[read_component(InstanceGroup<Render2DInstance>)]
+#[read_component(Mesh)]
+pub fn render(
+    world: &SubWorld,
+    #[state] state: &mut NodeState,
+    #[resource] mesh_registry: &Arc<RwLock<MeshRegistry>>,
+    #[resource] instance_buffer: &InstanceBuffer<Render2DInstance>,
+    #[resource] device: &Arc<wgpu::Device>,
+    #[resource] queue: &Arc<wgpu::Queue>,
+) {
+    let start_time = Instant::now();
+    debug!("running system render_2d_forward_instance (graph node)");
+    let node = Arc::clone(&state.node);
+    let mesh_registry = mesh_registry.read().unwrap();
 
-    let mut query = <(&InstanceId, &Position2D)>::query();
-    query.par_for_each(world, |(inst_id, pos_2d)| {
-        let mut group = instance_buffer.groups[inst_id.0 as usize].lock().unwrap();
-        group.instances[inst_id.1 as usize].model[0] = pos_2d.x;
-        group.instances[inst_id.1 as usize].model[1] = pos_2d.y;
+    let render_target = state.render_target.lock().unwrap();
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("render_2d_forward_instance_encoder"),
     });
+    let mut pass = render_target
+        .create_render_pass("render_2d_forward_instance_pass", &mut encoder, true)
+        .unwrap();
+    pass.set_pipeline(&node.pipeline);
+
+    // Global bindings
+    pass.set_bind_group(
+        1,
+        &node.binder.uniform_groups[&ID(CAMERA_2D_BIND_GROUP_ID)],
+        &[],
+    );
+    pass.set_bind_group(
+        2,
+        &node.binder.uniform_groups[&ID(LIGHTING_2D_BIND_GROUP_ID)],
+        &[],
+    );
+
+    for (group, mesh) in <(&InstanceGroup<Render2DInstance>, &Mesh)>::query().iter(world) {
+        debug!(
+            "rendering instance group => type: render_2d, name: {}, size: {}",
+            "",
+            group.num_instances()
+        );
+
+        // One instance buffer is managed per group type
+        // (in this case: InstanceBuffer<Render2DInstance>)
+        instance_buffer.load_group(group.buffer_bytes());
+
+        // Every instance in a group shares the same texture and mesh
+        pass.set_bind_group(0, &node.binder.texture_groups[&group.texture()], &[]);
+        pass.set_vertex_buffer(0, mesh.vertex_buffer.buffer.0.slice(..));
+        pass.set_index_buffer(
+            mesh.index_buffer.buffer.0.slice(..),
+            wgpu::IndexFormat::Uint16,
+        );
+
+        // Load and draw all instances in the group
+        pass.set_vertex_buffer(1, instance_buffer.state.buffer.slice(..));
+        pass.draw_indexed(
+            0..mesh.index_buffer.buffer.1,
+            0,
+            0..group.num_instances() as _,
+        );
+    }
+
+    debug!("done recording; submitting render pass");
+    drop(pass);
+    drop(mesh_registry);
+    queue.submit(std::iter::once(encoder.finish()));
+
+    debug!("render_2d_forward_instance pass submitted");
+    state.reporter.update(start_time.elapsed().as_secs_f64());
 }
+
+// #[system]
+// #[read_component(InstanceId)]
+// #[read_component(Position2D)]
+// #[read_component(Attractor2D)]
+// #[write_component(Velocity2D)]
+// pub fn attractor(world: &mut SubWorld) {
+//     debug!("running system render_2d_instance_attractor");
+
+//     let attractors: Vec<(f32, (f32, f32))> = <(&Attractor2D, &Position2D)>::query()
+//         .iter(world)
+//         .map(|(a, p)| (a.force, (p.x, p.y)))
+//         .collect();
+
+//     let mut query = <(&InstanceId, &Position2D, &mut Velocity2D)>::query();
+//     query.par_for_each_mut(world, |(_inst_id, pos_2d, vel_2d)| {
+//         for attractor in &attractors {
+//             attractor_2d(attractor, pos_2d, vel_2d);
+//         }
+//     });
+// }
+
+// fn attractor_2d(attractor: &(f32, (f32, f32)), pos: &Position2D, vel: &mut Velocity2D) {
+//     let line = Vector2::<f32>::new((attractor.1 .0) - pos.x, (attractor.1 .1) - pos.y);
+//     let power = attractor.0 / line.magnitude2();
+//     let theta: Rad<f32> = Angle::atan2(line.y, line.x);
+//     let dvx = power * Angle::cos(theta);
+//     let dvy = power * Angle::sin(theta);
+//     // info!("DVVVVV {} {}", dvx, dvy);
+//     vel.dx += dvx;
+//     vel.dy += dvy;
+// }
 
 // Draw all Render2D components //
 //
@@ -170,73 +259,3 @@ pub fn load(world: &SubWorld, #[resource] instance_buffer: &InstanceBuffer<Rende
 //   - Instances can be deleted by ID via the instance group (less efficient obviously)
 //   In both cases, Vec.swap_remove is used for O(1) performance, although when deleting by ID, the vector must be searched.
 //
-#[system]
-pub fn render(
-    #[state] state: &mut NodeState,
-    #[resource] mesh_registry: &Arc<RwLock<MeshRegistry>>,
-    #[resource] instance_buffer: &InstanceBuffer<Render2DInstance>,
-    #[resource] device: &Arc<wgpu::Device>,
-    #[resource] queue: &Arc<wgpu::Queue>,
-) {
-    let start_time = Instant::now();
-    debug!("running system render_2d_forward_instance (graph node)");
-    let node = Arc::clone(&state.node);
-    let mesh_registry = mesh_registry.read().unwrap();
-
-    let render_target = state.render_target.lock().unwrap();
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("render_2d_forward_instance_encoder"),
-    });
-    let mut pass = render_target
-        .create_render_pass("render_2d_forward_instance_pass", &mut encoder, true)
-        .unwrap();
-    pass.set_pipeline(&node.pipeline);
-
-    // Global bindings
-    pass.set_bind_group(
-        1,
-        &node.binder.uniform_groups[&ID(CAMERA_2D_BIND_GROUP_ID)],
-        &[],
-    );
-    pass.set_bind_group(
-        2,
-        &node.binder.uniform_groups[&ID(LIGHTING_2D_BIND_GROUP_ID)],
-        &[],
-    );
-
-    // Instance groups
-    for group in &instance_buffer.groups {
-        let group = group.lock().unwrap();
-
-        debug!(
-            "rendering instance group, type: render_2d, name: {}, size: {}",
-            "",
-            group.num_instances()
-        );
-
-        // Bind group texture; every instance in a group shares one texture
-        pass.set_bind_group(0, &node.binder.texture_groups[&group.texture()], &[]);
-
-        // Load instance buffer; one gpu buffer is created per group type
-        instance_buffer.load_group(group.buffer_bytes());
-
-        // Bind geometry; every instance in a group shares one vertex/index buffer
-        // let mesh = &mesh_registry.meshes[&group.mesh];
-        // pass.set_vertex_buffer(0, mesh.vertices.buffer.0.slice(..));
-        // pass.set_index_buffer(mesh.indices.buffer.0.slice(..), wgpu::IndexFormat::Uint16);
-
-        // // All instances
-        // pass.set_vertex_buffer(1, instance_buffer.state.buffer.slice(..));
-
-        // // Batch draw instance group
-        // pass.draw_indexed(0..mesh.indices.buffer.1, 0, 0..group.num_instances() as _);
-    }
-
-    debug!("done recording; submitting render pass");
-    drop(pass);
-    drop(mesh_registry);
-    queue.submit(std::iter::once(encoder.finish()));
-
-    debug!("render_2d_forward_instance pass submitted");
-    state.reporter.update(start_time.elapsed().as_secs_f64());
-}
