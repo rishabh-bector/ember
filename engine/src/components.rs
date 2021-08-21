@@ -15,6 +15,16 @@ pub struct Transform2D {
     pub angle: f32,
 }
 
+impl Transform2D {
+    pub fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
+        Self {
+            position: [x, y],
+            scale: [w, h],
+            angle: 0.0,
+        }
+    }
+}
+
 impl Default for Transform2D {
     fn default() -> Self {
         Self {

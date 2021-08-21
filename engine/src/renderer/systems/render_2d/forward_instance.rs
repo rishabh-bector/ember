@@ -41,10 +41,10 @@ pub struct Render2DInstance {
 }
 
 impl Render2DInstance {
-    pub fn new(x: f32, y: f32, w: f32, h: f32, color: [f32; 4]) -> Self {
+    pub fn new(color: [f32; 4]) -> Self {
         Self {
-            model: [x, y, w, h],
             color,
+            model: [0.0, 0.0, 1.0, 1.0],
             mix: 1.0,
             group_id: 0,
             id: 0,
@@ -63,7 +63,7 @@ impl Render2DInstance {
 
 impl Default for Render2DInstance {
     fn default() -> Self {
-        Self::new(0.0, 0.0, 10.0, 10.0, [1.0, 1.0, 1.0, 1.0])
+        Self::new([1.0, 1.0, 1.0, 1.0])
     }
 }
 
@@ -93,7 +93,6 @@ pub struct Render2DUniformGroup {}
 #[write_component(Mesh)]
 pub fn load(world: &mut SubWorld) {
     debug!("running system render_2d_instance_loader");
-
     <(&mut InstanceGroup<Render2DInstance>, &Mesh)>::query().par_for_each_mut(
         world,
         |(group, _)| {
@@ -106,11 +105,6 @@ pub fn load(world: &mut SubWorld) {
             })
         },
     );
-
-    // <(&InstanceId, &Position2D)>::query().par_for_each(world, |(inst_id, pos_2d)| {
-    //     groups[inst_id.0 as usize].instances[inst_id.1 as usize].model[0] = pos_2d.x;
-    //     groups[inst_id.0 as usize].instances[inst_id.1 as usize].model[1] = pos_2d.y;
-    // });
 }
 
 #[system]
