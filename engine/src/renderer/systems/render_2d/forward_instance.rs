@@ -1,31 +1,29 @@
-use cgmath::{Angle, InnerSpace, Rad, Vector2};
+
 use legion::{world::SubWorld, IntoQuery};
 use rayon::{
-    iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator},
-    slice::ParallelSliceMut,
+    iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
 use std::{
     sync::{Arc, RwLock},
     time::Instant,
 };
-use uuid::Uuid;
+
 
 use crate::{
-    components::{Position2D, Velocity2D},
+    components::{Position2D},
     constants::{
-        CAMERA_2D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID, PRIMITIVE_MESH_GROUP_ID,
+        CAMERA_2D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID,
         RENDER_2D_COMMON_TEXTURE_ID,
     },
     renderer::{
         buffer::instance::{
-            Instance, InstanceBuffer, InstanceGroup, InstanceGroupBinder, InstanceId,
+            Instance, InstanceBuffer, InstanceGroup, InstanceGroupBinder,
         },
         graph::NodeState,
         mesh::Mesh,
     },
     sources::{
-        primitives::unit_square,
-        registry::{MeshRegistry, TextureRegistry},
+        registry::{MeshRegistry},
     },
 };
 

@@ -1,11 +1,11 @@
 use anyhow::{anyhow, Result};
 use image::io::Reader as ImageReader;
-use legion::Resources;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::{
     collections::HashMap,
     rc::Rc,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
 };
 use uuid::Uuid;
 use wgpu::BindGroup;
@@ -13,12 +13,12 @@ use wgpu::BindGroup;
 use crate::{
     constants::{ID, PRIMITIVE_MESH_GROUP_ID, UNIT_CUBE_MESH_ID, UNIT_SQUARE_MESH_ID},
     renderer::{
-        buffer::{texture::Texture, VertexBuffer},
+        buffer::{texture::Texture},
         mesh::{Mesh, ObjLoader},
     },
 };
 
-use super::primitives::{unit_cube, unit_square, PrimitiveMesh};
+use super::primitives::{PrimitiveMesh};
 
 pub struct Registry {
     pub textures: Arc<RwLock<TextureRegistry>>,
@@ -99,7 +99,7 @@ impl TextureRegistryBuilder {
         format: wgpu::TextureFormat,
     ) -> Result<TextureRegistry> {
         let mut num_textures = 0;
-        &self
+        let _ = &self
             .to_load
             .iter()
             .for_each(|(_, tex)| tex.iter().for_each(|_| num_textures += 1));
@@ -234,7 +234,7 @@ impl MeshRegistryBuilder {
 
     pub fn build(&self, device: Arc<wgpu::Device>) -> MeshRegistry {
         let mut num_meshes = 0;
-        &self
+        let _ = &self
             .to_load
             .iter()
             .for_each(|(_, mesh)| mesh.iter().for_each(|_| num_meshes += 1));

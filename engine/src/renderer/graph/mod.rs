@@ -1,30 +1,28 @@
 use anyhow::{anyhow, Result};
 use std::{
     collections::HashMap,
-    str::FromStr,
     sync::{Arc, Mutex},
 };
 use uuid::Uuid;
 
 use crate::{
     constants::{
-        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, FORWARD_2D_NODE_ID, FORWARD_3D_NODE_ID, ID,
+        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, ID,
         INSTANCE_2D_NODE_ID, METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID,
     },
     renderer::{
-        buffer::{IndexBuffer, Vertex2D, VertexBuffer},
         graph::target::DepthBuffer,
     },
     sources::{
         metrics::{EngineMetrics, SystemReporter},
         registry::Registry,
-        schedule::{LocalReporterSystem, StatelessSystem, SubSchedule},
+        schedule::{StatelessSystem, SubSchedule},
         ui::{ImguiWindow, UIBuilder},
     },
     texture::Texture,
 };
 
-use super::systems::{graph::*, ui::*};
+use super::systems::{graph::*};
 
 use self::{
     node::{NodeBuilder, NodeBuilderTrait, RenderNode},
@@ -233,7 +231,7 @@ impl GraphBuilder {
             })
             .collect();
 
-        let ui_reporter = metrics_ui.register_system_id("render_ui", ID(RENDER_UI_SYSTEM_ID));
+        let _ui_reporter = metrics_ui.register_system_id("render_ui", ID(RENDER_UI_SYSTEM_ID));
         let metrics_ui = Arc::new(metrics_ui);
         let metrics_arc = Arc::clone(&metrics_ui);
         resources.insert(Arc::clone(&metrics_ui));

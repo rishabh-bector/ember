@@ -1,17 +1,13 @@
 use std::{
-    any::{type_name, Any},
-    collections::HashMap,
+    any::{type_name},
     marker::PhantomData,
-    rc::Rc,
     sync::{Arc, Mutex, RwLock},
 };
 use uuid::Uuid;
 use wgpu::util::DeviceExt;
 
 use crate::{
-    constants::ID,
     renderer::{
-        mesh::Mesh,
         uniform::{generic::BufferState, group::BufferMode},
     },
 };
@@ -138,5 +134,5 @@ where
         self.texture
     }
 
-    fn bind_mesh<'rp>(&self, render_pass: wgpu::RenderPass<'rp>) {}
+    fn bind_mesh<'rp>(&self, _render_pass: wgpu::RenderPass<'rp>) {}
 }

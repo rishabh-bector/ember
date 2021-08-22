@@ -10,7 +10,6 @@ extern crate vertex_traits;
 use anyhow::Result;
 use legion::{Resources, Schedule, World};
 use std::{
-    any::type_name,
     env,
     path::PathBuf,
     str::FromStr,

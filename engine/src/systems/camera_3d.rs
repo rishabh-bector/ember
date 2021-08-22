@@ -1,4 +1,4 @@
-use cgmath::{Angle, Deg, EuclideanSpace, Matrix2, Matrix4, Rad};
+use cgmath::{Angle, Deg, EuclideanSpace, Matrix2, Matrix4};
 use std::sync::{Arc, Mutex, RwLock};
 use winit_input_helper::WinitInputHelper;
 

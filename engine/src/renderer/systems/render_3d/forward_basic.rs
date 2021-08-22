@@ -1,6 +1,6 @@
 use legion::{component, systems::CommandBuffer, world::SubWorld, Entity};
 use std::{
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{Arc, Mutex},
     time::Instant,
 };
 use uuid::Uuid;
@@ -8,22 +8,19 @@ use uuid::Uuid;
 use crate::{
     components::Position3D,
     constants::{
-        CAMERA_2D_BIND_GROUP_ID, CAMERA_3D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID,
-        RENDER_2D_COMMON_TEXTURE_ID, RENDER_3D_COMMON_TEXTURE_ID,
+        CAMERA_3D_BIND_GROUP_ID, ID, RENDER_3D_COMMON_TEXTURE_ID,
     },
     legion::IntoQuery,
     renderer::{
         graph::NodeState,
         mesh::Mesh,
         uniform::{
-            generic::GenericUniform,
             group::{
-                GroupBuilder, GroupState, GroupStateBuilder, UniformGroup, UniformGroupBuilder,
+                GroupBuilder, GroupState, GroupStateBuilder,
             },
             Uniform,
         },
     },
-    sources::primitives::unit_cube,
     systems::camera_3d::matrix2array_4d,
 };
 
@@ -91,7 +88,7 @@ pub fn load(
     // Add a GroupState to any Render3D component without one
     let group_builder = group_builder.lock().unwrap();
     let mut query = <(Entity, &Render3D, &Position3D)>::query().filter(!component::<GroupState>());
-    query.for_each(world, |(entity, builder_3d, pos_3d)| {
+    query.for_each(world, |(entity, builder_3d, _pos_3d)| {
         debug!(
             "allocating buffers for new render_3d component: {}",
             builder_3d.name

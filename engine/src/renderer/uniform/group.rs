@@ -5,7 +5,7 @@ use std::{
     fmt::Debug,
     marker::PhantomData,
     num::NonZeroU64,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{Arc, Mutex},
 };
 use uuid::Uuid;
 use wgpu::BindGroupEntry;
@@ -321,8 +321,8 @@ where
                 layout: &bind_group_layout,
                 entries: &(0..buffer_states.len())
                     .map(|i| {
-                        let mut buffer_binding = buffer_states[i].buffer.as_entire_buffer_binding();
-                        let has_dynamic_offset = buffer_states[i].mode.is_dynamic();
+                        let buffer_binding = buffer_states[i].buffer.as_entire_buffer_binding();
+                        let _has_dynamic_offset = buffer_states[i].mode.is_dynamic();
 
                         // buffer_binding.size = Some(
                         //     NonZeroU64::new(match has_dynamic_offset {

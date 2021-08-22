@@ -1,10 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use ember::{
-    components::{Motion2D, Position2D, Transform2D, Velocity2D},
+    components::{Motion2D},
     constants::{ID, PRIMITIVE_MESH_GROUP_ID, UNIT_SQUARE_MESH_ID},
-    renderer::systems::render_2d::forward_instance::{Attractor2D, Render2DInstance},
-    systems::lighting_2d::Light2D,
+    renderer::systems::render_2d::forward_instance::{Render2DInstance},
 };
 use rand::Rng;
 
