@@ -184,6 +184,7 @@ impl EngineBuilder {
         self
     }
 
+    // Todo: distil this into several functions
     pub fn default(mut self) -> Result<(Engine, EventLoop<()>)> {
         pretty_env_logger::init();
         info!("building engine");

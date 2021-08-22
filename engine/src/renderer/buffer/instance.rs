@@ -1,5 +1,6 @@
 use std::{
-    any::type_name,
+    any::{type_name, Any},
+    collections::HashMap,
     marker::PhantomData,
     rc::Rc,
     sync::{Arc, Mutex, RwLock},
@@ -15,6 +16,29 @@ use crate::{
     },
 };
 
+pub trait Instance: bytemuck::Pod + bytemuck::Zeroable + Clone + Default {
+    fn id(&self) -> (u32, u32);
+    fn size() -> usize;
+    fn set_id(&mut self, group_id: u32, inst_id: u32);
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct InstanceId(pub u32, pub u32);
+
+pub trait InstanceMutator<I: Instance>: Send + Sync {
+    fn mutate(&self, instance: &mut I);
+}
+
+pub struct InstanceEntity<I: Instance> {
+    components: HashMap<Uuid, Arc<dyn InstanceMutator<I>>>,
+}
+
+// InstanceBuffer is allocated with enough space
+// for DEFAULT_MAX_INSTANCES_PER_BUFFER instances of type <I>.
+//
+// All InstanceGroups of type <I> share one instance buffer, because
+// all of their render passes will all be recorded on the same
+// thread via the same system.
 pub struct InstanceBuffer<I: Instance> {
     pub state: BufferState,
     pub queue: Arc<wgpu::Queue>,
@@ -51,26 +75,13 @@ where
 }
 
 // A group of components which can be rendered with one instanced draw call.
-// These share textures and meshes.
+// Each group shares one texture and mesh.
 pub struct InstanceGroup<I: Instance> {
     pub id: u32,
     pub instances: Vec<I>,
     pub components: Arc<RwLock<Vec<Vec<Arc<dyn InstanceMutator<I>>>>>>,
     pub texture: Uuid,
     next_id: InstanceId,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct InstanceId(pub u32, pub u32);
-
-pub trait Instance: bytemuck::Pod + bytemuck::Zeroable + Clone + Default {
-    fn id(&self) -> (u32, u32);
-    fn size() -> usize;
-    fn set_id(&mut self, group_id: u32, inst_id: u32);
-}
-
-pub trait InstanceMutator<I: Instance>: Send + Sync {
-    fn mutate(&self, instance: &mut I);
 }
 
 impl<I> InstanceGroup<I>

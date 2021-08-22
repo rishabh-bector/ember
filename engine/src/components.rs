@@ -1,5 +1,10 @@
-use crate::renderer::{
-    buffer::instance::InstanceMutator, systems::render_2d::forward_instance::Render2DInstance,
+use uuid::Uuid;
+
+use crate::{
+    constants::ID,
+    renderer::{
+        buffer::instance::InstanceMutator, systems::render_2d::forward_instance::Render2DInstance,
+    },
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]

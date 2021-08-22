@@ -190,53 +190,6 @@ impl GraphBuilder {
             UIMode::Node(id) => Arc::clone(&node_targets.get(id).unwrap()),
         };
 
-        // let unit_square_buffers = (
-        //     VertexBuffer::new_2d(
-        //         "unit_square",
-        //         &[
-        //             Vertex2D {
-        //                 position: [-1.0, -1.0],
-        //                 uvs: [0.0, 1.0],
-        //             },
-        //             Vertex2D {
-        //                 position: [-1.0, 1.0],
-        //                 uvs: [0.0, 0.0],
-        //             },
-        //             Vertex2D {
-        //                 position: [1.0, 1.0],
-        //                 uvs: [1.0, 0.0],
-        //             },
-        //             Vertex2D {
-        //                 position: [1.0, -1.0],
-        //                 uvs: [1.0, 1.0],
-        //             },
-        //         ],
-        //         &device,
-        //     ),
-        //     IndexBuffer::new(&[0, 2, 1, 3, 2, 0], &device),
-        // );
-
-        // let unit_cube_buffers = unit_cube_buffers(&device);
-
-        // debug!("loading common buffers");
-        // let mut common_buffers: HashMap<Uuid, Arc<(wgpu::Buffer, u32)>> = HashMap::new();
-        // common_buffers.insert(
-        //     Uuid::from_str(UNIT_SQUARE_VRT_BUFFER_ID).unwrap(),
-        //     Arc::clone(&unit_square_buffers.0.buffer),
-        // );
-        // common_buffers.insert(
-        //     Uuid::from_str(UNIT_SQUARE_IND_BUFFER_ID).unwrap(),
-        //     Arc::clone(&unit_square_buffers.1.buffer),
-        // );
-        // common_buffers.insert(
-        //     Uuid::from_str(UNIT_CUBE_VRT_BUFFER_ID).unwrap(),
-        //     Arc::clone(&unit_cube_buffers.0.buffer),
-        // );
-        // common_buffers.insert(
-        //     Uuid::from_str(UNIT_CUBE_IND_BUFFER_ID).unwrap(),
-        //     Arc::clone(&unit_cube_buffers.1.buffer),
-        // );
-
         // Build all NodeStates; each render node's system has this internal state,
         // allowing it to access the target bind groups of its inputs
         // as well as its own target texture
