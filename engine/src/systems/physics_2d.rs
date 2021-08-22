@@ -16,13 +16,13 @@ pub fn physics_2d(
     // Todo: replace hardcoding w/ some global config resource
     if vel.bounce {
         if pos.x <= -(1440 as f32) || pos.x >= (1440 as f32) {
-            vel.dx *= -1.0;
+            vel.vx *= -1.0;
         }
         if pos.y <= -(900 as f32) || pos.y >= (900 as f32) {
-            vel.dy *= -1.0;
+            vel.vy *= -1.0;
         }
     }
 
-    pos.x += vel.dx;
-    pos.y += vel.dy;
+    pos.x += vel.vx;
+    pos.y += vel.vy;
 }

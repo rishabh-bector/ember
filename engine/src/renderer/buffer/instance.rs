@@ -26,11 +26,7 @@ pub trait Instance: bytemuck::Pod + bytemuck::Zeroable + Clone + Default {
 pub struct InstanceId(pub u32, pub u32);
 
 pub trait InstanceMutator<I: Instance>: Send + Sync {
-    fn mutate(&self, instance: &mut I);
-}
-
-pub struct InstanceEntity<I: Instance> {
-    components: HashMap<Uuid, Arc<dyn InstanceMutator<I>>>,
+    fn mutate(&mut self, instance: &mut I);
 }
 
 // InstanceBuffer is allocated with enough space
@@ -79,7 +75,7 @@ where
 pub struct InstanceGroup<I: Instance> {
     pub id: u32,
     pub instances: Vec<I>,
-    pub components: Arc<RwLock<Vec<Vec<Arc<dyn InstanceMutator<I>>>>>>,
+    pub components: Arc<RwLock<Vec<Vec<Arc<Mutex<dyn InstanceMutator<I>>>>>>>,
     pub texture: Uuid,
     next_id: InstanceId,
 }
@@ -101,7 +97,7 @@ where
     pub fn push(
         &mut self,
         mut instance: I,
-        instance_components: Vec<Arc<dyn InstanceMutator<I>>>,
+        instance_components: Vec<Arc<Mutex<dyn InstanceMutator<I>>>>,
     ) -> InstanceId {
         instance.set_id(self.id, self.next_id.1);
         self.instances.push(instance);

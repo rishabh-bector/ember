@@ -1,7 +1,7 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use ember::{
-    components::{Position2D, Transform2D, Velocity2D},
+    components::{Motion2D, Position2D, Transform2D, Velocity2D},
     constants::{ID, PRIMITIVE_MESH_GROUP_ID, UNIT_SQUARE_MESH_ID},
     renderer::systems::render_2d::forward_instance::{Attractor2D, Render2DInstance},
     systems::lighting_2d::Light2D,
@@ -28,15 +28,18 @@ fn main() {
     // ));
 
     let mut rng = rand::thread_rng();
-    for _i in 0..1000 {
+    for _i in 0..5000 {
         particle_group.push(
             Render2DInstance::new([1.0, 1.0, 0.0, 1.0]),
-            vec![Arc::new(Transform2D::new(
-                rng.gen_range(-700.0..700.0),
-                rng.gen_range(-400.0..400.0),
+            vec![Arc::new(Mutex::new(Motion2D::new(
+                rng.gen_range(-5.0..5.0),
+                rng.gen_range(-5.0..5.0),
                 5.0,
                 5.0,
-            ))],
+                rng.gen_range(-5.0..5.0),
+                rng.gen_range(-5.0..5.0),
+                true,
+            )))],
         );
     }
 

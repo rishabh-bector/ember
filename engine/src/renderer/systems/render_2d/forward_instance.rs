@@ -100,7 +100,7 @@ pub fn load(world: &mut SubWorld) {
             let mutators = components.read().unwrap();
             group.instances.par_iter_mut().for_each(|instance| {
                 for component in &mutators[instance.id as usize] {
-                    component.mutate(instance);
+                    component.lock().unwrap().mutate(instance);
                 }
             })
         },
@@ -180,76 +180,3 @@ pub fn render(
     debug!("render_2d_forward_instance pass submitted");
     state.reporter.update(start_time.elapsed().as_secs_f64());
 }
-
-// #[system]
-// #[read_component(InstanceId)]
-// #[read_component(Position2D)]
-// #[read_component(Attractor2D)]
-// #[write_component(Velocity2D)]
-// pub fn attractor(world: &mut SubWorld) {
-//     debug!("running system render_2d_instance_attractor");
-
-//     let attractors: Vec<(f32, (f32, f32))> = <(&Attractor2D, &Position2D)>::query()
-//         .iter(world)
-//         .map(|(a, p)| (a.force, (p.x, p.y)))
-//         .collect();
-
-//     let mut query = <(&InstanceId, &Position2D, &mut Velocity2D)>::query();
-//     query.par_for_each_mut(world, |(_inst_id, pos_2d, vel_2d)| {
-//         for attractor in &attractors {
-//             attractor_2d(attractor, pos_2d, vel_2d);
-//         }
-//     });
-// }
-
-// fn attractor_2d(attractor: &(f32, (f32, f32)), pos: &Position2D, vel: &mut Velocity2D) {
-//     let line = Vector2::<f32>::new((attractor.1 .0) - pos.x, (attractor.1 .1) - pos.y);
-//     let power = attractor.0 / line.magnitude2();
-//     let theta: Rad<f32> = Angle::atan2(line.y, line.x);
-//     let dvx = power * Angle::cos(theta);
-//     let dvy = power * Angle::sin(theta);
-//     // info!("DVVVVV {} {}", dvx, dvy);
-//     vel.dx += dvx;
-//     vel.dy += dvy;
-// }
-
-// Draw all Render2D components //
-//
-// REVELATION:
-// the separation of load_system and render_system is only relevant for the dynamic node.
-// for instancing, loading needs to happen before each instanced group is drawn; otherwise,
-// we could only render 1 group of instanced entities per pass. In fact, right now the dynamic
-// node can only render 1 group of dynamic entities per pass. Anyways, I'll fix the dynamic
-// node later; for now, I'm focusing on instancing.
-//
-// So, the render system needs to:
-//  - Go through each instance group, load the uniform group's buffer with all the instances
-//  - Bind the instance group-specific things such as textures and v/i buffers
-//  - Bind a slice of each instance group's buffer before drawing that group
-//
-// Render system needs access to:
-//  - (ONE) uniform group instance buffer (from NodeState)
-//  - (MANY) instance group struct (from registry resource)
-//  - (MANY) !!vector of every single instance!! (from instance group struct)
-//
-// So, on init, users should request all their necessary instance groups (they'll give or receive IDs)
-//  (and pass in the texture + common v/i buffers)
-//  - For each one requested, we need to:
-//      - create a new instance group struct
-//      - add this struct to some master registry resource
-//    !!! only one instance buffer should be created per node/pipeline !!!
-//
-// Adding instances: AUTOMATIC ADDING CAN COME LATER
-//   Users should be able to request "Render2DInstanceRef" components from the Render2D InstanceGroup within the registry resource at any time
-//   The function takes ownership of the user's Render2DInstance builder, building the instance and inserting it into a vector.
-//   The user is given a Render2DInstanceRef whose u64 ID which matches the instance's ID in the instance group's vector.
-//
-// Modifying instances:
-//   In order to modify instances, users can request use a concurrent_update closure,
-//   which uses some rayon parallelism to mutably iterate over all the instances in the group.
-//
-// Deleting instances:
-//   - Instances can be deleted as part of parallelism, via some mutable bool ref passed in the concurrent closure?
-//   - Instances can be deleted by ID via the instance group (less efficient obviously)
-//   In both cases, Vec.swap_remove is used for O(1) performance, although when deleting by ID, the vector must be searched.
-//
