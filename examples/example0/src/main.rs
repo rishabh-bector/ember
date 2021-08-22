@@ -30,12 +30,12 @@ fn main() {
     let mut rng = rand::thread_rng();
     for _i in 0..5000 {
         particle_group.push(
-            Render2DInstance::new([1.0, 1.0, 0.0, 1.0]),
+            Render2DInstance::new([1.0, 1.0, 1.0, 1.0]),
             vec![Arc::new(Mutex::new(Motion2D::new(
                 rng.gen_range(-5.0..5.0),
                 rng.gen_range(-5.0..5.0),
-                5.0,
-                5.0,
+                1.0,
+                1.0,
                 rng.gen_range(-5.0..5.0),
                 rng.gen_range(-5.0..5.0),
                 true,
