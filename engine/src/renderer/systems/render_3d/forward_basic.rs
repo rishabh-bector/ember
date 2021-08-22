@@ -7,19 +7,12 @@ use uuid::Uuid;
 
 use crate::{
     components::Position3D,
-    constants::{
-        CAMERA_3D_BIND_GROUP_ID, ID, RENDER_3D_COMMON_TEXTURE_ID,
-    },
+    constants::{CAMERA_3D_BIND_GROUP_ID, ID, RENDER_3D_COMMON_TEXTURE_ID},
     legion::IntoQuery,
     renderer::{
         graph::NodeState,
         mesh::Mesh,
-        uniform::{
-            group::{
-                GroupBuilder, GroupState, GroupStateBuilder,
-            },
-            Uniform,
-        },
+        uniform::group::{GroupState, GroupStateBuilder},
     },
     systems::camera_3d::matrix2array_4d,
 };
