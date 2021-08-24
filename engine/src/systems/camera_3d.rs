@@ -3,11 +3,26 @@ use std::sync::{Arc, Mutex, RwLock};
 use winit_input_helper::WinitInputHelper;
 
 use crate::{
-    renderer::uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
+    constants::{CAMERA_3D_BIND_GROUP_ID, ID},
+    renderer::uniform::{
+        generic::{GenericUniform, GenericUniformBuilder},
+        group::{UniformGroup, UniformGroupBuilder, UniformGroupType},
+        Uniform,
+    },
     sources::camera::Camera3D,
 };
 
 pub struct Camera3DUniformGroup {}
+
+impl UniformGroupType<Self> for Camera3DUniformGroup {
+    fn builder() -> UniformGroupBuilder<Self> {
+        UniformGroup::<Camera3DUniformGroup>::builder()
+            .with_uniform(GenericUniformBuilder::from_source(Camera3DUniforms {
+                view_proj: Default::default(),
+            }))
+            .with_id(ID(CAMERA_3D_BIND_GROUP_ID))
+    }
+}
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]

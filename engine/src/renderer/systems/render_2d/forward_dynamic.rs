@@ -13,7 +13,10 @@ use crate::{
     renderer::{
         graph::NodeState,
         systems::render_2d::Render2D,
-        uniform::{generic::GenericUniform, group::UniformGroup},
+        uniform::{
+            generic::{GenericUniform, GenericUniformBuilder},
+            group::{UniformGroup, UniformGroupBuilder, UniformGroupType},
+        },
     },
 };
 
@@ -29,6 +32,23 @@ pub struct Render2DForwardDynamicUniforms {
 
 // Phantom type
 pub struct Render2DForwardDynamicGroup {}
+
+impl UniformGroupType<Self> for Render2DForwardDynamicGroup {
+    fn builder() -> UniformGroupBuilder<Render2DForwardDynamicGroup> {
+        UniformGroup::<Render2DForwardDynamicGroup>::builder()
+            .with_uniform(GenericUniformBuilder::from_source(
+                Render2DForwardDynamicUniforms {
+                    model: [0.0, 0.0, 1.0, 1.0],
+                    color: [1.0, 1.0, 1.0, 1.0],
+                    mix: 1.0,
+                    _padding: [0.0; 32],
+                    __padding: [0.0; 23],
+                },
+            ))
+            .with_id(ID(RENDER_2D_BIND_GROUP_ID))
+            .mode_instance()
+    }
+}
 
 // TODO: Make this a macro?
 #[system]

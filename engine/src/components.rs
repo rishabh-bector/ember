@@ -1,9 +1,5 @@
-
-
-use crate::{
-    renderer::{
-        buffer::instance::InstanceMutator, systems::render_2d::forward_instance::Render2DInstance,
-    },
+use crate::renderer::{
+    buffer::instance::InstanceMutator, systems::render_2d::forward_instance::Render2DInstance,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -4,10 +4,30 @@ use legion::{world::SubWorld, IntoQuery};
 
 use crate::{
     components::Position2D,
-    renderer::uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
+    constants::{ID, LIGHTING_2D_BIND_GROUP_ID},
+    renderer::uniform::{
+        generic::{GenericUniform, GenericUniformBuilder},
+        group::{UniformGroup, UniformGroupBuilder, UniformGroupType},
+        Uniform,
+    },
 };
 
 pub struct Lighting2DUniformGroup {}
+
+impl UniformGroupType<Self> for Lighting2DUniformGroup {
+    fn builder() -> UniformGroupBuilder<Self> {
+        UniformGroup::<Lighting2DUniformGroup>::builder()
+            .with_uniform(GenericUniformBuilder::from_source(Lighting2DUniforms {
+                light_0: Default::default(),
+                light_1: Default::default(),
+                light_2: Default::default(),
+                light_3: Default::default(),
+                light_4: Default::default(),
+                global: [0.1, 1.0, 1.0, 1.0],
+            }))
+            .with_id(ID(LIGHTING_2D_BIND_GROUP_ID))
+    }
+}
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]

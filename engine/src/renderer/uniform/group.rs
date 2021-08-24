@@ -488,3 +488,7 @@ where
         resources.insert::<Arc<Mutex<UniformGroup<N>>>>(group);
     }
 }
+
+pub trait UniformGroupType<N> {
+    fn builder() -> UniformGroupBuilder<N>;
+}

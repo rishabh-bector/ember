@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Result};
-use std::sync::{Arc};
+use std::sync::Arc;
 use winit::window::Window;
 
-
+use crate::constants::DEFAULT_TEXTURE_BUFFER_FORMAT;
 
 pub mod buffer;
 pub mod graph;
@@ -117,6 +117,15 @@ impl GpuState {
         self.swap_chain = self
             .device
             .create_swap_chain(&self.surface, &self.chain_descriptor);
+    }
+
+    pub fn device_preferred_format(&mut self) -> wgpu::TextureFormat {
+        let fmt = self
+            .adapter
+            .get_swap_chain_preferred_format(&self.surface)
+            .unwrap_or(DEFAULT_TEXTURE_BUFFER_FORMAT);
+        debug!("device preferred texture format: {:?}", fmt);
+        fmt
     }
 }
 

@@ -7,12 +7,19 @@ use uuid::Uuid;
 
 use crate::{
     components::Position3D,
-    constants::{CAMERA_3D_BIND_GROUP_ID, ID, RENDER_3D_COMMON_TEXTURE_ID},
+    constants::{
+        CAMERA_3D_BIND_GROUP_ID, ID, RENDER_3D_BIND_GROUP_ID, RENDER_3D_COMMON_TEXTURE_ID,
+    },
     legion::IntoQuery,
     renderer::{
         graph::NodeState,
         mesh::Mesh,
-        uniform::group::{GroupState, GroupStateBuilder},
+        uniform::{
+            generic::GenericUniformBuilder,
+            group::{
+                GroupState, GroupStateBuilder, UniformGroup, UniformGroupBuilder, UniformGroupType,
+            },
+        },
     },
     systems::camera_3d::matrix2array_4d,
 };
@@ -62,8 +69,19 @@ impl From<(&Render3D, &Position3D)> for Render3DUniforms {
     }
 }
 
-// Phantom type
 pub struct Render3DForwardUniformGroup {}
+
+impl UniformGroupType<Self> for Render3DForwardUniformGroup {
+    fn builder() -> UniformGroupBuilder<Render3DForwardUniformGroup> {
+        UniformGroup::<Render3DForwardUniformGroup>::builder()
+            .with_uniform(GenericUniformBuilder::from_source(Render3DUniforms {
+                model: Default::default(),
+                color: [1.0, 1.0, 1.0, 1.0],
+                mix: 1.0,
+            }))
+            .with_id(ID(RENDER_3D_BIND_GROUP_ID))
+    }
+}
 
 #[system]
 #[read_component(Render3D)]

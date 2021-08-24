@@ -2,11 +2,28 @@ use cgmath::Matrix2;
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    renderer::uniform::{generic::GenericUniform, group::UniformGroup, Uniform},
+    constants::{CAMERA_2D_BIND_GROUP_ID, ID},
+    renderer::uniform::{
+        generic::{GenericUniform, GenericUniformBuilder},
+        group::{UniformGroup, UniformGroupBuilder, UniformGroupType},
+        Uniform,
+    },
     sources::camera::Camera2D,
 };
 
 pub struct Camera2DUniformGroup {}
+
+impl UniformGroupType<Self> for Camera2DUniformGroup {
+    fn builder() -> UniformGroupBuilder<Self> {
+        UniformGroup::<Camera2DUniformGroup>::builder()
+            .with_uniform(GenericUniformBuilder::from_source(Camera2DUniforms {
+                view: [1.0, 1.0, 1.0, 1.0],
+                _padding: [0.0; 32],
+                __padding: [0.0; 28],
+            }))
+            .with_id(ID(CAMERA_2D_BIND_GROUP_ID))
+    }
+}
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
