@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 fn main() {
     std::env::set_var("RUST_LOG", "ember=debug");
-    let engine_builder = ember::engine_builder().default_3d().unwrap();
+    let engine_builder = ember::engine_builder();
 
     let airplane_mesh_group_id = Uuid::new_v4();
     let airplane_mesh_id = Uuid::new_v4();
@@ -21,7 +21,7 @@ fn main() {
 
     let (mut engine, event_loop) = engine_builder
         .with_mesh_group(airplane_mesh_group)
-        .default()
+        .default_3d()
         .unwrap();
 
     let airplane_mesh = engine.clone_mesh(&airplane_mesh_id, &airplane_mesh_group_id);

@@ -286,61 +286,41 @@ impl EngineBuilder {
         let gpu_mut = gpu.lock().unwrap();
 
         info!("building uniforms");
-        let render_2d_dynamic_group_builder =
-            Arc::new(Mutex::new(Render2DForwardDynamicGroup::builder()));
         let render_3d_group_builder = Arc::new(Mutex::new(Render3DForwardUniformGroup::builder()));
-        let camera_2d_group_builder = Arc::new(Mutex::new(Camera2DUniformGroup::builder()));
         let camera_3d_group_builder = Arc::new(Mutex::new(Camera3DUniformGroup::builder()));
-        let lighting_2d_group_builder = Arc::new(Mutex::new(Lighting2DUniformGroup::builder()));
 
         info!("building render graph nodes");
-        let _node_2d_forward_dynamic = build_node_2d_forward_dynamic(
-            Arc::clone(&render_2d_dynamic_group_builder),
-            Arc::clone(&camera_2d_group_builder),
-            Arc::clone(&lighting_2d_group_builder),
-        );
-        let node_2d_forward_instance = build_node_2d_forward_instance(
-            Arc::clone(&camera_2d_group_builder),
-            Arc::clone(&lighting_2d_group_builder),
-        );
         let node_3d_forward_basic = build_node_3d_forward_basic(
             Arc::clone(&render_3d_group_builder),
             Arc::clone(&camera_3d_group_builder),
         );
 
         // Todo: replace this with something better
-        resources.insert(InstanceBuffer::<
-            render_2d::forward_instance::Render2DInstance,
-        >::new(
-            &gpu_mut.device,
-            Arc::clone(&gpu_mut.queue),
-            DEFAULT_MAX_INSTANCES_PER_BUFFER,
-        ));
+        // resources.insert(InstanceBuffer::<
+        //     render_2d::forward_instance::Render2DInstance,
+        // >::new(
+        //     &gpu_mut.device,
+        //     Arc::clone(&gpu_mut.queue),
+        //     DEFAULT_MAX_INSTANCES_PER_BUFFER,
+        // ));
 
         info!("scheduling systems");
         let mut schedule = Schedule::builder();
         schedule
             // Main engine systems
-            .add_system(physics_2d_system())
-            .add_system(camera_2d_system())
             .add_system(camera_3d_system())
-            .add_system(lighting_2d_system())
             // .add_system(render_2d::forward_instance::attractor_system())
             // Uniform loading systems
             .flush()
-            .add_system(render_2d::forward_instance::load_system())
             .add_system(render_3d::forward_basic::load_system())
-            .add_system(camera_2d_uniform_system())
-            .add_system(camera_3d_uniform_system())
-            .add_system(lighting_2d_uniform_system());
+            .add_system(camera_3d_uniform_system());
 
         let metrics_ui = EngineMetrics::new();
 
         info!("building render graph");
         let mut graph_schedule = SubSchedule::new();
         let (render_graph, metrics) = GraphBuilder::new()
-            .with_node(node_3d_forward_basic)
-            .with_master_node(node_2d_forward_instance)
+            .with_master_node(node_3d_forward_basic)
             .with_ui_master()
             .build(
                 Arc::clone(&gpu_mut.device),
@@ -355,12 +335,6 @@ impl EngineBuilder {
         info!("scheduling render graph");
         graph_schedule.schedule(&mut schedule);
         let schedule = schedule.build();
-
-        // resource
-        let camera_2d = Arc::new(Mutex::new(Camera2D::default(
-            DEFAULT_SCREEN_WIDTH as f32,
-            DEFAULT_SCREEN_HEIGHT as f32,
-        )));
 
         // resource
         let camera_3d = Arc::new(Mutex::new(Camera3D::default(
@@ -379,7 +353,6 @@ impl EngineBuilder {
         resources.insert(Arc::clone(&input_helper));
         resources.insert(Arc::clone(&render_graph));
         resources.insert(Arc::clone(&render_3d_group_builder));
-        resources.insert(Arc::clone(&camera_2d));
         resources.insert(Arc::clone(&camera_3d));
 
         info!("ready to start!");

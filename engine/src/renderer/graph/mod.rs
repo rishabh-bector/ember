@@ -7,12 +7,10 @@ use uuid::Uuid;
 
 use crate::{
     constants::{
-        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, ID,
-        INSTANCE_2D_NODE_ID, METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID,
+        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, ID, INSTANCE_2D_NODE_ID, METRICS_UI_IMGUI_ID,
+        RENDER_UI_SYSTEM_ID,
     },
-    renderer::{
-        graph::target::DepthBuffer,
-    },
+    renderer::graph::target::DepthBuffer,
     sources::{
         metrics::{EngineMetrics, SystemReporter},
         registry::Registry,
@@ -22,7 +20,7 @@ use crate::{
     texture::Texture,
 };
 
-use super::systems::{graph::*};
+use super::systems::graph::*;
 
 use self::{
     node::{NodeBuilder, NodeBuilderTrait, RenderNode},
@@ -264,10 +262,11 @@ impl GraphBuilder {
         //     &nodes.get(&self.node_builders[0].dest_id).unwrap().system,
         // ));
 
+        // Run master node
         sub_schedule.add_node(
-            Arc::clone(&nodes.get(&ID(INSTANCE_2D_NODE_ID)).unwrap().system),
+            Arc::clone(&nodes.get(&self.master_node.unwrap()).unwrap().system),
             node_states
-                .get(&ID(INSTANCE_2D_NODE_ID))
+                .get(&self.master_node.unwrap())
                 .unwrap()
                 .to_owned(),
         );
