@@ -38,14 +38,12 @@ use crate::{
         systems::{
             render_2d::{
                 forward_dynamic::Render2DForwardDynamicGroup,
-                forward_instance::Render2DUniformGroup,
             },
             render_3d::forward_basic::Render3DForwardUniformGroup,
             *,
         },
         uniform::{
-            generic::GenericUniformBuilder,
-            group::{UniformGroup, UniformGroupBuilder, UniformGroupType},
+            group::{UniformGroupBuilder, UniformGroupType},
         },
         GpuState, GpuStateBuilder,
     },

@@ -7,8 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     constants::{
-        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, ID, INSTANCE_2D_NODE_ID, METRICS_UI_IMGUI_ID,
-        RENDER_UI_SYSTEM_ID,
+        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, ID, METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID,
     },
     renderer::{graph::target::DepthBuffer, systems::ui::*},
     sources::{

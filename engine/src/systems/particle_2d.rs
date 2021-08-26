@@ -2,14 +2,14 @@ use cgmath::{Angle, InnerSpace};
 use legion::{world::SubWorld, IntoQuery, World};
 use rand::Rng;
 use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelBridge,
+    IndexedParallelIterator, IntoParallelRefMutIterator,
     ParallelIterator,
 };
 use std::sync::{Arc, Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::{
-    components::{FrameMetrics, Motion2D, ParticleMutator2D},
+    components::{FrameMetrics, ParticleMutator2D},
     renderer::{
         buffer::instance::InstanceGroup, systems::render_2d::forward_instance::Render2DInstance,
     },
@@ -178,7 +178,7 @@ pub struct ParticleEmitter2D {
 }
 
 impl ParticleEmitter2D {
-    pub fn emit(&mut self, delta: f32) -> Vec<[[f32; 2]; 2]> {
+    pub fn emit(&mut self, _delta: f32) -> Vec<[[f32; 2]; 2]> {
         vec![
             self.mode.emit(&self.shape, self.position, self.zones),
             self.mode.emit(&self.shape, self.position, self.zones),

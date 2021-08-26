@@ -1,11 +1,10 @@
 use ember::{
-    components::Motion2D,
     constants::{ID, PRIMITIVE_MESH_GROUP_ID, UNIT_SQUARE_MESH_ID},
     renderer::systems::render_2d::forward_instance::Render2DInstance,
     systems::particle_2d::{ParticleEmitter2D, ParticleSystem2D},
 };
-use rand::Rng;
-use std::sync::{Arc, Mutex};
+
+
 
 // Ember example: 2D instance group
 
