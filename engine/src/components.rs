@@ -1,6 +1,35 @@
+use std::time::{Duration, Instant};
+
 use crate::renderer::{
     buffer::instance::InstanceMutator, systems::render_2d::forward_instance::Render2DInstance,
 };
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FrameMetrics {
+    delta: Duration,
+    start: Instant,
+}
+
+impl FrameMetrics {
+    pub fn new() -> Self {
+        Self {
+            delta: Duration::from_secs(0),
+            start: Instant::now(),
+        }
+    }
+
+    pub fn delta(&self) -> Duration {
+        self.delta
+    }
+
+    pub(crate) fn begin_frame(&mut self) {
+        self.start = Instant::now();
+    }
+
+    pub(crate) fn end_frame(&mut self) {
+        self.delta = self.start.elapsed();
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Position2D {
@@ -35,7 +64,7 @@ impl Default for Transform2D {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Velocity2D {
     pub vx: f32,
     pub vy: f32,
@@ -56,7 +85,7 @@ pub struct Position3D {
     pub z: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Velocity3D {
     pub x: f32,
     pub y: f32,
@@ -81,7 +110,7 @@ pub struct Rotor3D {
 // --------------------------------------------------
 
 impl InstanceMutator<Render2DInstance> for Transform2D {
-    fn mutate(&mut self, instance: &mut Render2DInstance) {
+    fn mutate(&mut self, instance: &mut Render2DInstance, _delta: f32) {
         instance.model[0] = self.position[0];
         instance.model[1] = self.position[1];
         instance.model[2] = self.scale[0];
@@ -89,7 +118,7 @@ impl InstanceMutator<Render2DInstance> for Transform2D {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Motion2D {
     pub transform: Transform2D,
     pub velocity: Velocity2D,
@@ -105,7 +134,7 @@ impl Motion2D {
 }
 
 impl InstanceMutator<Render2DInstance> for Motion2D {
-    fn mutate(&mut self, instance: &mut Render2DInstance) {
+    fn mutate(&mut self, instance: &mut Render2DInstance, delta: f32) {
         let pos = self.transform.position;
         if self.velocity.bounce {
             if pos[0] <= -(1440 as f32) || pos[0] >= (1440 as f32) {
@@ -118,6 +147,40 @@ impl InstanceMutator<Render2DInstance> for Motion2D {
 
         self.transform.position[0] += self.velocity.vx;
         self.transform.position[1] += self.velocity.vy;
-        self.transform.mutate(instance);
+        self.transform.mutate(instance, delta);
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ParticleMutator2D {
+    pub motion: Motion2D,
+    pub lifetime: f32,
+}
+
+impl ParticleMutator2D {
+    pub fn reset(&mut self) {
+        *self = Default::default();
+    }
+
+    pub fn launch(
+        &mut self,
+        pos: [f32; 2],
+        dir: [f32; 2],
+        scale: [f32; 2],
+        speed: f32,
+        lifetime: f32,
+    ) {
+        self.motion.transform.position = pos;
+        self.motion.transform.scale = scale;
+        self.motion.velocity.vx = dir[0] * speed;
+        self.motion.velocity.vy = dir[1] * speed;
+        self.lifetime = lifetime;
+    }
+}
+
+impl InstanceMutator<Render2DInstance> for ParticleMutator2D {
+    fn mutate(&mut self, instance: &mut Render2DInstance, delta: f32) {
+        self.lifetime -= delta;
+        self.motion.mutate(instance, delta);
     }
 }

@@ -1,0 +1,9 @@
+[package]
+name = "example2"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+ember = { path = "../../engine" }
+uuid = "0.8"
+rand = "0.8.4" 

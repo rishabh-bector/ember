@@ -1,30 +1,21 @@
-
 use legion::{world::SubWorld, IntoQuery};
-use rayon::{
-    iter::{IntoParallelRefMutIterator, ParallelIterator},
-};
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use std::{
     sync::{Arc, RwLock},
     time::Instant,
 };
 
-
 use crate::{
-    components::{Position2D},
+    components::{FrameMetrics, Position2D},
     constants::{
-        CAMERA_2D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID,
-        RENDER_2D_COMMON_TEXTURE_ID,
+        CAMERA_2D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID,
     },
     renderer::{
-        buffer::instance::{
-            Instance, InstanceBuffer, InstanceGroup, InstanceGroupBinder,
-        },
+        buffer::instance::{Instance, InstanceBuffer, InstanceGroup, InstanceGroupBinder},
         graph::NodeState,
         mesh::Mesh,
     },
-    sources::{
-        registry::{MeshRegistry},
-    },
+    sources::registry::MeshRegistry,
 };
 
 #[instance((4, 44usize))]
@@ -89,8 +80,9 @@ pub struct Render2DUniformGroup {}
 #[system]
 #[write_component(InstanceGroup<Render2DInstance>)]
 #[write_component(Mesh)]
-pub fn load(world: &mut SubWorld) {
+pub fn load(world: &mut SubWorld, #[resource] frame_metrics: &Arc<RwLock<FrameMetrics>>) {
     debug!("running system render_2d_instance_loader");
+    let delta = frame_metrics.read().unwrap().delta().as_secs_f32();
     <(&mut InstanceGroup<Render2DInstance>, &Mesh)>::query().par_for_each_mut(
         world,
         |(group, _)| {
@@ -98,7 +90,7 @@ pub fn load(world: &mut SubWorld) {
             let mutators = components.read().unwrap();
             group.instances.par_iter_mut().for_each(|instance| {
                 for component in &mutators[instance.id as usize] {
-                    component.lock().unwrap().mutate(instance);
+                    component.lock().unwrap().mutate(instance, delta);
                 }
             })
         },

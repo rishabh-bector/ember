@@ -26,6 +26,7 @@ use winit::{
 use winit_input_helper::WinitInputHelper;
 
 use crate::{
+    components::FrameMetrics,
     constants::*,
     renderer::{
         buffer::{instance::*, *},
@@ -55,7 +56,7 @@ use crate::{
         schedule::{Schedulable, SubSchedule},
         ui::UI,
     },
-    systems::{camera_2d::*, camera_3d::*, lighting_2d::*, physics_2d::*},
+    systems::{camera_2d::*, camera_3d::*, lighting_2d::*, particle_2d::*, physics_2d::*},
 };
 
 pub fn engine_builder() -> EngineBuilder {
@@ -78,10 +79,11 @@ pub struct Engine {
     graph: Arc<RenderGraph>,
     window: Arc<Window>,
     input: Arc<RwLock<WinitInputHelper>>,
-    metrics: Arc<EngineMetrics>,
     registry: Registry,
     legion: LegionState,
     reporter: EngineReporter,
+    engine_metrics: Arc<EngineMetrics>,
+    frame_metrics: Arc<RwLock<FrameMetrics>>,
 }
 
 impl Engine {
@@ -99,19 +101,21 @@ impl Engine {
 
     pub fn start(mut self, event_loop: EventLoop<()>) {
         info!("starting engine");
-        self.window.set_cursor_visible(false);
-        let _ = self.window.set_cursor_grab(true);
-        let metrics_last_updated = Arc::new(Mutex::new(Instant::now()));
+
+        self.init();
 
         // top-level event loop; hijacks thread
+        let metrics_last_updated = Arc::new(Mutex::new(Instant::now()));
         event_loop.run(move |event, _, control_flow| {
             if let Event::RedrawRequested(_) = event {
                 debug!("executing all systems");
+                self.frame_metrics.write().unwrap().begin_frame();
                 self.legion.execute();
                 self.reporter.update();
+                self.frame_metrics.write().unwrap().end_frame();
 
                 if metrics_last_updated.lock().unwrap().elapsed() >= Duration::from_secs(1) {
-                    self.metrics.calculate();
+                    self.engine_metrics.calculate();
                     *metrics_last_updated.lock().unwrap() = Instant::now();
                 }
             }
@@ -137,6 +141,13 @@ impl Engine {
                 self.window.request_redraw();
             }
         });
+    }
+
+    fn init(&mut self) {
+        self.window.set_cursor_visible(false);
+        let _ = self.window.set_cursor_grab(true);
+
+        init_particle_systems(self.world());
     }
 }
 
@@ -167,7 +178,7 @@ impl EngineBuilder {
     }
 
     // Todo: distil this into several functions
-    pub fn default_2d(mut self) -> Result<(Engine, EventLoop<()>)> {
+    pub fn default_2d(self) -> Result<(Engine, EventLoop<()>)> {
         info!("building engine: default 2d");
 
         let (gpu, window, event_loop, registry, mut resources) = build_engine_common(
@@ -210,6 +221,7 @@ impl EngineBuilder {
             .add_system(physics_2d_system())
             .add_system(camera_2d_system())
             .add_system(lighting_2d_system())
+            .add_system(particle_2d_emission_system())
             // .add_system(render_2d::forward_instance::attractor_system())
             // Uniform loading systems
             .flush()
@@ -220,7 +232,7 @@ impl EngineBuilder {
         info!("building render graph");
         let metrics_ui = EngineMetrics::new();
         let mut graph_schedule = SubSchedule::new();
-        let (render_graph, metrics) = GraphBuilder::new()
+        let (render_graph, engine_metrics) = GraphBuilder::new()
             .with_master_node(node_2d_forward_instance)
             .with_ui_master()
             .build(
@@ -246,19 +258,23 @@ impl EngineBuilder {
         // resource
         let input_helper = Arc::new(RwLock::new(WinitInputHelper::new()));
 
+        // resource
+        let frame_metrics = Arc::new(RwLock::new(FrameMetrics::new()));
+
         drop(gpu_mut);
         resources.insert(Arc::clone(&gpu));
         resources.insert(Arc::clone(&window));
         resources.insert(Arc::clone(&registry.textures));
         resources.insert(Arc::clone(&registry.meshes));
         resources.insert(Arc::clone(&input_helper));
+        resources.insert(Arc::clone(&frame_metrics));
         resources.insert(Arc::clone(&render_graph));
         resources.insert(Arc::clone(&camera_2d));
 
         info!("ready to start!");
         Ok((
             Engine {
-                reporter: EngineReporter::new(Arc::clone(&metrics.fps)),
+                reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
                 input: input_helper,
                 legion: LegionState {
                     world: World::default(),
@@ -268,14 +284,15 @@ impl EngineBuilder {
                 graph: render_graph,
                 registry,
                 window,
-                metrics,
+                engine_metrics,
+                frame_metrics,
                 gpu,
             },
             event_loop,
         ))
     }
 
-    pub fn default_3d(mut self) -> Result<(Engine, EventLoop<()>)> {
+    pub fn default_3d(self) -> Result<(Engine, EventLoop<()>)> {
         info!("building engine: default 3d");
 
         let (gpu, window, event_loop, registry, mut resources) = build_engine_common(
@@ -295,21 +312,11 @@ impl EngineBuilder {
             Arc::clone(&camera_3d_group_builder),
         );
 
-        // Todo: replace this with something better
-        // resources.insert(InstanceBuffer::<
-        //     render_2d::forward_instance::Render2DInstance,
-        // >::new(
-        //     &gpu_mut.device,
-        //     Arc::clone(&gpu_mut.queue),
-        //     DEFAULT_MAX_INSTANCES_PER_BUFFER,
-        // ));
-
         info!("scheduling systems");
         let mut schedule = Schedule::builder();
         schedule
             // Main engine systems
             .add_system(camera_3d_system())
-            // .add_system(render_2d::forward_instance::attractor_system())
             // Uniform loading systems
             .flush()
             .add_system(render_3d::forward_basic::load_system())
@@ -319,7 +326,7 @@ impl EngineBuilder {
 
         info!("building render graph");
         let mut graph_schedule = SubSchedule::new();
-        let (render_graph, metrics) = GraphBuilder::new()
+        let (render_graph, engine_metrics) = GraphBuilder::new()
             .with_master_node(node_3d_forward_basic)
             .with_ui_master()
             .build(
@@ -345,12 +352,16 @@ impl EngineBuilder {
         // resource
         let input_helper = Arc::new(RwLock::new(WinitInputHelper::new()));
 
+        // resource
+        let frame_metrics = Arc::new(RwLock::new(FrameMetrics::new()));
+
         drop(gpu_mut);
         resources.insert(Arc::clone(&gpu));
         resources.insert(Arc::clone(&window));
         resources.insert(Arc::clone(&registry.textures));
         resources.insert(Arc::clone(&registry.meshes));
         resources.insert(Arc::clone(&input_helper));
+        resources.insert(Arc::clone(&frame_metrics));
         resources.insert(Arc::clone(&render_graph));
         resources.insert(Arc::clone(&render_3d_group_builder));
         resources.insert(Arc::clone(&camera_3d));
@@ -358,7 +369,7 @@ impl EngineBuilder {
         info!("ready to start!");
         Ok((
             Engine {
-                reporter: EngineReporter::new(Arc::clone(&metrics.fps)),
+                reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
                 input: input_helper,
                 legion: LegionState {
                     world: World::default(),
@@ -368,7 +379,8 @@ impl EngineBuilder {
                 graph: render_graph,
                 registry,
                 window,
-                metrics,
+                engine_metrics,
+                frame_metrics,
                 gpu,
             },
             event_loop,
@@ -388,6 +400,8 @@ fn build_engine_common(
     Resources,
 )> {
     let mut resources = Resources::default();
+
+    resources.insert(RwLock::new(FrameMetrics::new()));
 
     info!("building gpu");
     let (gpu, window, event_loop) = build_gpu(&mut resources, window_size)?;

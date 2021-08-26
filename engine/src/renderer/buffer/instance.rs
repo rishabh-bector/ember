@@ -1,16 +1,12 @@
 use std::{
-    any::{type_name},
+    any::type_name,
     marker::PhantomData,
     sync::{Arc, Mutex, RwLock},
 };
 use uuid::Uuid;
 use wgpu::util::DeviceExt;
 
-use crate::{
-    renderer::{
-        uniform::{generic::BufferState, group::BufferMode},
-    },
-};
+use crate::renderer::uniform::{generic::BufferState, group::BufferMode};
 
 pub trait Instance: bytemuck::Pod + bytemuck::Zeroable + Clone + Default {
     fn id(&self) -> (u32, u32);
@@ -22,7 +18,7 @@ pub trait Instance: bytemuck::Pod + bytemuck::Zeroable + Clone + Default {
 pub struct InstanceId(pub u32, pub u32);
 
 pub trait InstanceMutator<I: Instance>: Send + Sync {
-    fn mutate(&mut self, instance: &mut I);
+    fn mutate(&mut self, instance: &mut I, delta: f32);
 }
 
 // InstanceBuffer is allocated with enough space
