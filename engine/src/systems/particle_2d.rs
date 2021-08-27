@@ -2,10 +2,12 @@ use cgmath::{Angle, InnerSpace};
 use legion::{world::SubWorld, IntoQuery, World};
 use rand::Rng;
 use rayon::iter::{
-    IndexedParallelIterator, IntoParallelRefMutIterator,
-    ParallelIterator,
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
-use std::sync::{Arc, Mutex, RwLock};
+use std::{
+    ops::{Add, Mul, Sub},
+    sync::{Arc, Mutex, RwLock},
+};
 use uuid::Uuid;
 
 use crate::{
@@ -22,19 +24,19 @@ pub struct ParticleSystem2D {
     emitters: Vec<Arc<Mutex<ParticleEmitter2D>>>,
 
     pub lifetime: f32,
-    pub scale: [[f32; 2]; 2],
-    pub speed: [f32; 2],
-    pub color: [[f32; 4]; 2],
+    pub scale: Interpolator<SmoothF32x2>,
+    pub speed: Interpolator<SmoothF32x2>,
+    pub color: Interpolator<SmoothF32x4>,
 }
 
 impl Default for ParticleSystem2D {
     fn default() -> Self {
-        Self::new(
-            5.0,
-            [2.0, 2.0],
-            [[2.0, 2.0], [2.0, 2.0]],
-            [[1.0, 1.0, 1.0, 1.0], [0.3, 0.3, 0.5, 0.5]],
-            5000,
+        Self::new_empty(
+            3.0,
+            Interpolator::<SmoothF32x2>::new([3.0, 3.0], [0.0, 0.0]),
+            Interpolator::<SmoothF32x2>::new([3.0, 3.0], [-2.0, -2.0]),
+            Interpolator::<SmoothF32x4>::new([1.0, 1.0, 0.0, 1.0], [1.0, 0.0, 1.0, 1.0]),
+            2000,
         )
     }
 }
@@ -42,28 +44,9 @@ impl Default for ParticleSystem2D {
 impl ParticleSystem2D {
     pub fn new(
         lifetime: f32,
-        speed: [f32; 2],
-        scale: [[f32; 2]; 2],
-        color: [[f32; 4]; 2],
-        num_particles: u32,
-    ) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            mutators: vec![],
-            emitters: vec![],
-            num_particles,
-            lifetime,
-            speed,
-            scale,
-            color,
-        }
-    }
-
-    pub fn from_emitters(
-        lifetime: f32,
-        speed: [f32; 2],
-        scale: [[f32; 2]; 2],
-        color: [[f32; 4]; 2],
+        speed: Interpolator<SmoothF32x2>,
+        scale: Interpolator<SmoothF32x2>,
+        color: Interpolator<SmoothF32x4>,
         num_particles: u32,
         emitters: Vec<ParticleEmitter2D>,
     ) -> Self {
@@ -77,6 +60,27 @@ impl ParticleSystem2D {
             scale,
             color,
         }
+    }
+
+    pub fn new_empty(
+        lifetime: f32,
+        speed: Interpolator<SmoothF32x2>,
+        scale: Interpolator<SmoothF32x2>,
+        color: Interpolator<SmoothF32x4>,
+        num_particles: u32,
+    ) -> Self {
+        Self::new(lifetime, speed, scale, color, num_particles, vec![])
+    }
+
+    pub fn from_emitters(
+        lifetime: f32,
+        speed: Interpolator<SmoothF32x2>,
+        scale: Interpolator<SmoothF32x2>,
+        color: Interpolator<SmoothF32x4>,
+        num_particles: u32,
+        emitters: Vec<ParticleEmitter2D>,
+    ) -> Self {
+        Self::new(lifetime, speed, scale, color, num_particles, emitters)
     }
 
     pub fn push(&mut self, emitter: ParticleEmitter2D) {
@@ -98,17 +102,23 @@ pub fn init_particle_systems(world: &mut World) {
 }
 
 pub enum EmitterShape {
-    Line { end: [f32; 2] },
+    Line { end: [f32; 2], reverse: bool },
     Arc { radius: [f32; 2], angle: f32 },
 }
 
 impl Shape2D for EmitterShape {
     fn parametric(&self, t: f32, pos: [f32; 2]) -> [[f32; 2]; 2] {
         match &self {
-            EmitterShape::Line { end } => {
+            EmitterShape::Line { end, reverse } => {
                 let dx = end[0] - pos[0];
                 let dy = end[1] - pos[1];
-                [[pos[0] + t * dx, pos[1] + t * dy], [-dy, dx]]
+                let dir = if *reverse {
+                    cgmath::vec2::<f32>(dy, -dx)
+                } else {
+                    cgmath::vec2::<f32>(-dy, dx)
+                }
+                .normalize();
+                [[pos[0] + t * dx, pos[1] + t * dy], [dir.x, dir.y]]
             }
             EmitterShape::Arc { radius, angle } => {
                 let cos = Angle::cos(cgmath::Deg(t * angle));
@@ -147,7 +157,7 @@ impl EmitterMode {
                 }
             }
             EmitterMode::Direction { next, reverse } => {
-                let out = shape.parametric((*next / zones) as f32, pos);
+                let out = shape.parametric(*next as f32 / zones as f32, pos);
                 if *reverse {
                     if *next == 0 {
                         *next = zones;
@@ -155,7 +165,7 @@ impl EmitterMode {
                         *next = (*next as i32 - 1) as u32;
                     }
                 } else {
-                    if *next >= zones {
+                    if *next == zones - 1 {
                         *next = 0;
                     } else {
                         *next = *next + 1;
@@ -173,19 +183,16 @@ pub struct ParticleEmitter2D {
     pub shape: EmitterShape,
     pub mode: EmitterMode,
     pub zones: u32,
-    pub batches: u32,
+    pub rate: u32,
     pub launch_freq: f32,
 }
 
 impl ParticleEmitter2D {
     pub fn emit(&mut self, _delta: f32) -> Vec<[[f32; 2]; 2]> {
-        vec![
-            self.mode.emit(&self.shape, self.position, self.zones),
-            self.mode.emit(&self.shape, self.position, self.zones),
-            self.mode.emit(&self.shape, self.position, self.zones),
-            self.mode.emit(&self.shape, self.position, self.zones),
-            self.mode.emit(&self.shape, self.position, self.zones),
-        ]
+        (0..self.rate)
+            .into_iter()
+            .map(|_| self.mode.emit(&self.shape, self.position, self.zones))
+            .collect()
     }
 }
 
@@ -194,11 +201,11 @@ impl Default for ParticleEmitter2D {
         Self {
             position: [0.0, 0.0],
             shape: EmitterShape::Arc {
-                radius: [50.0, 50.0],
+                radius: [0.0, 0.0],
                 angle: 360.0,
             },
             zones: 0,
-            batches: 0,
+            rate: 10,
             mode: EmitterMode::Random,
             launch_freq: 10.0,
         }
@@ -224,54 +231,144 @@ pub fn particle_2d_emission(
                     .flatten()
                     .collect(),
             ));
-            let launch_speed = system.speed[0];
-            let launch_scale = system.scale[0];
-            let launch_color = system.color[0];
-            let launch_lifetime = system.lifetime;
+
+            let launch_speed = system.speed.initial().0;
+            let launch_scale = system.scale.initial().0;
+            let launch_color = system.color.initial().0;
+
+            // - update active particles
+            // - deactivate expired particles
+            // - recycle deactivated particles
             group
                 .instances
                 .par_iter_mut()
                 .enumerate()
                 .for_each(|(i, instance)| {
                     let mut mutator = system.mutators[i].lock().unwrap();
-                    if mutator.lifetime > 0.0 {
-                        // Interpolations
+                    // mutate active particles
+                    if mutator.lifetime >= 0.0 && mutator.lifetime <= system.lifetime {
+                        let t = mutator.lifetime / system.lifetime;
+                        instance.color = system.color.linear(t).0;
+                        mutator.motion.transform.scale = system.scale.linear(t).0;
+                        mutator.motion.speed = system.speed.linear(t).0;
+                    // recycle expired particles
                     } else {
-                        if mutator.lifetime < 0.0 {
+                        if mutator.lifetime > system.lifetime {
                             mutator.reset();
                         }
-                        if mutator.lifetime == 0.0 {
+                        if mutator.lifetime == -1.0 {
                             let mut emitted = emitted.lock().unwrap();
                             let range = emitted.len().saturating_sub(1)..;
                             let next = emitted.drain(range).next_back();
                             drop(emitted);
                             if let Some(pos_dir) = next {
-                                mutator.launch(
-                                    pos_dir[0],
-                                    pos_dir[1],
-                                    launch_scale,
-                                    launch_speed,
-                                    launch_lifetime,
-                                );
+                                mutator.launch(pos_dir[0], pos_dir[1], launch_scale, launch_speed);
                                 instance.color = launch_color;
                             }
                         }
                     }
                 });
-
-            // group
-            //     .instances
-            //     .iter_mut()
-            //     .zip(Arc::clone(&group.components).write().unwrap().iter())
-            //     .par_bridge()
-            //     .into_par_iter()
-            //     .for_each(|(instance, components)| {});
         },
     );
 }
 
-// Emission algorithm (par_iter through particle systems):
-// Needs to:
-//      - Recycle old particles
-//      - Launch new particles
-// Individual particles should be updated via an Instance Mutator which wraps Motion2D.
+pub trait Quantity:
+    Clone + Copy + Add<Self, Output = Self> + Sub<Self, Output = Self> + Mul<f32, Output = Self> + Sized
+{
+}
+
+pub struct Interpolator<T: Quantity> {
+    from: T,
+    to: T,
+    delta: T,
+}
+
+impl<T> Interpolator<T>
+where
+    T: Quantity,
+{
+    pub fn new<I: Into<T>>(from: I, to: I) -> Self {
+        let from: T = from.into();
+        let to: T = to.into();
+        Self {
+            delta: to - from,
+            from,
+            to,
+        }
+    }
+
+    pub fn linear(&self, param: f32) -> T {
+        self.from + self.delta * param
+    }
+
+    pub fn initial(&self) -> T {
+        self.from
+    }
+
+    pub fn target(&self) -> T {
+        self.to
+    }
+}
+
+#[derive(Clone, Copy, Add, Sub, Mul)]
+pub struct SmoothF32(f32);
+impl Quantity for SmoothF32 {}
+
+#[derive(Clone, Copy, From)]
+pub struct SmoothF32x2([f32; 2]);
+impl Add for SmoothF32x2 {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        SmoothF32x2([self.0[0] + rhs.0[0], self.0[1] + rhs.0[1]])
+    }
+}
+impl Sub for SmoothF32x2 {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        SmoothF32x2([self.0[0] - rhs.0[0], self.0[1] - rhs.0[1]])
+    }
+}
+impl Mul<f32> for SmoothF32x2 {
+    type Output = Self;
+    fn mul(self, rhs: f32) -> Self::Output {
+        SmoothF32x2([self.0[0] * rhs, self.0[1] * rhs])
+    }
+}
+impl Quantity for SmoothF32x2 {}
+
+#[derive(Clone, Copy, From)]
+pub struct SmoothF32x4([f32; 4]);
+impl Add for SmoothF32x4 {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        SmoothF32x4([
+            self.0[0] + rhs.0[0],
+            self.0[1] + rhs.0[1],
+            self.0[2] + rhs.0[2],
+            self.0[3] + rhs.0[3],
+        ])
+    }
+}
+impl Sub for SmoothF32x4 {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        SmoothF32x4([
+            self.0[0] - rhs.0[0],
+            self.0[1] - rhs.0[1],
+            self.0[2] - rhs.0[2],
+            self.0[3] - rhs.0[3],
+        ])
+    }
+}
+impl Mul<f32> for SmoothF32x4 {
+    type Output = Self;
+    fn mul(self, rhs: f32) -> Self::Output {
+        SmoothF32x4([
+            self.0[0] * rhs,
+            self.0[1] * rhs,
+            self.0[2] * rhs,
+            self.0[3] * rhs,
+        ])
+    }
+}
+impl Quantity for SmoothF32x4 {}

@@ -1,11 +1,14 @@
 extern crate pretty_env_logger;
+extern crate vertex_traits;
+
+#[macro_use]
+extern crate derive_more;
 #[macro_use]
 extern crate log;
 #[macro_use]
 extern crate legion;
 #[macro_use]
 extern crate vertex_layout_derive;
-extern crate vertex_traits;
 
 use anyhow::Result;
 use legion::{Resources, Schedule, World};
@@ -36,15 +39,10 @@ use crate::{
         },
         mesh::Mesh,
         systems::{
-            render_2d::{
-                forward_dynamic::Render2DForwardDynamicGroup,
-            },
-            render_3d::forward_basic::Render3DForwardUniformGroup,
-            *,
+            render_2d::forward_dynamic::Render2DForwardDynamicGroup,
+            render_3d::forward_basic::Render3DForwardUniformGroup, *,
         },
-        uniform::{
-            group::{UniformGroupBuilder, UniformGroupType},
-        },
+        uniform::group::{UniformGroupBuilder, UniformGroupType},
         GpuState, GpuStateBuilder,
     },
     sources::{
@@ -58,6 +56,7 @@ use crate::{
 };
 
 pub fn engine_builder() -> EngineBuilder {
+    pretty_env_logger::init();
     EngineBuilder {
         window_size: (1440, 900),
         texture_registry_builder: TextureRegistryBuilder::new(),
@@ -398,7 +397,6 @@ fn build_engine_common(
     Resources,
 )> {
     let mut resources = Resources::default();
-
     resources.insert(RwLock::new(FrameMetrics::new()));
 
     info!("building gpu");
@@ -415,7 +413,6 @@ fn build_gpu(
     resources: &mut Resources,
     window_size: (usize, usize),
 ) -> Result<(Arc<Mutex<GpuState>>, Arc<Window>, EventLoop<()>)> {
-    pretty_env_logger::init();
     let event_loop = EventLoop::new();
     let window = build_window(window_size, &event_loop)?;
 

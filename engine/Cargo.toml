@@ -4,24 +4,25 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
-vertex_traits = { path = "../vertex_traits" }
-vertex_layout_derive = { path = "../vertex_layout_derive" }
 anyhow = "1.0"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 cgmath = "0.18" 
+derive_more = "0.99.16"
+futures = "0.3"
 image = "*"
 imgui = "0.7"
 imgui-wgpu = "0.16"
 imgui-winit-support = { version = "0.7.1", default-features = false, features = ["winit-25"] }
-legion = "0.4.0"
-log = "0.4" 
-uuid = "0.8"
-futures = "0.3"
 pretty_env_logger = "0.3"
 rand = "0.8.4"
 rayon = "1.5"
 regex = "1.5"
+legion = "0.4.0"
+log = "0.4" 
 tobj = "3.1"
+uuid = "0.8"
+vertex_traits = { path = "../vertex_traits" }
+vertex_layout_derive = { path = "../vertex_layout_derive" }
 wgpu = "0.9"
 winit = "0.25"
 winit_input_helper = "0.10"

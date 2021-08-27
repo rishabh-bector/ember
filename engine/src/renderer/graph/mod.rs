@@ -228,7 +228,7 @@ impl GraphBuilder {
             })
             .collect();
 
-        let ui_reporter = metrics_ui.register_system_id("render_ui", ID(RENDER_UI_SYSTEM_ID));
+        // let ui_reporter = metrics_ui.register_system_id("render_ui", ID(RENDER_UI_SYSTEM_ID));
         let metrics_ui = Arc::new(metrics_ui);
         let metrics_arc = Arc::clone(&metrics_ui);
         resources.insert(Arc::clone(&metrics_ui));
@@ -273,12 +273,12 @@ impl GraphBuilder {
         sub_schedule.flush();
 
         // Run ui system
-        if let UIMode::Master = self.ui_mode {
-            sub_schedule.add_single_threaded_reporter(
-                Arc::new(Box::new(LocalReporterSystem::new(render_ui_system))),
-                ui_reporter,
-            );
-        }
+        // if let UIMode::Master = self.ui_mode {
+        //     sub_schedule.add_single_threaded_reporter(
+        //         Arc::new(Box::new(LocalReporterSystem::new(render_ui_system))),
+        //         ui_reporter,
+        //     );
+        // }
 
         // Release lock on swap chain, end of frame
         sub_schedule.flush();
@@ -299,7 +299,6 @@ impl GraphBuilder {
         }));
 
         debug!("done building render graph!");
-
         Ok((Arc::clone(&self.dest.as_ref().unwrap()), metrics_arc))
     }
 

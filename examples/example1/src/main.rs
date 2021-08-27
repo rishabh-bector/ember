@@ -1,12 +1,14 @@
 use ember::{
-    components::Position3D, renderer::systems::render_3d::forward_basic::Render3D, MeshGroup,
+    components::{FrameMetrics, Position3D},
+    renderer::systems::render_3d::forward_basic::Render3D,
+    MeshGroup,
 };
 use uuid::Uuid;
 
 // Ember example: Basic 3D model
 
 fn main() {
-    std::env::set_var("RUST_LOG", "ember=debug");
+    std::env::set_var("RUST_LOG", "ember=info");
     let engine_builder = ember::engine_builder();
 
     let airplane_mesh_group_id = Uuid::new_v4();

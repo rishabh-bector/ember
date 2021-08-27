@@ -52,6 +52,7 @@ impl EngineMetrics {
 
         // Metric: average fps (from reporter)
         ui.avg_fps = *self.fps.lock().unwrap();
+        info!("average fps: {}", ui.avg_fps);
 
         // Metric: average system run time
         ui.avg_execution_time = 0.0;
