@@ -16,13 +16,14 @@ fn main() {
     let mut particle_system = ParticleSystem2D::default();
     particle_system.push(ParticleEmitter2D::default());
 
-    // let mut p2 = ParticleEmitter2D::default();
-    // p2.position = [500.0, 500.0];
-    // p2.shape = EmitterShape::Line {
-    //     end: [600.0, 500.0],
-    //     reverse: true,
-    // };
-    // particle_system.push(p2);
+    let mut p2 = ParticleEmitter2D::default();
+    p2.position = [1000.0, 500.0];
+    p2.shape = EmitterShape::Line {
+        end: [1100.0, 500.0],
+        reverse: true,
+    };
+    p2.rate = 2;
+    particle_system.push(p2);
 
     engine
         .world()
