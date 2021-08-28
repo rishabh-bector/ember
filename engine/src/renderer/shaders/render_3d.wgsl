@@ -1,4 +1,6 @@
-// Vertex shader
+// --------------------------------------------------
+// Common
+// -------------------------------------------------
 
 [[block]]
 struct Render3DUniforms {
@@ -36,6 +38,10 @@ var<uniform> camera_uniforms: Camera3DUniforms;
 // [[group(3), binding(0)]]
 // var<uniform> light_uniforms: LightUniforms;
 
+// --------------------------------------------------
+// Vertex shader
+// --------------------------------------------------
+
 struct VertexInput {
     [[location(0)]] position: vec3<f32>;
     [[location(1)]] uvs: vec2<f32>;
@@ -51,10 +57,6 @@ struct VertexOutput {
 fn main(
     in: VertexInput,
 ) -> VertexOutput {
-    //var world_space: vec2<f32> = in.position * render_3d_uniforms.model.zw + render_3d_uniforms.model.xy;
-    // var snapped: vec2<f32> = vec2<f32>(round(world_space.x), round(world_space.y));
-    //var camera_space: vec2<f32> = snap2grid(world_space + camera_uniforms.view.xy, i32(1)) / camera_uniforms.view.zw;
-
     var world_space: vec4<f32> = render_3d_uniforms.model * vec4<f32>(in.position, 1.0);
     var camera_space: vec4<f32> = camera_uniforms.view_proj * world_space;
 
@@ -66,7 +68,9 @@ fn main(
     return out;
 }
 
+// --------------------------------------------------
 // Fragment shader
+// -------------------------------------------------
 
 [[group(0), binding(0)]]
 var texture0: texture_2d<f32>;
@@ -82,7 +86,7 @@ fn point_light_2d(pos: vec2<f32>, light: vec4<f32>) -> f32 {
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {    
     var sample_texture: vec4<f32> = textureSample(texture0, sampler0, in.uvs);
-    var sample_final: vec4<f32> = (render_3d_uniforms.color * render_3d_uniforms.mix) + ((1.0 - render_3d_uniforms.mix) * sample_texture);
+    var sample_final: vec4<f32> = (render_3d_uniforms.color * (1.0 - render_3d_uniforms.mix)) + (render_3d_uniforms.mix * sample_texture);
 
     // var lighting_0: f32 = point_light_2d(world_pos.xy, light_uniforms.light_0);
     // var lighting_1: f32 = point_light_2d(world_pos.xy, light_uniforms.light_1);

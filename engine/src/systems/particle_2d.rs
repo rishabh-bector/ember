@@ -18,10 +18,11 @@ use crate::{
 };
 
 pub struct ParticleSystem2D {
+    mutators: Vec<Arc<Mutex<ParticleMutator2D>>>,
     pub id: Uuid,
     pub num_particles: u32,
-    mutators: Vec<Arc<Mutex<ParticleMutator2D>>>,
-    emitters: Vec<Arc<Mutex<ParticleEmitter2D>>>,
+
+    pub emitters: Vec<Arc<Mutex<ParticleEmitter2D>>>,
 
     pub lifetime: f32,
     pub scale: Interpolator<SmoothF32x2>,

@@ -146,7 +146,7 @@ impl GraphBuilder {
                         Some(Arc::new(DepthBuffer(Texture::depth_buffer(
                             &format!("{}_depth_target", node.name),
                             &device,
-                            (2160 as u32, 1350 as u32),
+                            (3840 as u32, 2160 as u32),
                             wgpu::TextureFormat::Depth32Float,
                         ))))
                     }

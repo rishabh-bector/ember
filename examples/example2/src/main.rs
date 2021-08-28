@@ -14,6 +14,7 @@ fn main() {
     let particle_mesh = engine.clone_mesh(&ID(UNIT_SQUARE_MESH_ID), &ID(PRIMITIVE_MESH_GROUP_ID));
 
     let mut particle_system = ParticleSystem2D::default();
+    particle_system.num_particles = 5000;
     particle_system.push(ParticleEmitter2D::default());
 
     let mut p2 = ParticleEmitter2D::default();

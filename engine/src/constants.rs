@@ -2,8 +2,8 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 // Engine
-pub const DEFAULT_SCREEN_WIDTH: usize = 1440;
-pub const DEFAULT_SCREEN_HEIGHT: usize = 900;
+pub const DEFAULT_SCREEN_WIDTH: usize = 1920;
+pub const DEFAULT_SCREEN_HEIGHT: usize = 1080;
 
 // Buffers
 pub const DEFAULT_TEXTURE_BUFFER_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;

@@ -8,7 +8,7 @@ use uuid::Uuid;
 // Ember example: Basic 3D model
 
 fn main() {
-    std::env::set_var("RUST_LOG", "ember=info");
+    std::env::set_var("RUST_LOG", "debug");
     let engine_builder = ember::engine_builder();
 
     let airplane_mesh_group_id = Uuid::new_v4();

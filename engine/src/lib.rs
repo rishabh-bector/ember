@@ -24,7 +24,7 @@ use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
     event_loop::{ControlFlow, EventLoop},
-    window::{Window, WindowBuilder},
+    window::{Fullscreen, Window, WindowBuilder},
 };
 use winit_input_helper::WinitInputHelper;
 
@@ -58,7 +58,7 @@ use crate::{
 pub fn engine_builder() -> EngineBuilder {
     pretty_env_logger::init();
     EngineBuilder {
-        window_size: (1440, 900),
+        window_size: (DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT),
         texture_registry_builder: TextureRegistryBuilder::new(),
         mesh_registry_builder: MeshRegistryBuilder::new(),
     }
@@ -81,6 +81,12 @@ pub struct Engine {
     reporter: EngineReporter,
     engine_metrics: Arc<EngineMetrics>,
     frame_metrics: Arc<RwLock<FrameMetrics>>,
+    mode: EngineMode,
+}
+
+enum EngineMode {
+    Forward2D,
+    Forward3D,
 }
 
 impl Engine {
@@ -141,8 +147,10 @@ impl Engine {
     }
 
     fn init(&mut self) {
-        self.window.set_cursor_visible(false);
-        let _ = self.window.set_cursor_grab(true);
+        if let EngineMode::Forward3D = &self.mode {
+            self.window.set_cursor_visible(false);
+            let _ = self.window.set_cursor_grab(true);
+        }
 
         init_particle_systems(self.world());
     }
@@ -248,8 +256,8 @@ impl EngineBuilder {
 
         // resource
         let camera_2d = Arc::new(Mutex::new(Camera2D::default(
-            DEFAULT_SCREEN_WIDTH as f32,
-            DEFAULT_SCREEN_HEIGHT as f32,
+            self.window_size.0 as f32,
+            self.window_size.1 as f32,
         )));
 
         // resource
@@ -271,6 +279,7 @@ impl EngineBuilder {
         info!("ready to start!");
         Ok((
             Engine {
+                mode: EngineMode::Forward2D,
                 reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
                 input: input_helper,
                 legion: LegionState {
@@ -342,8 +351,8 @@ impl EngineBuilder {
 
         // resource
         let camera_3d = Arc::new(Mutex::new(Camera3D::default(
-            DEFAULT_SCREEN_WIDTH as f32,
-            DEFAULT_SCREEN_HEIGHT as f32,
+            self.window_size.0 as f32,
+            self.window_size.1 as f32,
         )));
 
         // resource
@@ -366,6 +375,7 @@ impl EngineBuilder {
         info!("ready to start!");
         Ok((
             Engine {
+                mode: EngineMode::Forward3D,
                 reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
                 input: input_helper,
                 legion: LegionState {
@@ -439,10 +449,12 @@ fn build_window(size: (usize, usize), event_loop: &EventLoop<()>) -> Result<Arc<
     let size = LogicalSize::new(size.0 as f64, size.1 as f64);
     Ok(Arc::new({
         WindowBuilder::new()
-            .with_title("Hello World")
+            .with_title("Ember Engine")
             .with_inner_size(size)
             .with_min_inner_size(size)
             .with_max_inner_size(size)
+            .with_resizable(false)
+            .with_fullscreen(Some(Fullscreen::Borderless(None)))
             .build(event_loop)?
     }))
 }
