@@ -39,12 +39,15 @@ impl MeshBuilder for ObjLoader {
         let options = tobj::LoadOptions {
             triangulate: true,
             single_index: true,
-            ignore_lines: true,
-            ignore_points: true,
+            ignore_lines: false,
+            ignore_points: false,
             ..Default::default()
         };
         let (models, _) = tobj::load_obj(&self.path, &options).unwrap();
-        debug!("obj contains {} meshes which will be merged", models.len());
+        debug!(
+            "obj contains {} models which will be merged into one mesh",
+            models.len()
+        );
 
         let mut flat_vertices: Vec<f32> = vec![];
         let mut flat_uvs: Vec<f32> = vec![];
@@ -53,10 +56,6 @@ impl MeshBuilder for ObjLoader {
         let mut indices: Vec<u16> = vec![];
         let mut mesh_index_offset: u16 = 0;
         for i in 0..models.len() {
-            // if i != 0 {
-            //     continue;
-            // }
-
             let mesh = &models[i].mesh;
             debug!(
                 "building mesh {} with {} triangles and {} indices (faces: {})",
@@ -66,7 +65,6 @@ impl MeshBuilder for ObjLoader {
                 mesh.face_arities.len(),
             );
 
-            let mesh = &models[i].mesh;
             for index in 0..mesh.positions.len() / 3 {
                 flat_vertices.push(mesh.positions[3 * index]);
                 flat_vertices.push(mesh.positions[3 * index + 1]);
@@ -80,8 +78,8 @@ impl MeshBuilder for ObjLoader {
                 flat_normals.push(mesh.normals[3 * index + 2]);
             }
 
-            indices.extend(mesh.indices.iter().map(|i| mesh_index_offset + *i as u16));
-            mesh_index_offset = indices.len() as u16 + 1;
+            indices.extend(mesh.indices.iter().map(|i| mesh_index_offset + (*i as u16)));
+            mesh_index_offset += (mesh.positions.len() / 3) as u16;
         }
 
         let (vertex_buffer, vertices) = VertexBuffer::from_flat_slices(
@@ -90,6 +88,12 @@ impl MeshBuilder for ObjLoader {
             flat_uvs.as_slice(),
             flat_normals.as_slice(),
             &device,
+        );
+
+        info!(
+            "loaded mesh with {} triangles from {}",
+            indices.len() / 3,
+            self.path.split("/").last().unwrap(),
         );
 
         Mesh {

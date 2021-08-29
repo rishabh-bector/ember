@@ -93,6 +93,7 @@ impl VertexBuffer {
     ) -> (Self, Vec<f32>) {
         let num_vertices = vertices_flat.len() / 3;
         assert_eq!(num_vertices, uvs_flat.len() / 2);
+        assert_eq!(num_vertices, normals_flat.len() / 3);
 
         let mut buf: Vec<f32> = vec![];
         for i in 0..num_vertices {

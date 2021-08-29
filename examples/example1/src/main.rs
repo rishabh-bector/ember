@@ -1,5 +1,5 @@
 use ember::{
-    components::{FrameMetrics, Position3D},
+    components::{DeltaTransform3D, FrameMetrics, Position3D, Transform3D},
     renderer::systems::render_3d::forward_basic::Render3D,
     MeshGroup,
 };
@@ -29,10 +29,10 @@ fn main() {
     let airplane_mesh = engine.clone_mesh(&airplane_mesh_id, &airplane_mesh_group_id);
     engine.world().push((
         Render3D::default("test_cube"),
-        Position3D {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
+        Transform3D::origin(),
+        DeltaTransform3D {
+            rotation: [10.0, 25.0, 0.0],
+            ..Default::default()
         },
         airplane_mesh,
     ));

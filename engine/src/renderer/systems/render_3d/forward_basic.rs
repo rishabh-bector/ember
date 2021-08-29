@@ -1,3 +1,4 @@
+use cgmath::{Matrix, Rotation3, SquareMatrix};
 use legion::{component, systems::CommandBuffer, world::SubWorld, Entity};
 use std::{
     sync::{Arc, Mutex},
@@ -6,7 +7,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    components::Position3D,
+    components::Transform3D,
     constants::{
         CAMERA_3D_BIND_GROUP_ID, ID, RENDER_3D_BIND_GROUP_ID, RENDER_3D_COMMON_TEXTURE_ID,
     },
@@ -21,7 +22,7 @@ use crate::{
             },
         },
     },
-    systems::camera_3d::matrix2array_4d,
+    systems::camera_3d::{matrix2array_3d, matrix2array_4d},
 };
 
 // Todo: go through all todo comments and make tickets for them
@@ -53,16 +54,35 @@ impl Render3D {
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Render3DUniforms {
-    pub model: [[f32; 4]; 4],
+    pub model_mat: [[f32; 4]; 4],
+    pub normal_mat: [[f32; 4]; 4],
     pub color: [f32; 4],
     pub mix: f32,
 }
 
-impl From<(&Render3D, &Position3D)> for Render3DUniforms {
-    fn from(entity: (&Render3D, &Position3D)) -> Self {
-        let mat = cgmath::Matrix4::from_translation((entity.1.x, entity.1.y, entity.1.z).into());
+impl From<(&Render3D, &Transform3D)> for Render3DUniforms {
+    fn from(entity: (&Render3D, &Transform3D)) -> Self {
+        let model_mat = cgmath::Matrix4::from_translation(
+            (
+                entity.1.position[0],
+                entity.1.position[1],
+                entity.1.position[2],
+            )
+                .into(),
+        ) * cgmath::Matrix4::from_angle_x(cgmath::Deg(entity.1.rotation[0]))
+            * cgmath::Matrix4::from_angle_y(cgmath::Deg(entity.1.rotation[1]))
+            * cgmath::Matrix4::from_angle_z(cgmath::Deg(entity.1.rotation[2]))
+            * cgmath::Matrix4::from_nonuniform_scale(
+                entity.1.scale[0],
+                entity.1.scale[1],
+                entity.1.scale[2],
+            );
+
+        let normal_mat = model_mat.invert().unwrap().transpose();
+
         Self {
-            model: matrix2array_4d(mat),
+            model_mat: matrix2array_4d(model_mat),
+            normal_mat: matrix2array_4d(normal_mat),
             color: entity.0.color,
             mix: entity.0.mix,
         }
@@ -75,7 +95,8 @@ impl UniformGroupType<Self> for Render3DForwardUniformGroup {
     fn builder() -> UniformGroupBuilder<Render3DForwardUniformGroup> {
         UniformGroup::<Render3DForwardUniformGroup>::builder()
             .with_uniform(GenericUniformBuilder::from_source(Render3DUniforms {
-                model: Default::default(),
+                model_mat: Default::default(),
+                normal_mat: Default::default(),
                 color: [1.0, 1.0, 1.0, 1.0],
                 mix: 1.0,
             }))
@@ -85,7 +106,7 @@ impl UniformGroupType<Self> for Render3DForwardUniformGroup {
 
 #[system]
 #[read_component(Render3D)]
-#[read_component(Position3D)]
+#[read_component(Transform3D)]
 #[read_component(GroupState)]
 pub fn load(
     world: &mut SubWorld,
@@ -98,8 +119,8 @@ pub fn load(
 
     // Add a GroupState to any Render3D component without one
     let group_builder = group_builder.lock().unwrap();
-    let mut query = <(Entity, &Render3D, &Position3D)>::query().filter(!component::<GroupState>());
-    query.for_each(world, |(entity, builder_3d, _pos_3d)| {
+    let mut query = <(Entity, &Render3D, &Transform3D)>::query().filter(!component::<GroupState>());
+    query.for_each(world, |(entity, builder_3d, _)| {
         debug!(
             "allocating buffers for new render_3d component: {}",
             builder_3d.name
@@ -108,20 +129,19 @@ pub fn load(
     });
 
     // Load all Render3D components into their GroupStates
-    let mut query = <(&Render3D, &Position3D, &GroupState)>::query();
-    query.par_for_each(world, |(render_3d, pos_3d, group_state)| {
+    let mut query = <(&Render3D, &Transform3D, &GroupState)>::query();
+    query.par_for_each(world, |(render_3d, transform_3d, group_state)| {
         debug!(
             "loading uniform group state for existing render_3d component: {}",
             render_3d.name
         );
-        let source = &[Render3DUniforms::from((render_3d, pos_3d))];
+        let source = &[Render3DUniforms::from((render_3d, transform_3d))];
         group_state.write_buffer(0, bytemuck::cast_slice(source));
     });
 }
 
 #[system]
 #[read_component(Render3D)]
-#[read_component(Position3D)]
 #[read_component(Mesh)]
 #[read_component(GroupState)]
 pub fn render(

@@ -52,7 +52,9 @@ use crate::{
         schedule::{Schedulable, SubSchedule},
         ui::UI,
     },
-    systems::{camera_2d::*, camera_3d::*, lighting_2d::*, particle_2d::*, physics_2d::*},
+    systems::{
+        camera_2d::*, camera_3d::*, lighting_2d::*, particle_2d::*, physics_2d::*, physics_3d::*,
+    },
 };
 
 pub fn engine_builder() -> EngineBuilder {
@@ -323,6 +325,7 @@ impl EngineBuilder {
         schedule
             // Main engine systems
             .add_system(camera_3d_system())
+            .add_system(physics_3d_system())
             // Uniform loading systems
             .flush()
             .add_system(render_3d::forward_basic::load_system())

@@ -4,7 +4,11 @@ use crate::renderer::{
     buffer::instance::InstanceMutator, systems::render_2d::forward_instance::Render2DInstance,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+// --------------------------------------------------
+// General
+// --------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct FrameMetrics {
     delta: Duration,
     start: Instant,
@@ -31,13 +35,24 @@ impl FrameMetrics {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
+pub struct Sprite {
+    pub width: usize,
+    pub height: usize,
+    pub pixels: Vec<u8>,
+}
+
+// --------------------------------------------------
+// Two-Dimensional
+// --------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Position2D {
     pub x: f32,
     pub y: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Transform2D {
     pub position: [f32; 2],
     pub scale: [f32; 2],
@@ -64,42 +79,66 @@ impl Default for Transform2D {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
+#[derive(Clone, Copy, PartialEq, Default, Debug)]
 pub struct Velocity2D {
     pub vx: f32,
     pub vy: f32,
     pub bounce: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Sprite {
-    pub width: usize,
-    pub height: usize,
-    pub pixels: Vec<u8>,
+// --------------------------------------------------
+// Three-Dimensional
+// --------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Transform3D {
+    pub position: [f32; 3],
+    pub rotation: [f32; 3],
+    pub scale: [f32; 3],
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+impl Transform3D {
+    pub fn origin() -> Self {
+        Self {
+            position: Default::default(),
+            rotation: Default::default(),
+            scale: [1.0, 1.0, 1.0],
+        }
+    }
+
+    pub fn scale_origin(scale: [f32; 3]) -> Self {
+        Self {
+            position: Default::default(),
+            rotation: Default::default(),
+            scale,
+        }
+    }
+
+    pub fn rotate_origin(rotation: [f32; 3]) -> Self {
+        Self {
+            position: Default::default(),
+            scale: [1.0, 1.0, 1.0],
+            rotation,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Default, Debug)]
+pub struct DeltaTransform3D {
+    pub position: [f32; 3],
+    pub scale: [f32; 3],
+    pub rotation: [f32; 3],
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Position3D {
     pub x: f32,
     pub y: f32,
     pub z: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
-pub struct Velocity3D {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Scale3D {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-}
-
-pub struct Rotor3D {
     pub x: f32,
     pub y: f32,
     pub z: f32,
@@ -118,7 +157,7 @@ impl InstanceMutator<Render2DInstance> for Transform2D {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Default, Debug)]
 pub struct Motion2D {
     pub transform: Transform2D,
     pub velocity: Velocity2D,

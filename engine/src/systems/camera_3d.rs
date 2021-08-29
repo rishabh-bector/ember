@@ -1,4 +1,4 @@
-use cgmath::{Angle, Deg, EuclideanSpace, Matrix2, Matrix4};
+use cgmath::{Angle, Deg, EuclideanSpace, Matrix2, Matrix3, Matrix4};
 use std::sync::{Arc, Mutex, RwLock};
 use winit_input_helper::WinitInputHelper;
 
@@ -18,6 +18,7 @@ impl UniformGroupType<Self> for Camera3DUniformGroup {
     fn builder() -> UniformGroupBuilder<Self> {
         UniformGroup::<Camera3DUniformGroup>::builder()
             .with_uniform(GenericUniformBuilder::from_source(Camera3DUniforms {
+                view_pos: Default::default(),
                 view_proj: Default::default(),
             }))
             .with_id(ID(CAMERA_3D_BIND_GROUP_ID))
@@ -27,6 +28,7 @@ impl UniformGroupType<Self> for Camera3DUniformGroup {
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Camera3DUniforms {
+    pub view_pos: [f32; 4],
     pub view_proj: [[f32; 4]; 4],
 }
 
@@ -74,6 +76,7 @@ pub fn camera_3d(
     camera.pos.y += input.scroll_diff() * camera.scroll_sensitivity;
 
     // Build camera matrix
+    camera_uniforms.mut_ref().view_pos = [camera.pos.x, camera.pos.y, camera.pos.z, 0.0];
     camera_uniforms.mut_ref().view_proj = matrix2array_4d(camera.build_view_proj());
 }
 
@@ -92,6 +95,14 @@ pub fn camera_3d_uniform(
 
 pub fn matrix2array_2d(mat: Matrix2<f32>) -> [f32; 4] {
     [mat.x[0], mat.y[0], mat.x[1], mat.y[1]]
+}
+
+pub fn matrix2array_3d(mat: Matrix3<f32>) -> [[f32; 3]; 3] {
+    [
+        [mat.x.x, mat.x.y, mat.x.z],
+        [mat.y.x, mat.y.y, mat.y.z],
+        [mat.z.x, mat.z.y, mat.z.z],
+    ]
 }
 
 pub fn matrix2array_4d(mat: Matrix4<f32>) -> [[f32; 4]; 4] {
