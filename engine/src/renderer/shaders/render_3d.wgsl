@@ -45,12 +45,14 @@ var<uniform> camera_uniforms: Camera3DUniforms;
 struct VertexInput {
     [[location(0)]] position: vec3<f32>;
     [[location(1)]] uvs: vec2<f32>;
+    [[location(2)]] normal: vec3<f32>;
 };
 
 struct VertexOutput {
     [[builtin(position)]] clip_position: vec4<f32>;
     [[location(0)]] uvs: vec2<f32>;
     [[location(1)]] world_pos: vec3<f32>;
+    [[location(2)]] tangent_normal: vec3<f32>;
 };
 
 [[stage(vertex)]]
@@ -64,6 +66,7 @@ fn main(
     out.uvs = in.uvs;
     out.clip_position = camera_space;
     out.world_pos = world_space.xyz;
+    out.tangent_normal = in.normal;
 
     return out;
 }
@@ -77,10 +80,12 @@ var texture0: texture_2d<f32>;
 [[group(0), binding(1)]]
 var sampler0: sampler;
 
-fn point_light_2d(pos: vec2<f32>, light: vec4<f32>) -> f32 {
-    let d: f32 = length(light.xy - pos);
-    let attenuation: f32 = 1.0 / (1.0 + light.z * d + light.w * (d * d));
-    return attenuation;
+fn phong(light_dir: vec3<f32>, fragment_normal: vec3<f32>) -> f32 {
+    return max(dot(normalize(fragment_normal), normalize(-light_dir)), 0.0);
+}
+
+fn directional_light_3d(light_dir: vec3<f32>, light_color: vec3<f32>, fragment_normal: vec3<f32>) -> vec3<f32> {
+    return light_color * phong(light_dir, fragment_normal);
 }
 
 [[stage(fragment)]]
@@ -88,13 +93,9 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     var sample_texture: vec4<f32> = textureSample(texture0, sampler0, in.uvs);
     var sample_final: vec4<f32> = (render_3d_uniforms.color * (1.0 - render_3d_uniforms.mix)) + (render_3d_uniforms.mix * sample_texture);
 
-    // var lighting_0: f32 = point_light_2d(world_pos.xy, light_uniforms.light_0);
-    // var lighting_1: f32 = point_light_2d(world_pos.xy, light_uniforms.light_1);
-    // var lighting_2: f32 = point_light_2d(world_pos.xy, light_uniforms.light_2);
-    // var lighting_3: f32 = point_light_2d(world_pos.xy, light_uniforms.light_3);
-    // var lighting_4: f32 = point_light_2d(world_pos.xy, light_uniforms.light_4);
-    // var lighting: f32 = lighting_0 + lighting_1 + lighting_2 + lighting_3 + lighting_4;
-    var lighting: f32 = 1.0;
+    let ambient_light = vec3<f32>(0.05, 0.05, 0.05);
+    var light_0: vec3<f32> = directional_light_3d(vec3<f32>(1.0, -1.0, -1.0), vec3<f32>(0.5, 0.5, 0.5), in.tangent_normal);
+    let fragment_light = ambient_light + light_0;
     
-    return vec4<f32>(sample_final.rgb * lighting, 1.0);
+    return vec4<f32>(sample_final.rgb * fragment_light, 1.0);
 }

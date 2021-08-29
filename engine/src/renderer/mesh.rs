@@ -48,12 +48,14 @@ impl MeshBuilder for ObjLoader {
 
         let mut flat_vertices: Vec<f32> = vec![];
         let mut flat_uvs: Vec<f32> = vec![];
+        let mut flat_normals: Vec<f32> = vec![];
 
         let mut indices: Vec<u16> = vec![];
+        let mut mesh_index_offset: u16 = 0;
         for i in 0..models.len() {
-            if i != 0 {
-                continue;
-            }
+            // if i != 0 {
+            //     continue;
+            // }
 
             let mesh = &models[i].mesh;
             debug!(
@@ -69,16 +71,24 @@ impl MeshBuilder for ObjLoader {
                 flat_vertices.push(mesh.positions[3 * index]);
                 flat_vertices.push(mesh.positions[3 * index + 1]);
                 flat_vertices.push(mesh.positions[3 * index + 2]);
+
                 flat_uvs.push(mesh.texcoords[2 * index]);
                 flat_uvs.push(mesh.texcoords[2 * index + 1]);
+
+                flat_normals.push(mesh.normals[3 * index]);
+                flat_normals.push(mesh.normals[3 * index + 1]);
+                flat_normals.push(mesh.normals[3 * index + 2]);
             }
-            indices.extend(mesh.indices.iter().map(|i| *i as u16));
+
+            indices.extend(mesh.indices.iter().map(|i| mesh_index_offset + *i as u16));
+            mesh_index_offset = indices.len() as u16 + 1;
         }
 
         let (vertex_buffer, vertices) = VertexBuffer::from_flat_slices(
             &self.path,
             flat_vertices.as_slice(),
             flat_uvs.as_slice(),
+            flat_normals.as_slice(),
             &device,
         );
 

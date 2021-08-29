@@ -13,12 +13,13 @@ pub mod texture;
 
 // Vertex and index buffers
 
-#[vertex((0, 20usize))]
+#[vertex((0, 32usize))]
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct Vertex3D {
     pub position: [f32; 3],
     pub uvs: [f32; 2],
+    pub normal: [f32; 3],
 }
 
 unsafe impl bytemuck::Pod for Vertex3D {}
@@ -87,6 +88,7 @@ impl VertexBuffer {
         name: &str,
         vertices_flat: &[f32],
         uvs_flat: &[f32],
+        normals_flat: &[f32],
         device: &wgpu::Device,
     ) -> (Self, Vec<f32>) {
         let num_vertices = vertices_flat.len() / 3;
@@ -97,8 +99,13 @@ impl VertexBuffer {
             buf.push(vertices_flat[i * 3]);
             buf.push(vertices_flat[i * 3 + 1]);
             buf.push(vertices_flat[i * 3 + 2]);
+
             buf.push(uvs_flat[i * 2]);
             buf.push(uvs_flat[i * 2 + 1]);
+
+            buf.push(normals_flat[i * 3]);
+            buf.push(normals_flat[i * 3 + 1]);
+            buf.push(normals_flat[i * 3 + 2]);
         }
 
         (
@@ -115,44 +122,6 @@ impl VertexBuffer {
             },
             buf,
         )
-    }
-
-    pub fn layout_2d<'a>() -> wgpu::VertexBufferLayout<'a> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex2D>() as wgpu::BufferAddress,
-            step_mode: wgpu::InputStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
-    }
-
-    pub fn layout_3d<'a>() -> wgpu::VertexBufferLayout<'a> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex3D>() as wgpu::BufferAddress,
-            step_mode: wgpu::InputStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
     }
 }
 

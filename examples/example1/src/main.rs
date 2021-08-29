@@ -17,7 +17,7 @@ fn main() {
         id: airplane_mesh_group_id,
         meshes: vec![(
             airplane_mesh_id,
-            "./engine/src/sources/static/sphere.obj".to_owned(),
+            "./engine/src/sources/static/chair.obj".to_owned(),
         )],
     };
 

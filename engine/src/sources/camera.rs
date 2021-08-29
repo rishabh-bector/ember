@@ -27,8 +27,8 @@ pub struct Camera3D {
 impl Camera3D {
     pub fn default(screen_width: f32, screen_height: f32) -> Self {
         Self {
-            speed: 0.3,
-            sensitivity: 0.2,
+            speed: 0.2,
+            sensitivity: 0.15,
             scroll_sensitivity: 0.5,
             pos: (0.0, 0.0, -5.0).into(),
             dir: (0.0, 0.0, 1.0).into(),

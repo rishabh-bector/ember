@@ -1,4 +1,3 @@
-
 use std::sync::Arc;
 
 use crate::renderer::{
@@ -71,150 +70,186 @@ const UNIT_CUBE_VERTICES: [Vertex3D; 36] = [
     Vertex3D {
         position: [0.5, 0.5, -0.5],
         uvs: [0.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, -0.5, -0.5],
         uvs: [0.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, -0.5, -0.5],
         uvs: [1.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, -0.5, -0.5],
         uvs: [1.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, 0.5, -0.5],
         uvs: [1.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, 0.5, -0.5],
         uvs: [0.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     // Front face //
     Vertex3D {
         position: [-0.5, -0.5, 0.5],
         uvs: [0.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, -0.5, 0.5],
         uvs: [1.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, 0.5, 0.5],
         uvs: [1.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, 0.5, 0.5],
         uvs: [1.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, 0.5, 0.5],
         uvs: [0.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, -0.5, 0.5],
         uvs: [0.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     // Left face //
     Vertex3D {
         position: [-0.5, 0.5, 0.5],
         uvs: [1.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, 0.5, -0.5],
         uvs: [0.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, -0.5, -0.5],
         uvs: [0.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, -0.5, -0.5],
         uvs: [0.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, -0.5, 0.5],
         uvs: [1.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, 0.5, 0.5],
         uvs: [1.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     // Right face //
     Vertex3D {
         position: [0.5, -0.5, -0.5],
         uvs: [1.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, 0.5, -0.5],
         uvs: [1.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, 0.5, 0.5],
         uvs: [0.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, 0.5, 0.5],
         uvs: [0.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, -0.5, 0.5],
         uvs: [0.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, -0.5, -0.5],
         uvs: [1.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     // Bottom face //
     Vertex3D {
         position: [-0.5, -0.5, -0.5],
         uvs: [0.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, -0.5, -0.5],
         uvs: [1.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, -0.5, 0.5],
         uvs: [1.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, -0.5, 0.5],
         uvs: [1.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, -0.5, 0.5],
         uvs: [0.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, -0.5, -0.5],
         uvs: [0.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     // Top face //
     Vertex3D {
         position: [0.5, 0.5, 0.5],
         uvs: [1.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, 0.5, -0.5],
         uvs: [1.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, 0.5, -0.5],
         uvs: [0.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, 0.5, -0.5],
         uvs: [0.0, 0.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [-0.5, 0.5, 0.5],
         uvs: [0.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
     Vertex3D {
         position: [0.5, 0.5, 0.5],
         uvs: [1.0, 1.0],
+        normal: [0.0, 0.0, 0.0],
     },
 ];
