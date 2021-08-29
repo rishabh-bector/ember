@@ -17,7 +17,7 @@ fn main() {
         id: airplane_mesh_group_id,
         meshes: vec![(
             airplane_mesh_id,
-            "./engine/src/sources/static/chair.obj".to_owned(),
+            "./engine/src/sources/static/skull.obj".to_owned(),
         )],
     };
 
@@ -29,9 +29,12 @@ fn main() {
     let airplane_mesh = engine.clone_mesh(&airplane_mesh_id, &airplane_mesh_group_id);
     engine.world().push((
         Render3D::default("test_cube"),
-        Transform3D::origin(),
+        Transform3D {
+            rotation: [-90.0, 0.0, -90.0],
+            ..Default::default()
+        },
         DeltaTransform3D {
-            rotation: [10.0, 25.0, 0.0],
+            rotation: [0.0, 0.0, 20.0],
             ..Default::default()
         },
         airplane_mesh,

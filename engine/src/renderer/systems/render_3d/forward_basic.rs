@@ -9,7 +9,8 @@ use uuid::Uuid;
 use crate::{
     components::Transform3D,
     constants::{
-        CAMERA_3D_BIND_GROUP_ID, ID, RENDER_3D_BIND_GROUP_ID, RENDER_3D_COMMON_TEXTURE_ID,
+        CAMERA_3D_BIND_GROUP_ID, ID, IDENTITY_MATRIX_4, RENDER_3D_BIND_GROUP_ID,
+        RENDER_3D_COMMON_TEXTURE_ID,
     },
     legion::IntoQuery,
     renderer::{
@@ -95,8 +96,8 @@ impl UniformGroupType<Self> for Render3DForwardUniformGroup {
     fn builder() -> UniformGroupBuilder<Render3DForwardUniformGroup> {
         UniformGroup::<Render3DForwardUniformGroup>::builder()
             .with_uniform(GenericUniformBuilder::from_source(Render3DUniforms {
-                model_mat: Default::default(),
-                normal_mat: Default::default(),
+                model_mat: IDENTITY_MATRIX_4,
+                normal_mat: IDENTITY_MATRIX_4,
                 color: [1.0, 1.0, 1.0, 1.0],
                 mix: 1.0,
             }))
@@ -182,7 +183,7 @@ pub fn render(
         pass.set_vertex_buffer(0, mesh.vertex_buffer.buffer.0.slice(..));
         pass.set_index_buffer(
             mesh.index_buffer.buffer.0.slice(..),
-            wgpu::IndexFormat::Uint16,
+            wgpu::IndexFormat::Uint32,
         );
 
         pass.draw_indexed(0..mesh.index_buffer.buffer.1, 0, 0..1);

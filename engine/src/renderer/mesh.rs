@@ -7,7 +7,7 @@ use super::buffer::{IndexBuffer, VertexBuffer};
 
 pub struct Mesh {
     pub vertices: Vec<f32>,
-    pub indices: Vec<u16>,
+    pub indices: Vec<u32>,
     pub vertex_buffer: VertexBuffer,
     pub index_buffer: IndexBuffer,
 }
@@ -53,8 +53,8 @@ impl MeshBuilder for ObjLoader {
         let mut flat_uvs: Vec<f32> = vec![];
         let mut flat_normals: Vec<f32> = vec![];
 
-        let mut indices: Vec<u16> = vec![];
-        let mut mesh_index_offset: u16 = 0;
+        let mut indices: Vec<u32> = vec![];
+        let mut mesh_index_offset: u32 = 0;
         for i in 0..models.len() {
             let mesh = &models[i].mesh;
             debug!(
@@ -78,8 +78,8 @@ impl MeshBuilder for ObjLoader {
                 flat_normals.push(mesh.normals[3 * index + 2]);
             }
 
-            indices.extend(mesh.indices.iter().map(|i| mesh_index_offset + (*i as u16)));
-            mesh_index_offset += (mesh.positions.len() / 3) as u16;
+            indices.extend(mesh.indices.iter().map(|i| mesh_index_offset + (*i as u32)));
+            mesh_index_offset += (mesh.positions.len() / 3) as u32;
         }
 
         let (vertex_buffer, vertices) = VertexBuffer::from_flat_slices(

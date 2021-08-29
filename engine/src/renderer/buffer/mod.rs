@@ -132,7 +132,7 @@ pub struct IndexBuffer {
 }
 
 impl IndexBuffer {
-    pub fn new(indices: &[u16], device: &wgpu::Device) -> Self {
+    pub fn new(indices: &[u32], device: &wgpu::Device) -> Self {
         IndexBuffer {
             buffer: Arc::new((
                 device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

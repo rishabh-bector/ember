@@ -123,6 +123,12 @@ impl Transform3D {
     }
 }
 
+impl Default for Transform3D {
+    fn default() -> Self {
+        Self::origin()
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
 pub struct DeltaTransform3D {
     pub position: [f32; 3],
