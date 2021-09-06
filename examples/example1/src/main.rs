@@ -8,7 +8,7 @@ use uuid::Uuid;
 // Ember example: Basic 3D model
 
 fn main() {
-    std::env::set_var("RUST_LOG", "debug");
+    std::env::set_var("RUST_LOG", "ember=info");
     let engine_builder = ember::engine_builder();
 
     let airplane_mesh_group_id = Uuid::new_v4();
@@ -30,11 +30,12 @@ fn main() {
     engine.world().push((
         Render3D::default("test_cube"),
         Transform3D {
+            position: [0.0, -10.0, 80.0],
             rotation: [-90.0, 0.0, -90.0],
-            ..Default::default()
+            ..Default::default() //scale: [0.1, 0.1, 0.1],
         },
         DeltaTransform3D {
-            rotation: [0.0, 0.0, 20.0],
+            rotation: [0.0, 0.0, -20.0],
             ..Default::default()
         },
         airplane_mesh,

@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 extern crate pretty_env_logger;
 extern crate vertex_traits;
 
@@ -39,10 +41,10 @@ use crate::{
         },
         mesh::Mesh,
         systems::{
-            render_2d::forward_dynamic::Render2DForwardDynamicGroup,
+            quad::QuadUniformGroup, render_2d::forward_dynamic::Render2DForwardDynamicGroup,
             render_3d::forward_basic::Render3DForwardUniformGroup, *,
         },
-        uniform::group::{UniformGroupBuilder, UniformGroupType},
+        uniform::group::{GroupStateBuilder, UniformGroupBuilder, UniformGroupType},
         GpuState, GpuStateBuilder,
     },
     sources::{
@@ -186,7 +188,7 @@ impl EngineBuilder {
 
     // Todo: distil this into several functions
     pub fn default_2d(self) -> Result<(Engine, EventLoop<()>)> {
-        info!("building engine: default 2d");
+        info!("building engine: default_2d");
 
         let (gpu, window, event_loop, registry, mut resources) = build_engine_common(
             self.window_size,
@@ -301,7 +303,7 @@ impl EngineBuilder {
     }
 
     pub fn default_3d(self) -> Result<(Engine, EventLoop<()>)> {
-        info!("building engine: default 3d");
+        info!("building engine: default_3d");
 
         let (gpu, window, event_loop, registry, mut resources) = build_engine_common(
             self.window_size,
@@ -379,6 +381,106 @@ impl EngineBuilder {
         Ok((
             Engine {
                 mode: EngineMode::Forward3D,
+                reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
+                input: input_helper,
+                legion: LegionState {
+                    world: World::default(),
+                    schedule,
+                    resources,
+                },
+                graph: render_graph,
+                registry,
+                window,
+                engine_metrics,
+                frame_metrics,
+                gpu,
+            },
+            event_loop,
+        ))
+    }
+
+    pub fn default_quad(self, shader_source: ShaderSource) -> Result<(Engine, EventLoop<()>)> {
+        info!("building engine: default_shader");
+
+        let (gpu, window, event_loop, registry, mut resources) = build_engine_common(
+            self.window_size,
+            self.texture_registry_builder,
+            self.mesh_registry_builder,
+        )?;
+        let gpu_mut = gpu.lock().unwrap();
+
+        info!("building uniforms");
+        let quad_group_builder = Arc::new(Mutex::new(QuadUniformGroup::builder()));
+
+        info!("building render graph nodes");
+        let node_quad = build_node_quad(Arc::clone(&quad_group_builder), shader_source);
+
+        info!("scheduling systems");
+        let mut schedule = Schedule::builder();
+        schedule
+            // Main engine systems
+            // Uniform loading systems
+            .flush()
+            .add_system(quad::load_system());
+
+        info!("building render graph");
+        let metrics_ui = EngineMetrics::new();
+        let mut graph_schedule = SubSchedule::new();
+        let (render_graph, engine_metrics) = GraphBuilder::new()
+            .with_master_node(node_quad)
+            .with_ui_master()
+            .build(
+                Arc::clone(&gpu_mut.device),
+                Arc::clone(&gpu_mut.queue),
+                &mut resources,
+                &mut graph_schedule,
+                &registry,
+                &window,
+                metrics_ui,
+            )?;
+
+        info!("scheduling render graph");
+        graph_schedule.schedule(&mut schedule);
+        let schedule = schedule.build();
+
+        // resource
+        let input_helper = Arc::new(RwLock::new(WinitInputHelper::new()));
+
+        // resource
+        let frame_metrics = Arc::new(RwLock::new(FrameMetrics::new()));
+
+        // resource
+        let quad_group_builder = resources
+            .get::<Arc<Mutex<GroupStateBuilder<QuadUniformGroup>>>>()
+            .unwrap();
+        let quad = quad::Quad {
+            mesh: registry
+                .meshes
+                .read()
+                .unwrap()
+                .clone_mesh(&ID(SCREEN_QUAD_MESH_ID), &ID(PRIMITIVE_MESH_GROUP_ID)),
+            uniforms: Default::default(),
+            uniform_group: quad_group_builder
+                .lock()
+                .unwrap()
+                .single_state(&gpu_mut.device, &gpu_mut.queue)?,
+        };
+
+        drop(quad_group_builder);
+        drop(gpu_mut);
+        resources.insert(quad);
+        resources.insert(Arc::clone(&gpu));
+        resources.insert(Arc::clone(&window));
+        resources.insert(Arc::clone(&registry.textures));
+        resources.insert(Arc::clone(&registry.meshes));
+        resources.insert(Arc::clone(&input_helper));
+        resources.insert(Arc::clone(&frame_metrics));
+        resources.insert(Arc::clone(&render_graph));
+
+        info!("ready to start!");
+        Ok((
+            Engine {
+                mode: EngineMode::Forward2D,
                 reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
                 input: input_helper,
                 legion: LegionState {
@@ -556,6 +658,17 @@ fn build_node_3d_forward_basic(
     .with_shared_uniform_group(Arc::clone(&camera_3d_group_builder))
     .with_depth_buffer()
     .with_system(render_3d::forward_basic::render_system)
+}
+
+fn build_node_quad(
+    quad_group_builder: Arc<Mutex<UniformGroupBuilder<QuadUniformGroup>>>,
+    shader_source: ShaderSource,
+) -> NodeBuilder {
+    NodeBuilder::new("render_quad_node".to_owned(), 0, shader_source)
+        .with_id(ID(QUAD_NODE_ID))
+        .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
+        .with_shared_uniform_group(Arc::clone(&quad_group_builder))
+        .with_system(quad::render_system)
 }
 
 pub struct LegionState {

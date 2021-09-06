@@ -349,6 +349,7 @@ where
             self.buffer_builders.clone(),
         )));
         resources.insert(group_state_builder);
+        info!("GSB: {}", type_name::<N>());
 
         for builder in &self.uniforms {
             builder.lock().unwrap().build_to_resource(resources);

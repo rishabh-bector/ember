@@ -18,6 +18,7 @@ pub const FORWARD_2D_NODE_ID: &str = "0660ca73-c74c-40b0-afee-8cd9128aa190";
 pub const FORWARD_3D_NODE_ID: &str = "df86532d-e851-4d11-bf5c-17cfd7a94505";
 pub const INSTANCE_2D_NODE_ID: &str = "19c32cfe-bccc-42fe-8d05-0860740fa752";
 pub const INSTANCE_3D_NODE_ID: &str = "8e1e1471-650f-4ab3-98f7-0502efa7dff6";
+pub const QUAD_NODE_ID: &str = "eaf2b9f7-1e96-4b6b-964f-29e2da214823";
 // Engine systems (excluding renderer)
 pub const RENDER_UI_SYSTEM_ID: &str = "7a370e52-053a-46dc-82d6-4fd8d41c1c19";
 // Engine uniform groups
@@ -27,6 +28,7 @@ pub const CAMERA_2D_BIND_GROUP_ID: &str = "50cdf623-c003-4c7c-ae56-646339c4f026"
 pub const CAMERA_3D_BIND_GROUP_ID: &str = "76a7bf47-812f-4612-be5e-c4ec9dba5477";
 pub const LIGHTING_2D_BIND_GROUP_ID: &str = "eb964ee1-abc3-435f-ab03-0dceb692661e";
 pub const LIGHTING_3D_BIND_GROUP_ID: &str = "b08c391a-8726-4665-87c3-cdd5102b175e";
+pub const QUAD_BIND_GROUP_ID: &str = "6ced9414-e8fc-4de1-aba0-fc64fa48202e";
 // Engine imgui windows
 pub const METRICS_UI_IMGUI_ID: &str = "cb7550b5-e8a7-49b0-954a-c156f69db093";
 // Default texture groups
@@ -39,6 +41,7 @@ pub const RENDER_3D_COMMON_TEXTURE_ID: &str = "fb378338-4d98-4b48-bd6d-1ca285159
 pub const PRIMITIVE_MESH_GROUP_ID: &str = "437b63d4-5c7d-49e9-958b-8f68b4931355";
 pub const UNIT_SQUARE_MESH_ID: &str = "6fd0eeb3-9847-4a26-9eec-370e9839cbd3";
 pub const UNIT_CUBE_MESH_ID: &str = "85603817-f080-4a3b-959f-c629da179da5";
+pub const SCREEN_QUAD_MESH_ID: &str = "85603817-f080-4a3b-959f-c629da179da5";
 //
 ///
 

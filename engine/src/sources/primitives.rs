@@ -10,6 +10,7 @@ use super::registry::MeshBuilder;
 pub enum PrimitiveMesh {
     UnitSquare,
     UnitCube,
+    ScreenQuad,
 }
 
 impl MeshBuilder for PrimitiveMesh {
@@ -17,6 +18,7 @@ impl MeshBuilder for PrimitiveMesh {
         match &self {
             PrimitiveMesh::UnitSquare => unit_square(&device),
             PrimitiveMesh::UnitCube => unit_cube(&device),
+            PrimitiveMesh::ScreenQuad => screen_quad(&device),
         }
     }
 }
@@ -57,6 +59,36 @@ pub fn unit_cube(device: &wgpu::Device) -> Mesh {
         index_buffer: IndexBuffer::new(&UNIT_CUBE_INDICES, &device),
         vertices: bytemuck::cast_slice(&UNIT_CUBE_VERTICES).to_vec(),
         indices: UNIT_CUBE_INDICES.to_vec(),
+    }
+}
+
+pub fn screen_quad(device: &wgpu::Device) -> Mesh {
+    let vertices = [
+        Vertex2D {
+            position: [0.0, 0.0],
+            uvs: [0.0, 1.0],
+        },
+        Vertex2D {
+            position: [0.0, 1.0],
+            uvs: [0.0, 0.0],
+        },
+        Vertex2D {
+            position: [1.0, 1.0],
+            uvs: [1.0, 0.0],
+        },
+        Vertex2D {
+            position: [1.0, 0.0],
+            uvs: [1.0, 1.0],
+        },
+    ];
+
+    let indices = [0, 2, 1, 3, 2, 0];
+
+    Mesh {
+        vertex_buffer: VertexBuffer::new_2d("screen_quad", &vertices, &device),
+        index_buffer: IndexBuffer::new(&indices, &device),
+        vertices: bytemuck::cast_slice(&vertices).to_vec(),
+        indices: indices.to_vec(),
     }
 }
 

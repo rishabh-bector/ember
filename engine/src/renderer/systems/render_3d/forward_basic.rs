@@ -36,8 +36,6 @@ pub struct Render3D {
     pub color: [f32; 4],
     pub texture: Uuid,
     pub mix: f32,
-
-    pub uniforms: Render3DUniforms,
 }
 
 impl Render3D {
@@ -47,7 +45,6 @@ impl Render3D {
             color: [1.0, 1.0, 1.0, 1.0],
             texture: ID(RENDER_3D_COMMON_TEXTURE_ID),
             mix: 0.0,
-            uniforms: Default::default(),
         }
     }
 }

@@ -11,14 +11,16 @@ use uuid::Uuid;
 use wgpu::BindGroup;
 
 use crate::{
-    constants::{ID, PRIMITIVE_MESH_GROUP_ID, UNIT_CUBE_MESH_ID, UNIT_SQUARE_MESH_ID},
+    constants::{
+        ID, PRIMITIVE_MESH_GROUP_ID, SCREEN_QUAD_MESH_ID, UNIT_CUBE_MESH_ID, UNIT_SQUARE_MESH_ID,
+    },
     renderer::{
-        buffer::{texture::Texture},
+        buffer::texture::Texture,
         mesh::{Mesh, ObjLoader},
     },
 };
 
-use super::primitives::{PrimitiveMesh};
+use super::primitives::PrimitiveMesh;
 
 pub struct Registry {
     pub textures: Arc<RwLock<TextureRegistry>>,
@@ -271,6 +273,7 @@ impl MeshRegistryBuilder {
         let mut primitive_group: HashMap<Uuid, Arc<dyn MeshBuilder>> = HashMap::new();
         primitive_group.insert(ID(UNIT_SQUARE_MESH_ID), Arc::new(PrimitiveMesh::UnitSquare));
         primitive_group.insert(ID(UNIT_CUBE_MESH_ID), Arc::new(PrimitiveMesh::UnitCube));
+        primitive_group.insert(ID(SCREEN_QUAD_MESH_ID), Arc::new(PrimitiveMesh::ScreenQuad));
         groups.insert(ID(PRIMITIVE_MESH_GROUP_ID), primitive_group);
 
         MeshRegistry {
