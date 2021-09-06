@@ -107,6 +107,5 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     var lighting_4: f32 = point_light_2d(world_pos.xy, light_uniforms.light_4);
     var lighting: f32 = 1.0; //light_uniforms.global.x + lighting_0 + lighting_1 + lighting_2 + lighting_3 + lighting_4;
 
-    return vec4<f32>(1.0, 1.0, 1.0, 1.0);
-    // return vec4<f32>(sample_final.rgb * lighting, 1.0);
+    return vec4<f32>(sample_final.rgb * lighting, 1.0);
 }

@@ -150,7 +150,7 @@ pub fn render(
         pass.set_vertex_buffer(0, mesh.vertex_buffer.buffer.0.slice(..));
         pass.set_index_buffer(
             mesh.index_buffer.buffer.0.slice(..),
-            wgpu::IndexFormat::Uint16,
+            wgpu::IndexFormat::Uint32,
         );
 
         // Load and draw all instances in the group
