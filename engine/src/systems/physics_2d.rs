@@ -6,13 +6,7 @@ use crate::{
 };
 
 #[system(for_each)]
-pub fn physics_2d(
-    pos: &mut Position2D,
-    vel: &mut Velocity2D,
-    #[resource] gpu: &Arc<Mutex<GpuState>>,
-) {
-    let (_width, _height) = gpu.lock().unwrap().screen_size;
-
+pub fn physics_2d(pos: &mut Position2D, vel: &mut Velocity2D) {
     // Todo: replace hardcoding w/ some global config resource
     if vel.bounce {
         if pos.x <= -(1440 as f32) || pos.x >= (1440 as f32) {

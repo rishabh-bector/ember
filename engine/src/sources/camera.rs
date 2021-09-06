@@ -43,6 +43,10 @@ impl Camera3D {
         }
     }
 
+    pub fn build_view(&self) -> cgmath::Matrix4<f32> {
+        return cgmath::Matrix4::look_at_rh(self.pos, self.pos + self.dir.to_vec(), self.up);
+    }
+
     pub fn build_view_proj(&self) -> cgmath::Matrix4<f32> {
         let view = cgmath::Matrix4::look_at_rh(self.pos, self.pos + self.dir.to_vec(), self.up);
         let proj = cgmath::perspective(cgmath::Deg(self.fov), self.aspect, self.z_near, self.z_far);

@@ -10,3 +10,8 @@ pub mod ui;
 pub trait ResourceBuilder {
     fn build_to_resource(&self, resources: &mut Resources);
 }
+
+pub struct WindowSize {
+    pub width: f32,
+    pub height: f32,
+}

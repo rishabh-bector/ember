@@ -53,6 +53,7 @@ use crate::{
         registry::{MeshRegistryBuilder, Registry, TextureRegistryBuilder},
         schedule::{Schedulable, SubSchedule},
         ui::UI,
+        WindowSize,
     },
     systems::{
         camera_2d::*, camera_3d::*, lighting_2d::*, particle_2d::*, physics_2d::*, physics_3d::*,
@@ -411,16 +412,23 @@ impl EngineBuilder {
 
         info!("building uniforms");
         let quad_group_builder = Arc::new(Mutex::new(QuadUniformGroup::builder()));
+        let camera_3d_group_builder = Arc::new(Mutex::new(Camera3DUniformGroup::builder()));
 
         info!("building render graph nodes");
-        let node_quad = build_node_quad(Arc::clone(&quad_group_builder), shader_source);
+        let node_quad = build_node_quad(
+            Arc::clone(&quad_group_builder),
+            Arc::clone(&camera_3d_group_builder),
+            shader_source,
+        );
 
         info!("scheduling systems");
         let mut schedule = Schedule::builder();
         schedule
             // Main engine systems
+            .add_system(camera_3d_system())
             // Uniform loading systems
             .flush()
+            .add_system(camera_3d_uniform_system())
             .add_system(quad::load_system());
 
         info!("building render graph");
@@ -450,23 +458,29 @@ impl EngineBuilder {
         let frame_metrics = Arc::new(RwLock::new(FrameMetrics::new()));
 
         // resource
-        let quad_group_builder = resources
-            .get::<Arc<Mutex<GroupStateBuilder<QuadUniformGroup>>>>()
-            .unwrap();
-        let quad = quad::Quad {
-            mesh: registry
-                .meshes
-                .read()
-                .unwrap()
-                .clone_mesh(&ID(SCREEN_QUAD_MESH_ID), &ID(PRIMITIVE_MESH_GROUP_ID)),
-            uniforms: Default::default(),
-            uniform_group: quad_group_builder
-                .lock()
-                .unwrap()
-                .single_state(&gpu_mut.device, &gpu_mut.queue)?,
+        let quad = {
+            let quad_group_builder = resources
+                .get::<Arc<Mutex<GroupStateBuilder<QuadUniformGroup>>>>()
+                .unwrap();
+
+            let builder_mut = quad_group_builder.lock().unwrap();
+
+            quad::Quad {
+                mesh: registry
+                    .meshes
+                    .read()
+                    .unwrap()
+                    .clone_mesh(&ID(SCREEN_QUAD_MESH_ID), &ID(PRIMITIVE_MESH_GROUP_ID)),
+                uniforms: Default::default(),
+                uniform_group: builder_mut.single_state(&gpu_mut.device, &gpu_mut.queue)?,
+            }
         };
 
-        drop(quad_group_builder);
+        let camera_3d = Arc::new(Mutex::new(Camera3D::default(
+            self.window_size.0 as f32,
+            self.window_size.1 as f32,
+        )));
+
         drop(gpu_mut);
         resources.insert(quad);
         resources.insert(Arc::clone(&gpu));
@@ -476,6 +490,7 @@ impl EngineBuilder {
         resources.insert(Arc::clone(&input_helper));
         resources.insert(Arc::clone(&frame_metrics));
         resources.insert(Arc::clone(&render_graph));
+        resources.insert(Arc::clone(&camera_3d));
 
         info!("ready to start!");
         Ok((
@@ -519,6 +534,12 @@ fn build_engine_common(
 
     info!("building registry");
     let registry = build_registry(Arc::clone(&gpu), tex_reg_builder, mesh_reg_builder)?;
+
+    let window_size = WindowSize {
+        width: window_size.0 as f32,
+        height: window_size.1 as f32,
+    };
+    resources.insert(Arc::new(window_size));
 
     Ok((gpu, window, event_loop, registry, resources))
 }
@@ -662,12 +683,14 @@ fn build_node_3d_forward_basic(
 
 fn build_node_quad(
     quad_group_builder: Arc<Mutex<UniformGroupBuilder<QuadUniformGroup>>>,
+    camera_3d_group_builder: Arc<Mutex<UniformGroupBuilder<Camera3DUniformGroup>>>,
     shader_source: ShaderSource,
 ) -> NodeBuilder {
     NodeBuilder::new("render_quad_node".to_owned(), 0, shader_source)
         .with_id(ID(QUAD_NODE_ID))
         .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
         .with_shared_uniform_group(Arc::clone(&quad_group_builder))
+        .with_shared_uniform_group(Arc::clone(&camera_3d_group_builder))
         .with_system(quad::render_system)
 }
 

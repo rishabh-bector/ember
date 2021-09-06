@@ -8,8 +8,9 @@ use std::{
 use crate::{
     components::{FrameMetrics, Position2D},
     constants::{
-        CAMERA_2D_BIND_GROUP_ID, DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, ID,
-        LIGHTING_2D_BIND_GROUP_ID, QUAD_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID,
+        CAMERA_2D_BIND_GROUP_ID, CAMERA_3D_BIND_GROUP_ID, DEFAULT_SCREEN_HEIGHT,
+        DEFAULT_SCREEN_WIDTH, ID, LIGHTING_2D_BIND_GROUP_ID, QUAD_BIND_GROUP_ID,
+        RENDER_2D_COMMON_TEXTURE_ID,
     },
     renderer::{
         buffer::instance::{Instance, InstanceBuffer, InstanceGroup, InstanceGroupBinder},
@@ -20,7 +21,7 @@ use crate::{
             group::{GroupState, UniformGroup, UniformGroupBuilder, UniformGroupType},
         },
     },
-    sources::registry::MeshRegistry,
+    sources::{registry::MeshRegistry, WindowSize},
 };
 
 // Resource
@@ -35,7 +36,7 @@ pub struct Quad {
 pub struct QuadUniforms {
     pub dimensions: [f32; 2],
     pub time: f32,
-    pub nut: f32,
+    pub delta: f32,
 }
 
 pub struct QuadUniformGroup {}
@@ -46,15 +47,22 @@ impl UniformGroupType<Self> for QuadUniformGroup {
             .with_uniform(GenericUniformBuilder::from_source(QuadUniforms {
                 dimensions: [DEFAULT_SCREEN_WIDTH as f32, DEFAULT_SCREEN_HEIGHT as f32],
                 time: 0.0,
-                nut: 0.0,
+                delta: 0.0,
             }))
             .with_id(ID(QUAD_BIND_GROUP_ID))
     }
 }
 
 #[system]
-pub fn load(#[resource] quad: &mut Quad) {
+pub fn load(
+    #[resource] quad: &mut Quad,
+    #[resource] window_size: &Arc<WindowSize>,
+    #[resource] frame_metrics: &Arc<RwLock<FrameMetrics>>,
+) {
     debug!("running system render_quad_uniform_loader (graph node)");
+    quad.uniforms.dimensions = [window_size.width, window_size.height];
+    quad.uniforms.delta += frame_metrics.read().unwrap().delta().as_secs_f32();
+    quad.uniforms.time += quad.uniforms.delta;
     quad.uniform_group
         .write_buffer(0, bytemuck::cast_slice(&[quad.uniforms]));
 }
@@ -74,12 +82,19 @@ pub fn render(
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Quad Encoder"),
     });
+
     let mut pass = render_target
-        .create_render_pass("quad_render", &mut encoder, true)
+        .create_render_pass("quad_render", &mut encoder, false)
         .unwrap();
     pass.set_pipeline(&node.pipeline);
 
     pass.set_bind_group(0, &quad.uniform_group.bind_group, &[]);
+    pass.set_bind_group(
+        1,
+        &node.binder.uniform_groups[&ID(CAMERA_3D_BIND_GROUP_ID)],
+        &[],
+    );
+
     pass.set_vertex_buffer(0, quad.mesh.vertex_buffer.buffer.0.slice(..));
     pass.set_index_buffer(
         quad.mesh.index_buffer.buffer.0.slice(..),

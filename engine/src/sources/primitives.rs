@@ -65,20 +65,20 @@ pub fn unit_cube(device: &wgpu::Device) -> Mesh {
 pub fn screen_quad(device: &wgpu::Device) -> Mesh {
     let vertices = [
         Vertex2D {
-            position: [0.0, 0.0],
-            uvs: [0.0, 1.0],
-        },
-        Vertex2D {
-            position: [0.0, 1.0],
+            position: [-1.0, -1.0],
             uvs: [0.0, 0.0],
         },
         Vertex2D {
-            position: [1.0, 1.0],
-            uvs: [1.0, 0.0],
+            position: [-1.0, 1.0],
+            uvs: [0.0, 1.0],
         },
         Vertex2D {
-            position: [1.0, 0.0],
+            position: [1.0, 1.0],
             uvs: [1.0, 1.0],
+        },
+        Vertex2D {
+            position: [1.0, -1.0],
+            uvs: [1.0, 0.0],
         },
     ];
 

@@ -1,4 +1,4 @@
-use cgmath::{Angle, Deg, EuclideanSpace, Matrix2, Matrix3, Matrix4};
+use cgmath::{Angle, Deg, EuclideanSpace, Matrix2, Matrix3, Matrix4, SquareMatrix};
 use std::sync::{Arc, Mutex, RwLock};
 use winit_input_helper::WinitInputHelper;
 
@@ -20,6 +20,8 @@ impl UniformGroupType<Self> for Camera3DUniformGroup {
             .with_uniform(GenericUniformBuilder::from_source(Camera3DUniforms {
                 view_pos: Default::default(),
                 view_proj: Default::default(),
+                inv_view_proj: Default::default(),
+                clip: Default::default(),
             }))
             .with_id(ID(CAMERA_3D_BIND_GROUP_ID))
     }
@@ -30,6 +32,8 @@ impl UniformGroupType<Self> for Camera3DUniformGroup {
 pub struct Camera3DUniforms {
     pub view_pos: [f32; 4],
     pub view_proj: [[f32; 4]; 4],
+    pub inv_view_proj: [[f32; 4]; 4],
+    pub clip: [f32; 2],
 }
 
 #[system]
@@ -75,9 +79,14 @@ pub fn camera_3d(
     // Scroll altitude
     camera.pos.y += input.scroll_diff() * camera.scroll_sensitivity;
 
-    // Build camera matrix
+    // Camera matrices
+    let view_proj = camera.build_view_proj();
+    let inv_view_proj = view_proj.invert().unwrap();
+
     camera_uniforms.mut_ref().view_pos = [camera.pos.x, camera.pos.y, camera.pos.z, 0.0];
-    camera_uniforms.mut_ref().view_proj = matrix2array_4d(camera.build_view_proj());
+    camera_uniforms.mut_ref().view_proj = matrix2array_4d(view_proj);
+    camera_uniforms.mut_ref().inv_view_proj = matrix2array_4d(inv_view_proj);
+    camera_uniforms.mut_ref().clip = [0.01, 10000.0];
 }
 
 // TODO: Make this a macro?
