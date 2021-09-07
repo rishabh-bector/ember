@@ -92,6 +92,7 @@ pub struct Engine {
 enum EngineMode {
     Forward2D,
     Forward3D,
+    Quad,
 }
 
 impl Engine {
@@ -152,9 +153,12 @@ impl Engine {
     }
 
     fn init(&mut self) {
-        if let EngineMode::Forward3D = &self.mode {
-            self.window.set_cursor_visible(false);
-            let _ = self.window.set_cursor_grab(true);
+        match &self.mode {
+            EngineMode::Forward3D | EngineMode::Quad => {
+                self.window.set_cursor_visible(false);
+                let _ = self.window.set_cursor_grab(true);
+            }
+            _ => {}
         }
 
         init_particle_systems(self.world());
@@ -495,7 +499,7 @@ impl EngineBuilder {
         info!("ready to start!");
         Ok((
             Engine {
-                mode: EngineMode::Forward2D,
+                mode: EngineMode::Quad,
                 reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
                 input: input_helper,
                 legion: LegionState {
@@ -580,7 +584,7 @@ fn build_window(size: (usize, usize), event_loop: &EventLoop<()>) -> Result<Arc<
             .with_min_inner_size(size)
             .with_max_inner_size(size)
             .with_resizable(false)
-            .with_fullscreen(Some(Fullscreen::Borderless(None)))
+            // .with_fullscreen(Some(Fullscreen::Borderless(None)))
             .build(event_loop)?
     }))
 }
