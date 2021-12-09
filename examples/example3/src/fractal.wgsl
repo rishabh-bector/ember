@@ -150,6 +150,38 @@ fn capsule(target: vec3<f32>, a: vec3<f32>, b: vec3<f32>, radius: f32) -> f32 {
 	return length(pa - ba * h) - radius;
 }
 
+// -1.0 if not hit
+// t, color if hit
+fn mandelbulb(target: vec3<f32>, scale: f32) -> vec4<f32> {
+    var w: vec3<f32> = target * scale;
+    var m: f32 = dot(w, w);
+
+    var trap: vec4<f32> = vec4<f32>(abs(w), m);
+	var dz: f32 = 1.0;
+    
+	for(var i: i32 = 0; i < 5; i = i + 1) {
+        dz = 8.0 * pow(m, 3.5) * dz + 1.0;
+        // dz = 8.0*pow(sqrt(m),7.0)*dz + 1.0;
+        // z = z^8+z
+        let r = length(w);
+        let b = 8.0 * acos(w.y / r);
+        let a = 8.0 * atan2(w.x, w.z);
+        w = (target * scale) + pow(r, 8.0) * vec3<f32>(sin(b) * sin(a), cos(b), sin(b) * cos(a));
+        trap = min(trap, vec4<f32>(abs(w), m));
+
+        m = dot(w, w);
+		if(m > 256.0) {
+            break;
+        }
+    }
+
+    let color = vec3<f32>(m, trap.yz);
+    // distance estimation (through the Hubbard-Douady potential)
+    let dist =  0.25 * log(m) * sqrt(m) / dz;
+
+    return vec4<f32>(dist / scale, color);
+}
+
 // --- Lighting ---
 
 fn sun_light(input_color: vec3<f32>, normal: vec3<f32>, ray_dir: vec3<f32>) -> vec3<f32> {
@@ -217,7 +249,7 @@ fn scene(target: vec3<f32>) -> f32 {
         vec3<f32>(sin(r), 0.0, cos(r)),
     );
 
-    closest_t = min(closest_t, 1000000.0);
+    closest_t = min(closest_t, mandelbulb(rot_mat * (vec3<f32>(0.0, 12.0, 0.0) - target), 0.1).x);
     
     // closest_t_2 = min(closest_t, sphere(vec3<f32>(10.0, 10.0, 4.0) - target, 3.0));
     // closest_t = min(closest_t, sphere(vec3<f32>(-25.0, 10.0, -21.0) - target, 6.0));

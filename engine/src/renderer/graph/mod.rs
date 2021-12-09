@@ -19,7 +19,7 @@ use crate::{
     texture::Texture,
 };
 
-use super::systems::graph::*;
+use super::{buffer::target::TargetBuffer, systems::graph::*};
 
 use self::{
     node::{NodeBuilder, NodeBuilderTrait, RenderNode},
@@ -55,7 +55,7 @@ pub struct RenderGraph {
 
     pub swap_chain_target: Arc<Mutex<RenderTarget>>,
     pub ui_target: Arc<Mutex<RenderTarget>>,
-    pub node_targets: HashMap<Uuid, Arc<Mutex<RenderTarget>>>,
+    pub node_targets: TargetBuffer,
 }
 
 pub struct GraphBuilder {
@@ -136,7 +136,8 @@ impl GraphBuilder {
 
         debug!("creating render graph node_targets");
         let texture_registry = registry.textures.read().unwrap();
-        let node_targets = nodes
+        let mut master = Uuid::default();
+        let targets = nodes
             .iter()
             .map(|(id, node)| {
                 let depth_buffer = match node.depth_buffer {
@@ -154,7 +155,10 @@ impl GraphBuilder {
                 Ok((
                     *id,
                     Arc::new(Mutex::new(match node.master {
-                        true => RenderTarget::empty_master(depth_buffer),
+                        true => {
+                            master = node.id;
+                            RenderTarget::empty_master(depth_buffer)
+                        }
                         false => RenderTarget::Texture {
                             color_buffer: Arc::new(Texture::blank(
                                 // TODO: Make actual config (part of SHIP: EngineBuilder)
@@ -172,8 +176,11 @@ impl GraphBuilder {
             })
             .collect::<Result<HashMap<Uuid, Arc<Mutex<RenderTarget>>>>>()?;
 
+        let target_buffer = TargetBuffer::new(targets, master);
+
         let swap_chain_target = Arc::clone(
-            &node_targets
+            &target_buffer
+                .targets
                 .get(self.master_node.as_ref().unwrap())
                 .unwrap(),
         );
@@ -182,7 +189,7 @@ impl GraphBuilder {
         let ui_target = match &self.ui_mode {
             UIMode::Disabled => Arc::new(Mutex::new(RenderTarget::Empty)),
             UIMode::Master => Arc::clone(&swap_chain_target),
-            UIMode::Node(id) => Arc::clone(&node_targets.get(id).unwrap()),
+            UIMode::Node(id) => Arc::clone(&target_buffer.targets.get(id).unwrap()),
         };
 
         // Build all NodeStates; each render node's system has this internal state,
@@ -201,7 +208,8 @@ impl GraphBuilder {
                             .iter()
                             .map(|input_id| {
                                 Arc::clone(
-                                    &node_targets
+                                    &target_buffer
+                                        .targets
                                         .get(input_id)
                                         .unwrap()
                                         .lock()
@@ -211,7 +219,7 @@ impl GraphBuilder {
                                 )
                             })
                             .collect::<Vec<Arc<wgpu::BindGroup>>>(),
-                        render_target: Arc::clone(&node_targets.get(&node_id).unwrap()),
+                        render_target: Arc::clone(&target_buffer.targets.get(&node_id).unwrap()),
                         // Cloned for now
                         // common_buffers: common_buffers.clone(),
                         dyn_offset_state: nodes
@@ -250,18 +258,66 @@ impl GraphBuilder {
 
         debug!("scheduling render systems");
 
+        //////////////////////////////////
+        // BEGIN RENDER GRAPH SCHEDULER //
+        //////////////////////////////////
+
         // Request target from swap chain, store in graph
         sub_schedule.add_stateless(Arc::new(Box::new(StatelessSystem::new(
             begin_render_graph_system,
         ))));
+
+        // --------------------------------------------------
         sub_schedule.flush();
 
-        // Run all node systems except master
-        // sub_schedule.add_node(Arc::clone(
-        //     &nodes.get(&self.node_builders[0].dest_id).unwrap().system,
-        // ));
+        // Schedule the render systems such that they are processed in graph dependency
+        // order, until the TargetBuffer runs out of render targets. Then, a flush()
+        // is inserted, and the TargetBuffer count is started again. Once the master node
+        // is reached, a flush() is inserted before it.
 
-        // Run master node
+        // REQUIREMENT: Unique ID per node in the graph.
+
+        // // First, schedule the source nodes
+
+        // for source_id in &self.source_nodes {
+        //     sub_schedule.add_node(
+        //         Arc::clone(&nodes.get(source_id).unwrap().system),
+        //         node_states.get(source_id).unwrap().to_owned(),
+        //     );
+        // }
+
+        // sub_schedule.add_node(
+        //     Arc::clone(&nodes.get(source_id).unwrap().system),
+        //     node_states.get(source_id).unwrap().to_owned(),
+        // );
+
+        //
+
+        // Schedule the source and channel nodes via the graph.
+        // Recurse backwards from the master node to find these babies.
+
+        let master_map = self.build_map(master);
+
+        match master_map {
+            Some(mm) => {
+                let mut exec_order: Vec<Uuid> = mm.clone().into_iter().flatten().collect();
+                exec_order.reverse();
+
+                for node in exec_order {
+                    sub_schedule.add_node(
+                        Arc::clone(&nodes.get(&node).unwrap().system),
+                        node_states.get(&node).unwrap().to_owned(),
+                    );
+                }
+            }
+            // Single-node graph
+            None => {}
+        };
+
+        // --------------------------------------------------
+
+        // Then, schedule master node
+        sub_schedule.flush();
         sub_schedule.add_node(
             Arc::clone(&nodes.get(&self.master_node.unwrap()).unwrap().system),
             node_states
@@ -270,8 +326,9 @@ impl GraphBuilder {
                 .to_owned(),
         );
 
-        sub_schedule.flush();
-
+        // --------------------------------------------------
+        // sub_schedule.flush();
+        //
         // Run ui system
         // if let UIMode::Master = self.ui_mode {
         //     sub_schedule.add_single_threaded_reporter(
@@ -280,15 +337,22 @@ impl GraphBuilder {
         //     );
         // }
 
-        // Release lock on swap chain, end of frame
+        // --------------------------------------------------
         sub_schedule.flush();
+
+        // Release lock on swap chain, end of frame
+
         sub_schedule.add_stateless(Arc::new(Box::new(StatelessSystem::new(
             end_render_graph_system,
         ))));
 
+        ////////////////////////////////
+        // END RENDER GRAPH SCHEDULER //
+        ////////////////////////////////
+
         self.dest = Some(Arc::new(RenderGraph {
             nodes,
-            node_targets,
+            node_targets: target_buffer,
             swap_chain_target,
             channels: self.channels.clone(),
             source_nodes: self.source_nodes.clone(),
@@ -302,8 +366,34 @@ impl GraphBuilder {
         Ok((Arc::clone(&self.dest.as_ref().unwrap()), metrics_arc))
     }
 
+    // Running this on the master node will return a map of all layers below the master node.
+    //
+    // [[l1, l1], [l2, l2, l2], [l3, l3]] etc. where master = l0 <- l1 <- l2 <- ...
+    //
+    fn build_map(&self, current_node: Uuid) -> Option<Vec<Vec<Uuid>>> {
+        let current_inputs: Vec<Uuid> = self.input_nodes_for_node(current_node);
+        let mut dependency_layers: Vec<Vec<Uuid>> = vec![];
+
+        if current_inputs.len() > 0 {
+            let current_layer = dependency_layers.len();
+            dependency_layers.push(vec![]);
+            dependency_layers[current_layer].extend(current_inputs);
+
+            for input in dependency_layers[current_layer].clone() {
+                match self.build_map(input) {
+                    Some(input_map) => dependency_layers.extend(input_map),
+                    None => (),
+                }
+            }
+            Some(dependency_layers)
+        } else {
+            None
+        }
+    }
+
     fn input_nodes_for_node(&self, node_id: Uuid) -> Vec<Uuid> {
-        self.channels
+        let mut inputs = self
+            .channels
             .iter()
             .filter_map(|(in_id, out_id)| {
                 if *out_id == node_id {
@@ -312,6 +402,9 @@ impl GraphBuilder {
                     None
                 }
             })
-            .collect::<Vec<Uuid>>()
+            .collect::<Vec<Uuid>>();
+        inputs.sort_unstable();
+        inputs.dedup();
+        inputs
     }
 }

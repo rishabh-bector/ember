@@ -584,7 +584,7 @@ fn build_window(size: (usize, usize), event_loop: &EventLoop<()>) -> Result<Arc<
             .with_min_inner_size(size)
             .with_max_inner_size(size)
             .with_resizable(false)
-            // .with_fullscreen(Some(Fullscreen::Borderless(None)))
+            .with_fullscreen(Some(Fullscreen::Borderless(None)))
             .build(event_loop)?
     }))
 }

@@ -2,6 +2,7 @@ use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
 pub mod instance;
+pub mod target;
 pub mod texture;
 
 // Vertex Layout Builder
