@@ -188,7 +188,7 @@ impl GraphBuilder {
         // Build UI if enabled
         let ui_target = match &self.ui_mode {
             UIMode::Disabled => Arc::new(Mutex::new(RenderTarget::Empty)),
-            UIMode::Master => Arc::clone(&swap_chain_target),
+            UIMode::Master => todo!(), // Arc::clone(&target_buffer.targets.get(id).unwrap()),
             UIMode::Node(id) => Arc::clone(&target_buffer.targets.get(id).unwrap()),
         };
 
@@ -244,7 +244,7 @@ impl GraphBuilder {
             UIBuilder::new().with_imgui_window(metrics_ui.impl_imgui(), ID(METRICS_UI_IMGUI_ID));
 
         match self.ui_mode {
-            UIMode::Node(_) | UIMode::Master => {
+            UIMode::Node(_) | UIMode::Master | UIMode::Disabled => {
                 ui_builder.build_to_resources(
                     resources,
                     Arc::clone(&ui_target),

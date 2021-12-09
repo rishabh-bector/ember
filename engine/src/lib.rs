@@ -344,7 +344,6 @@ impl EngineBuilder {
         let mut graph_schedule = SubSchedule::new();
         let (render_graph, engine_metrics) = GraphBuilder::new()
             .with_master_node(node_3d_forward_basic)
-            .with_ui_master()
             .build(
                 Arc::clone(&gpu_mut.device),
                 Arc::clone(&gpu_mut.queue),
@@ -438,10 +437,8 @@ impl EngineBuilder {
         info!("building render graph");
         let metrics_ui = EngineMetrics::new();
         let mut graph_schedule = SubSchedule::new();
-        let (render_graph, engine_metrics) = GraphBuilder::new()
-            .with_master_node(node_quad)
-            .with_ui_master()
-            .build(
+        let (render_graph, engine_metrics) =
+            GraphBuilder::new().with_master_node(node_quad).build(
                 Arc::clone(&gpu_mut.device),
                 Arc::clone(&gpu_mut.queue),
                 &mut resources,
