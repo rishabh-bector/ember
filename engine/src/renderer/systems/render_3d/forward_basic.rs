@@ -157,7 +157,7 @@ pub fn render(
         label: Some("Render3D Encoder"),
     });
 
-    let pass_res = render_target.create_render_pass("forward_render_3d", &mut encoder, false);
+    let pass_res = render_target.create_render_pass("forward_render_3d", &mut encoder, true);
     if pass_res.is_err() {
         warn!("no target, aborting render pass: render_3d_forward_basic");
         return;

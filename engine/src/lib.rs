@@ -603,7 +603,7 @@ impl EngineBuilder {
         info!("ready to start!");
         Ok((
             Engine {
-                mode: EngineMode::Quad,
+                mode: EngineMode::Forward3D,
                 reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
                 input: input_helper,
                 legion: LegionState {

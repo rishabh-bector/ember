@@ -42,7 +42,7 @@ pub const RENDER_3D_COMMON_TEXTURE_ID: &str = "fb378338-4d98-4b48-bd6d-1ca285159
 pub const PRIMITIVE_MESH_GROUP_ID: &str = "437b63d4-5c7d-49e9-958b-8f68b4931355";
 pub const UNIT_SQUARE_MESH_ID: &str = "6fd0eeb3-9847-4a26-9eec-370e9839cbd3";
 pub const UNIT_CUBE_MESH_ID: &str = "85603817-f080-4a3b-959f-c629da179da5";
-pub const SCREEN_QUAD_MESH_ID: &str = "85603817-f080-4a3b-959f-c629da179da5";
+pub const SCREEN_QUAD_MESH_ID: &str = "4cc51b12-9edb-4ecb-b963-95c9de3928a1";
 //
 ///
 
