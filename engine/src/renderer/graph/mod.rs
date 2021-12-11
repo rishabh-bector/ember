@@ -6,12 +6,12 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    constants::{ID, METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID},
-    renderer::{graph::target::DepthBuffer, systems::ui::*, SCREEN_SIZE},
+    constants::{ID, METRICS_UI_IMGUI_ID},
+    renderer::{graph::target::DepthBuffer, SCREEN_SIZE},
     sources::{
         metrics::{EngineMetrics, SystemReporter},
         registry::Registry,
-        schedule::{LocalReporterSystem, StatelessSystem, SubSchedule},
+        schedule::{StatelessSystem, SubSchedule},
         ui::{ImguiWindow, UIBuilder},
     },
     texture::Texture,

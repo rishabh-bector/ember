@@ -1,8 +1,7 @@
-use std::sync::{Arc, Mutex};
+
 
 use crate::{
     components::{Position2D, Velocity2D},
-    renderer::GpuState,
 };
 
 #[system(for_each)]

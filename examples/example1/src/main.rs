@@ -1,5 +1,5 @@
 use ember::{
-    components::{DeltaTransform3D, FrameMetrics, Position3D, Transform3D},
+    components::{DeltaTransform3D, Transform3D},
     renderer::systems::render_3d::forward_basic::Render3D,
     MeshGroup,
 };

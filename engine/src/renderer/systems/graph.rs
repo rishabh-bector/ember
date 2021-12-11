@@ -8,7 +8,7 @@ pub fn begin_render_graph(
     #[resource] graph: &Arc<RenderGraph>,
 ) {
     debug!("running system begin_render_graph");
-    let mut gpu = gpu.lock().unwrap();
+    let gpu = gpu.lock().unwrap();
     match gpu.swap_chain.get_current_frame() {
         Ok(frame) => graph
             .swap_chain_target

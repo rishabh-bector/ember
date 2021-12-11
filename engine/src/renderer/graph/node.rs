@@ -201,7 +201,7 @@ impl NodeBuilderTrait for NodeBuilder {
         let texture_registry = registry.textures.read().unwrap();
         let layout_refs = bind_group_layouts
             .into_iter()
-            .map(|(opt_uniform, is_node_input)| match opt_uniform {
+            .map(|(opt_uniform, _is_node_input)| match opt_uniform {
                 Some(u) => &u,
                 None => &texture_registry.bind_layout,
             })

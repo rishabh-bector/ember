@@ -2,7 +2,7 @@ use cgmath::{Angle, InnerSpace};
 use legion::{world::SubWorld, IntoQuery, World};
 use rand::Rng;
 use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
+    IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
 use std::{
     ops::{Add, Mul, Sub},

@@ -26,7 +26,6 @@ use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
     event_loop::{ControlFlow, EventLoop},
-    monitor::VideoMode,
     window::{Fullscreen, Window, WindowBuilder},
 };
 use winit_input_helper::WinitInputHelper;

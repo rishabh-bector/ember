@@ -1,27 +1,18 @@
-use legion::{world::SubWorld, IntoQuery};
-use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+
+use rayon::iter::{ParallelIterator};
 use std::{
-    sync::{Arc, RwLock},
+    sync::{Arc},
     time::Instant,
 };
 
 use crate::{
-    components::{FrameMetrics, Position2D},
     constants::{
-        CAMERA_2D_BIND_GROUP_ID, CAMERA_3D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID,
-        QUAD_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID,
+        CAMERA_3D_BIND_GROUP_ID, ID,
     },
     renderer::{
-        buffer::instance::{Instance, InstanceBuffer, InstanceGroup, InstanceGroupBinder},
         graph::NodeState,
-        mesh::Mesh,
         systems::quad::Quad,
-        uniform::{
-            generic::GenericUniformBuilder,
-            group::{GroupState, UniformGroup, UniformGroupBuilder, UniformGroupType},
-        },
     },
-    sources::{registry::MeshRegistry, WindowSize},
 };
 
 #[system]

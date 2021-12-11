@@ -23,7 +23,7 @@ use crate::{
             },
         },
     },
-    systems::camera_3d::{matrix2array_3d, matrix2array_4d},
+    systems::camera_3d::{matrix2array_4d},
 };
 
 // Todo: go through all todo comments and make tickets for them
