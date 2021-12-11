@@ -17,7 +17,8 @@ fn main() {
         Transform3D {
             position: [0.0, 0.0, 0.0],
             rotation: [-90.0, 0.0, -90.0],
-            ..Default::default() //scale: [0.1, 0.1, 0.1],
+            scale: [5.0, 5.0, 5.0],
+            ..Default::default()
         },
         DeltaTransform3D {
             rotation: [0.0, 0.0, -20.0],

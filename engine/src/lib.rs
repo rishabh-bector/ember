@@ -478,6 +478,7 @@ impl EngineBuilder {
             }
         };
 
+        // resource
         let camera_3d = Arc::new(Mutex::new(Camera3D::default(
             self.window_size.0 as f32,
             self.window_size.1 as f32,
@@ -529,15 +530,15 @@ impl EngineBuilder {
         let gpu_mut = gpu.lock().unwrap();
 
         info!("building uniforms");
-        // let quad_group_builder = Arc::new(Mutex::new(QuadUniformGroup::builder()));
+        let quad_group_builder = Arc::new(Mutex::new(QuadUniformGroup::builder()));
         let camera_3d_group_builder = Arc::new(Mutex::new(Camera3DUniformGroup::builder()));
         let render_3d_group_builder = Arc::new(Mutex::new(Render3DForwardUniformGroup::builder()));
 
         info!("building render graph nodes");
-        // let node_channel = build_node_channel(
-        //     Arc::clone(&quad_group_builder),
-        //     Arc::clone(&camera_3d_group_builder),
-        // );
+        let node_channel = build_node_channel(
+            Arc::clone(&quad_group_builder),
+            Arc::clone(&camera_3d_group_builder),
+        );
         let node_3d_forward_basic = build_node_3d_forward_basic(
             Arc::clone(&render_3d_group_builder),
             Arc::clone(&camera_3d_group_builder),
@@ -551,19 +552,19 @@ impl EngineBuilder {
             // Uniform loading systems
             .flush()
             .add_system(camera_3d_uniform_system())
-            .add_system(render_3d::forward_basic::load_system());
-        // .add_system(quad::load_system());
+            .add_system(render_3d::forward_basic::load_system())
+            .add_system(quad::load_system());
 
         info!("building render graph");
         let metrics_ui = EngineMetrics::new();
         let mut graph_schedule = SubSchedule::new();
         let (render_graph, engine_metrics) = GraphBuilder::new()
-            // .with_channel(
-            //     node_3d_forward_basic.dest_id.clone(),
-            //     node_channel.dest_id.clone(),
-            // )
-            // .with_source_node(node_3d_forward_basic)
-            .with_master_node(node_3d_forward_basic)
+            .with_channel(
+                node_3d_forward_basic.dest_id.clone(),
+                node_channel.dest_id.clone(),
+            )
+            .with_source_node(node_3d_forward_basic)
+            .with_master_node(node_channel)
             .build(
                 Arc::clone(&gpu_mut.device),
                 Arc::clone(&gpu_mut.queue),
@@ -584,12 +585,33 @@ impl EngineBuilder {
         // resource
         let frame_metrics = Arc::new(RwLock::new(FrameMetrics::new()));
 
+        // resource
+        let quad = {
+            let quad_group_builder = resources
+                .get::<Arc<Mutex<GroupStateBuilder<QuadUniformGroup>>>>()
+                .unwrap();
+
+            let builder_mut = quad_group_builder.lock().unwrap();
+
+            quad::Quad {
+                mesh: registry
+                    .meshes
+                    .read()
+                    .unwrap()
+                    .clone_mesh(&ID(SCREEN_QUAD_MESH_ID), &ID(PRIMITIVE_MESH_GROUP_ID)),
+                uniforms: Default::default(),
+                uniform_group: builder_mut.single_state(&gpu_mut.device, &gpu_mut.queue)?,
+            }
+        };
+
+        // resource
         let camera_3d = Arc::new(Mutex::new(Camera3D::default(
             self.window_size.0 as f32,
             self.window_size.1 as f32,
         )));
 
         drop(gpu_mut);
+        resources.insert(quad);
         resources.insert(Arc::clone(&gpu));
         resources.insert(Arc::clone(&window));
         resources.insert(Arc::clone(&registry.textures));

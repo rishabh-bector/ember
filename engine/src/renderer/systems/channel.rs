@@ -21,7 +21,7 @@ pub fn render(
         label: Some("Channel Encoder"),
     });
 
-    let pass_res = render_target.create_render_pass("channel_render", &mut encoder, false);
+    let pass_res = render_target.create_render_pass("channel_render", &mut encoder, true);
     if pass_res.is_err() {
         warn!("no target, aborting render pass: render_channel");
         return;
