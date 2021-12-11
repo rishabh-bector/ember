@@ -47,6 +47,7 @@ pub enum ShaderSource {
 pub enum BindIndex {
     Uniform { node_index: usize },
     Texture { group_id: Uuid },
+    NodeInput,
 }
 
 /// RenderGraph node builder.
@@ -114,6 +115,11 @@ impl NodeBuilder {
         self
     }
 
+    pub fn with_node_input(mut self) -> Self {
+        self.bind_groups.push(BindIndex::NodeInput);
+        self
+    }
+
     pub fn with_vertex_layout(mut self, layout: wgpu::VertexBufferLayout<'static>) -> Self {
         self.vertex_buffer_layouts.push(layout);
         self
@@ -177,21 +183,25 @@ impl NodeBuilderTrait for NodeBuilder {
             .iter()
             .map(|bind_index| {
                 Ok(match *bind_index {
-                    BindIndex::Texture { .. } => None,
-                    BindIndex::Uniform { node_index } => Some(
-                        self.uniform_group_builders[node_index]
-                            .lock()
-                            .unwrap()
-                            .build(device, resources, Arc::clone(&queue))?,
+                    BindIndex::Texture { .. } => (None, false),
+                    BindIndex::Uniform { node_index } => (
+                        Some(
+                            self.uniform_group_builders[node_index]
+                                .lock()
+                                .unwrap()
+                                .build(device, resources, Arc::clone(&queue))?,
+                        ),
+                        false,
                     ),
+                    BindIndex::NodeInput {} => (None, true),
                 })
             })
-            .collect::<Result<Vec<Option<wgpu::BindGroupLayout>>>>()?;
+            .collect::<Result<Vec<(Option<wgpu::BindGroupLayout>, bool)>>>()?;
 
         let texture_registry = registry.textures.read().unwrap();
         let layout_refs = bind_group_layouts
             .into_iter()
-            .map(|opt_uniform| match opt_uniform {
+            .map(|(opt_uniform, is_node_input)| match opt_uniform {
                 Some(u) => &u,
                 None => &texture_registry.bind_layout,
             })

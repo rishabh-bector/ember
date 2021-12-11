@@ -26,6 +26,7 @@ use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
     event_loop::{ControlFlow, EventLoop},
+    monitor::VideoMode,
     window::{Fullscreen, Window, WindowBuilder},
 };
 use winit_input_helper::WinitInputHelper;
@@ -145,7 +146,7 @@ impl Engine {
                 }
 
                 if let Some(physical_size) = input.resolution() {
-                    let _ = &self.gpu.lock().unwrap().resize(physical_size);
+                    self.gpu.lock().unwrap().resize(physical_size);
                 }
                 self.window.request_redraw();
             }
@@ -167,7 +168,7 @@ impl Engine {
 
 pub struct EngineBuilder {
     // Engine config
-    window_size: (usize, usize),
+    window_size: (u32, u32),
 
     // Static assets
     texture_registry_builder: TextureRegistryBuilder,
@@ -514,10 +515,116 @@ impl EngineBuilder {
             event_loop,
         ))
     }
+
+    // RENDER GRAPH TEST MODE
+    pub fn test_channel_node(self) -> Result<(Engine, EventLoop<()>)> {
+        warn!("RUNNING EXPERIMENTAL ENGINE MODE: test_channel_node");
+        info!("building engine: test_channel_node");
+
+        let (gpu, window, event_loop, registry, mut resources) = build_engine_common(
+            self.window_size,
+            self.texture_registry_builder,
+            self.mesh_registry_builder,
+        )?;
+        let gpu_mut = gpu.lock().unwrap();
+
+        info!("building uniforms");
+        // let quad_group_builder = Arc::new(Mutex::new(QuadUniformGroup::builder()));
+        let camera_3d_group_builder = Arc::new(Mutex::new(Camera3DUniformGroup::builder()));
+        let render_3d_group_builder = Arc::new(Mutex::new(Render3DForwardUniformGroup::builder()));
+
+        info!("building render graph nodes");
+        // let node_channel = build_node_channel(
+        //     Arc::clone(&quad_group_builder),
+        //     Arc::clone(&camera_3d_group_builder),
+        // );
+        let node_3d_forward_basic = build_node_3d_forward_basic(
+            Arc::clone(&render_3d_group_builder),
+            Arc::clone(&camera_3d_group_builder),
+        );
+
+        info!("scheduling systems");
+        let mut schedule = Schedule::builder();
+        schedule
+            // Main engine systems
+            .add_system(camera_3d_system())
+            // Uniform loading systems
+            .flush()
+            .add_system(camera_3d_uniform_system())
+            .add_system(render_3d::forward_basic::load_system());
+        // .add_system(quad::load_system());
+
+        info!("building render graph");
+        let metrics_ui = EngineMetrics::new();
+        let mut graph_schedule = SubSchedule::new();
+        let (render_graph, engine_metrics) = GraphBuilder::new()
+            // .with_channel(
+            //     node_3d_forward_basic.dest_id.clone(),
+            //     node_channel.dest_id.clone(),
+            // )
+            // .with_source_node(node_3d_forward_basic)
+            .with_master_node(node_3d_forward_basic)
+            .build(
+                Arc::clone(&gpu_mut.device),
+                Arc::clone(&gpu_mut.queue),
+                &mut resources,
+                &mut graph_schedule,
+                &registry,
+                &window,
+                metrics_ui,
+            )?;
+
+        info!("scheduling render graph");
+        graph_schedule.schedule(&mut schedule);
+        let schedule = schedule.build();
+
+        // resource
+        let input_helper = Arc::new(RwLock::new(WinitInputHelper::new()));
+
+        // resource
+        let frame_metrics = Arc::new(RwLock::new(FrameMetrics::new()));
+
+        let camera_3d = Arc::new(Mutex::new(Camera3D::default(
+            self.window_size.0 as f32,
+            self.window_size.1 as f32,
+        )));
+
+        drop(gpu_mut);
+        resources.insert(Arc::clone(&gpu));
+        resources.insert(Arc::clone(&window));
+        resources.insert(Arc::clone(&registry.textures));
+        resources.insert(Arc::clone(&registry.meshes));
+        resources.insert(Arc::clone(&input_helper));
+        resources.insert(Arc::clone(&frame_metrics));
+        resources.insert(Arc::clone(&render_graph));
+        resources.insert(Arc::clone(&render_3d_group_builder)); // what the shit is this?
+        resources.insert(Arc::clone(&camera_3d));
+
+        info!("ready to start!");
+        Ok((
+            Engine {
+                mode: EngineMode::Quad,
+                reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
+                input: input_helper,
+                legion: LegionState {
+                    world: World::default(),
+                    schedule,
+                    resources,
+                },
+                graph: render_graph,
+                registry,
+                window,
+                engine_metrics,
+                frame_metrics,
+                gpu,
+            },
+            event_loop,
+        ))
+    }
 }
 
 fn build_engine_common(
-    window_size: (usize, usize),
+    window_size: (u32, u32),
     tex_reg_builder: TextureRegistryBuilder,
     mesh_reg_builder: MeshRegistryBuilder,
 ) -> Result<(
@@ -548,7 +655,7 @@ fn build_engine_common(
 // Dimension-agnostic init logic
 fn build_gpu(
     resources: &mut Resources,
-    window_size: (usize, usize),
+    window_size: (u32, u32),
 ) -> Result<(Arc<Mutex<GpuState>>, Arc<Window>, EventLoop<()>)> {
     let event_loop = EventLoop::new();
     let window = build_window(window_size, &event_loop)?;
@@ -572,8 +679,14 @@ fn get_crate_directory() -> PathBuf {
     )
 }
 
-fn build_window(size: (usize, usize), event_loop: &EventLoop<()>) -> Result<Arc<Window>> {
+fn build_window(size: (u32, u32), event_loop: &EventLoop<()>) -> Result<Arc<Window>> {
     let size = LogicalSize::new(size.0 as f64, size.1 as f64);
+
+    // Set initial size
+    let ss_u32 = (size.width as u32, size.height as u32);
+    *renderer::SCREEN_SIZE.write().unwrap() = ss_u32;
+    info!("INITIAL SCREEN_SIZE: {}, {}", ss_u32.0, ss_u32.1);
+
     Ok(Arc::new({
         WindowBuilder::new()
             .with_title("Ember Engine")
@@ -581,6 +694,7 @@ fn build_window(size: (usize, usize), event_loop: &EventLoop<()>) -> Result<Arc<
             .with_min_inner_size(size)
             .with_max_inner_size(size)
             .with_resizable(false)
+            // .with_fullscreen(None)
             .with_fullscreen(Some(Fullscreen::Borderless(None)))
             .build(event_loop)?
     }))
@@ -678,10 +792,11 @@ fn build_node_3d_forward_basic(
     .with_texture_group(ID(RENDER_3D_TEXTURE_GROUP))
     .with_shared_uniform_group(Arc::clone(&render_3d_group_builder))
     .with_shared_uniform_group(Arc::clone(&camera_3d_group_builder))
-    .with_depth_buffer()
+    // .with_depth_buffer()
     .with_system(render_3d::forward_basic::render_system)
 }
 
+// similar to channel, but meant for raytracing
 fn build_node_quad(
     quad_group_builder: Arc<Mutex<UniformGroupBuilder<QuadUniformGroup>>>,
     camera_3d_group_builder: Arc<Mutex<UniformGroupBuilder<Camera3DUniformGroup>>>,
@@ -693,6 +808,24 @@ fn build_node_quad(
         .with_shared_uniform_group(Arc::clone(&quad_group_builder))
         .with_shared_uniform_group(Arc::clone(&camera_3d_group_builder))
         .with_system(quad::render_system)
+}
+
+// similar to node, but meant for post-processing
+fn build_node_channel(
+    quad_group_builder: Arc<Mutex<UniformGroupBuilder<QuadUniformGroup>>>,
+    camera_3d_group_builder: Arc<Mutex<UniformGroupBuilder<Camera3DUniformGroup>>>,
+) -> NodeBuilder {
+    NodeBuilder::new(
+        "render_channel_node".to_owned(),
+        1,
+        ShaderSource::WGSL(include_str!("renderer/shaders/channelpass.wgsl").to_owned()),
+    )
+    .with_id(ID(CHANNEL_NODE_ID))
+    .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
+    .with_node_input()
+    .with_shared_uniform_group(Arc::clone(&quad_group_builder))
+    .with_shared_uniform_group(Arc::clone(&camera_3d_group_builder))
+    .with_system(channel::render_system)
 }
 
 pub struct LegionState {

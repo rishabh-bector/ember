@@ -1,14 +1,21 @@
 use anyhow::{anyhow, Result};
-use std::sync::Arc;
+use once_cell::sync::Lazy;
+use std::sync::{Arc, RwLock};
 use winit::window::Window;
 
-use crate::constants::DEFAULT_TEXTURE_BUFFER_FORMAT;
+use crate::constants::{
+    DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, DEFAULT_TEXTURE_BUFFER_FORMAT,
+};
 
 pub mod buffer;
 pub mod graph;
 pub mod mesh;
 pub mod systems;
 pub mod uniform;
+
+// Global Mutable Variable
+pub static SCREEN_SIZE: Lazy<RwLock<(u32, u32)>> =
+    Lazy::new(|| RwLock::new((DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT)));
 
 pub struct GpuState {
     pub device: Arc<wgpu::Device>,
@@ -18,7 +25,7 @@ pub struct GpuState {
     pub surface: wgpu::Surface,
     pub chain_descriptor: wgpu::SwapChainDescriptor,
     pub swap_chain: wgpu::SwapChain,
-    pub screen_size: (u32, u32),
+    pub first_resize: bool,
 }
 
 pub struct GpuStateBuilder {
@@ -98,22 +105,56 @@ impl GpuStateBuilder {
         let swap_chain = device.create_swap_chain(&surface, &chain_descriptor);
 
         Ok(GpuState {
-            screen_size: self.screen_size,
             adapter: Arc::new(adapter),
             surface,
             device,
             queue,
             chain_descriptor,
             swap_chain,
+            first_resize: false,
         })
     }
 }
 
 impl GpuState {
     pub fn resize(&mut self, new_size: (u32, u32)) {
-        self.screen_size = new_size;
+        let current_size = SCREEN_SIZE.read().unwrap();
+        if current_size.0 == new_size.0 && current_size.1 == new_size.1 {
+            warn!(
+                "gpu_state resize() called but new_size the same: {:?}",
+                new_size
+            );
+            if self.first_resize {
+                return;
+            } else {
+                self.first_resize = true;
+            }
+        } else {
+        }
+        drop(current_size);
+
+        *SCREEN_SIZE.write().unwrap() = new_size;
         self.chain_descriptor.width = new_size.0;
         self.chain_descriptor.height = new_size.1;
+
+        self.swap_chain = self
+            .device
+            .create_swap_chain(&self.surface, &self.chain_descriptor);
+
+        info!("SCREEN_SIZE CHANGED TO: {}, {}", new_size.0, new_size.1);
+    }
+
+    pub fn force_new_swap_chain(&mut self) {
+        warn!("running force_new_swap_chain; something might be wrong");
+        warn!("> chain descriptor: {:?}", self.chain_descriptor);
+
+        let current_size = SCREEN_SIZE.read().unwrap();
+        warn!(
+            "> current screen size: {}, {}",
+            current_size.0, current_size.1
+        );
+        drop(current_size);
+
         self.swap_chain = self
             .device
             .create_swap_chain(&self.surface, &self.chain_descriptor);

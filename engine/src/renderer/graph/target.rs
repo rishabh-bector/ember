@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use std::sync::Arc;
 
 use crate::renderer::buffer::texture::Texture;
@@ -24,22 +25,18 @@ impl RenderTarget {
         }
     }
 
-    pub fn begin_render_pass(&self) -> Option<&wgpu::TextureView> {
-        None
-    }
-
     pub fn create_render_pass<'a>(
         &'a self,
         name: &'a str,
         encoder: &'a mut wgpu::CommandEncoder,
         clear: bool,
-    ) -> Option<wgpu::RenderPass<'a>> {
+    ) -> Result<wgpu::RenderPass<'a>> {
         match self {
-            RenderTarget::Empty => None,
+            RenderTarget::Empty => Err(anyhow!("cannot render to an empty target")),
             RenderTarget::Texture {
                 color_buffer,
                 depth_buffer,
-            } => Some(create_render_pass(
+            } => Ok(create_render_pass(
                 name,
                 &color_buffer.view,
                 depth_buffer.as_ref().map(|tex| &tex.0.view),
@@ -49,13 +46,16 @@ impl RenderTarget {
             RenderTarget::Master {
                 screen_buffer,
                 depth_buffer,
-            } => Some(create_render_pass(
-                name,
-                &screen_buffer.as_ref().unwrap().view,
-                depth_buffer.as_ref().map(|tex| &tex.0.view),
-                encoder,
-                clear,
-            )),
+            } => match screen_buffer {
+                Some(buf) => Ok(create_render_pass(
+                    name,
+                    &buf.view,
+                    depth_buffer.as_ref().map(|tex| &tex.0.view),
+                    encoder,
+                    clear,
+                )),
+                None => Err(anyhow!("no screen buffer")),
+            },
         }
     }
 

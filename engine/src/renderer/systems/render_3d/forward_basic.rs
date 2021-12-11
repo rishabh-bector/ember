@@ -156,9 +156,14 @@ pub fn render(
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Render3D Encoder"),
     });
-    let mut pass = render_target
-        .create_render_pass("forward_render_3d", &mut encoder, true)
-        .unwrap();
+
+    let pass_res = render_target.create_render_pass("forward_render_3d", &mut encoder, false);
+    if pass_res.is_err() {
+        warn!("no target, aborting render pass: render_3d_forward_basic");
+        return;
+    }
+
+    let mut pass = pass_res.unwrap();
     pass.set_pipeline(&node.pipeline);
 
     pass.set_bind_group(
@@ -183,6 +188,10 @@ pub fn render(
             wgpu::IndexFormat::Uint32,
         );
 
+        info!(
+            "RENDER 3D drawing entity with {} triangles",
+            mesh.indices.len() / 3
+        );
         pass.draw_indexed(0..mesh.index_buffer.buffer.1, 0, 0..1);
     }
 

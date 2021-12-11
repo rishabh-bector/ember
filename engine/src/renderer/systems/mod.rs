@@ -1,3 +1,4 @@
+pub mod channel;
 pub mod graph;
 pub mod quad;
 pub mod render_2d;

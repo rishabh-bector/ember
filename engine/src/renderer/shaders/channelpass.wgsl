@@ -9,8 +9,17 @@ struct QuadUniforms {
     delta: f32;
 };
 
-[[group(0), binding(0)]]
+[[block]]
+struct Camera3DUniforms {
+    view_pos: vec4<f32>;
+    view_proj: mat4x4<f32>;
+};
+
+[[group(1), binding(0)]]
 var<uniform> quad: QuadUniforms;
+
+[[group(2), binding(0)]]
+var<uniform> camera: Camera3DUniforms;
 
 // --------------------------------------------------
 // Vertex shader
@@ -42,16 +51,21 @@ fn main(in: VertexInput) -> VertexOutput {
 
 // --- Main ---
 
-// [[group(2), binding(0)]]
-// var texture0: texture_2d<f32>;
-// [[group(2), binding(1)]]
-// var sampler0: sampler;
+[[group(0), binding(0)]]
+var node_input_tex: texture_2d<f32>;
+[[group(0), binding(1)]]
+var node_input_smp: sampler;
 
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    in.screen_pos
 
     // gamma correction
     // pixel_color = pow(pixel_color, vec3<f32>(0.4545));
-    return vec4<f32>(total, 1.0);
+    var m: f32 = 0.5;
+    // return vec4<f32>(in.screen_pos, 0.0, 1.0);
+    return mix(
+        textureSample(node_input_tex, node_input_smp, in.screen_pos),
+        vec4<f32>(0.0, 0.0, 1.0, 1.0),
+        vec4<f32>(m, m, m, m)
+    );
 }

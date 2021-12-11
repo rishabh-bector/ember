@@ -6,10 +6,8 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    constants::{
-        DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, ID, METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID,
-    },
-    renderer::{graph::target::DepthBuffer, systems::ui::*},
+    constants::{ID, METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID},
+    renderer::{graph::target::DepthBuffer, systems::ui::*, SCREEN_SIZE},
     sources::{
         metrics::{EngineMetrics, SystemReporter},
         registry::Registry,
@@ -135,6 +133,12 @@ impl GraphBuilder {
             .collect::<Result<HashMap<Uuid, Arc<RenderNode>>>>()?;
 
         debug!("creating render graph node_targets");
+        let screen_size = SCREEN_SIZE.read().unwrap();
+        info!(
+            "SCREEN_SIZE AT TARGET BUILD: {}, {}",
+            screen_size.0, screen_size.1
+        );
+
         let texture_registry = registry.textures.read().unwrap();
         let mut master = Uuid::default();
         let targets = nodes
@@ -147,7 +151,7 @@ impl GraphBuilder {
                         Some(Arc::new(DepthBuffer(Texture::depth_buffer(
                             &format!("{}_depth_target", node.name),
                             &device,
-                            (3840 as u32, 2160 as u32),
+                            (screen_size.0, screen_size.1),
                             wgpu::TextureFormat::Depth32Float,
                         ))))
                     }
@@ -162,7 +166,7 @@ impl GraphBuilder {
                         false => RenderTarget::Texture {
                             color_buffer: Arc::new(Texture::blank(
                                 // TODO: Make actual config (part of SHIP: EngineBuilder)
-                                (DEFAULT_SCREEN_WIDTH as u32, DEFAULT_SCREEN_HEIGHT as u32),
+                                (screen_size.0, screen_size.1),
                                 &device,
                                 texture_registry.format,
                                 &texture_registry.bind_layout,
@@ -177,13 +181,7 @@ impl GraphBuilder {
             .collect::<Result<HashMap<Uuid, Arc<Mutex<RenderTarget>>>>>()?;
 
         let target_buffer = TargetBuffer::new(targets, master);
-
-        let swap_chain_target = Arc::clone(
-            &target_buffer
-                .targets
-                .get(self.master_node.as_ref().unwrap())
-                .unwrap(),
-        );
+        let swap_chain_target = Arc::clone(&target_buffer.targets.get(&master).unwrap());
 
         // Build UI if enabled
         let ui_target = match &self.ui_mode {

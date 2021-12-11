@@ -8,18 +8,17 @@ use std::{
 use crate::{
     components::{FrameMetrics, Position2D},
     constants::{
-        CAMERA_2D_BIND_GROUP_ID, CAMERA_3D_BIND_GROUP_ID, DEFAULT_SCREEN_HEIGHT,
-        DEFAULT_SCREEN_WIDTH, ID, LIGHTING_2D_BIND_GROUP_ID, QUAD_BIND_GROUP_ID,
-        RENDER_2D_COMMON_TEXTURE_ID,
+        CAMERA_2D_BIND_GROUP_ID, CAMERA_3D_BIND_GROUP_ID, ID, LIGHTING_2D_BIND_GROUP_ID,
+        QUAD_BIND_GROUP_ID, RENDER_2D_COMMON_TEXTURE_ID,
     },
     renderer::{
-        buffer::instance::{Instance, InstanceBuffer, InstanceGroup, InstanceGroupBinder},
         graph::NodeState,
         mesh::Mesh,
         uniform::{
             generic::GenericUniformBuilder,
             group::{GroupState, UniformGroup, UniformGroupBuilder, UniformGroupType},
         },
+        SCREEN_SIZE,
     },
     sources::{registry::MeshRegistry, WindowSize},
 };
@@ -43,9 +42,10 @@ pub struct QuadUniformGroup {}
 
 impl UniformGroupType<Self> for QuadUniformGroup {
     fn builder() -> UniformGroupBuilder<QuadUniformGroup> {
+        let screen_size = SCREEN_SIZE.read().unwrap();
         UniformGroup::<QuadUniformGroup>::builder()
             .with_uniform(GenericUniformBuilder::from_source(QuadUniforms {
-                dimensions: [DEFAULT_SCREEN_WIDTH as f32, DEFAULT_SCREEN_HEIGHT as f32],
+                dimensions: [screen_size.0 as f32, screen_size.1 as f32],
                 time: 0.0,
                 delta: 0.0,
             }))
