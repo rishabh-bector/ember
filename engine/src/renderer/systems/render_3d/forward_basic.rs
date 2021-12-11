@@ -1,4 +1,4 @@
-use cgmath::{Matrix, Rotation3, SquareMatrix};
+use cgmath::{Matrix, SquareMatrix};
 use legion::{component, systems::CommandBuffer, world::SubWorld, Entity};
 use std::{
     sync::{Arc, Mutex},
@@ -23,7 +23,7 @@ use crate::{
             },
         },
     },
-    systems::camera_3d::{matrix2array_4d},
+    systems::camera_3d::matrix2array_4d,
 };
 
 // Todo: go through all todo comments and make tickets for them

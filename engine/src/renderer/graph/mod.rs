@@ -250,8 +250,7 @@ impl GraphBuilder {
                     &device,
                     &queue,
                 );
-            }
-            _ => (debug!("ui is disabled")),
+            } // _ => (debug!("ui is disabled")),
         }
 
         debug!("scheduling render systems");

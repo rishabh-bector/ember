@@ -1,18 +1,8 @@
-
-use rayon::iter::{ParallelIterator};
-use std::{
-    sync::{Arc},
-    time::Instant,
-};
+use std::{sync::Arc, time::Instant};
 
 use crate::{
-    constants::{
-        CAMERA_3D_BIND_GROUP_ID, ID,
-    },
-    renderer::{
-        graph::NodeState,
-        systems::quad::Quad,
-    },
+    constants::{CAMERA_3D_BIND_GROUP_ID, ID},
+    renderer::{graph::NodeState, systems::quad::Quad},
 };
 
 #[system]

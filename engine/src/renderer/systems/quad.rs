@@ -1,16 +1,11 @@
-
-use rayon::iter::{ParallelIterator};
 use std::{
     sync::{Arc, RwLock},
     time::Instant,
 };
 
 use crate::{
-    components::{FrameMetrics},
-    constants::{
-        CAMERA_3D_BIND_GROUP_ID, ID,
-        QUAD_BIND_GROUP_ID,
-    },
+    components::FrameMetrics,
+    constants::{CAMERA_3D_BIND_GROUP_ID, ID, QUAD_BIND_GROUP_ID},
     renderer::{
         graph::NodeState,
         mesh::Mesh,
@@ -20,7 +15,7 @@ use crate::{
         },
         SCREEN_SIZE,
     },
-    sources::{WindowSize},
+    sources::WindowSize,
 };
 
 // Resource

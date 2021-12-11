@@ -1,8 +1,4 @@
-
-
-use crate::{
-    components::{Position2D, Velocity2D},
-};
+use crate::components::{Position2D, Velocity2D};
 
 #[system(for_each)]
 pub fn physics_2d(pos: &mut Position2D, vel: &mut Velocity2D) {

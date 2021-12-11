@@ -1,4 +1,5 @@
 #![windows_subsystem = "windows"]
+#![allow(dead_code)]
 
 extern crate pretty_env_logger;
 extern crate vertex_traits;
