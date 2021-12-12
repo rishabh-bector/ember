@@ -871,3 +871,31 @@ pub struct MeshGroup {
     pub id: Uuid,
     pub meshes: Vec<(Uuid, String)>,
 }
+
+// --------------------------------------------------
+//
+// Ideas:
+//  - I want to test rendergraph by making post-processing shaders, but I have no scene to make them with
+//  - So, first I should upgrade the 3D capabilities of the engine, then I can make post-processing with it.
+//
+// 3D Upgrades (basic mvp to test basic post-processing):
+//  - Deferred renderer right off the bat???
+//  - Don't work PBR, focus instead on toon (like Zelda) first
+//  - Instancing
+//  - Skyboxing
+//  - Grass/wind shader
+// ===== probably not necessary for basic mvp =====
+//  - Foliage Node (LoD, Quadtree?) <- can nodes include "default entities" so that
+//    a user could simple add a "foliage" or "terrain" node??
+//  - Terrain Node (LoD, Quadtree? Tesselation? With library?)
+//
+// Post-processing effects:
+//  - Bloom (needs ping-pong render node)
+//  - Ambient Occlusion (HUGE effect on realistic lighting, scene-level shadow)
+//  - Auto Exposure (dynamically adjusts the exposure of an image to match its mid-tone)
+//  - Depth of Field
+//  - Screen Space Reflection
+//  - Fog/Clouds??
+//  - Water??
+//
+// --------------------------------------------------
