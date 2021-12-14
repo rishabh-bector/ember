@@ -152,12 +152,14 @@ pub fn render(
     let start_time = Instant::now();
     let node = Arc::clone(&state.node);
 
-    let render_target = state.render_target.lock().unwrap();
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Render3D Encoder"),
     });
 
-    let pass_res = render_target.create_render_pass("forward_render_3d", &mut encoder, true);
+    let render_target = state.get_render_target(0);
+    let render_target_mut = render_target.lock().unwrap();
+
+    let pass_res = render_target_mut.create_render_pass("forward_render_3d", &mut encoder, true);
     if pass_res.is_err() {
         warn!("no target, aborting render pass: render_3d_forward_basic");
         return;

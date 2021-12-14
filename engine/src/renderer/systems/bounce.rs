@@ -12,20 +12,20 @@ pub fn render(
     #[resource] device: &Arc<wgpu::Device>,
     #[resource] queue: &Arc<wgpu::Queue>,
 ) {
-    debug!("running system render_channel (graph node)");
+    debug!("running system render_bounce (graph node)");
     let start_time = Instant::now();
     let node = Arc::clone(&state.node);
 
-    let render_target = state.get_render_target(0);
+    let render_target = state.get_chain_target();
     let render_target_mut = render_target.lock().unwrap();
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("Channel Encoder"),
+        label: Some("Bounce Encoder"),
     });
 
-    let pass_res = render_target_mut.create_render_pass("channel_render", &mut encoder, true);
+    let pass_res = render_target_mut.create_render_pass("bounce_render", &mut encoder, true);
     if pass_res.is_err() {
-        warn!("no target, aborting render pass: render_channel");
+        warn!("no target, aborting render pass: bounce_channel");
         return;
     }
 
@@ -53,6 +53,6 @@ pub fn render(
     drop(pass);
     queue.submit(std::iter::once(encoder.finish()));
 
-    debug!("channel_render pass submitted");
+    debug!("bounce_render pass submitted");
     state.reporter.update(start_time.elapsed().as_secs_f64());
 }

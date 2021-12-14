@@ -37,7 +37,10 @@ pub enum UIMode {
 pub struct NodeState {
     pub node: Arc<RenderNode>,
     pub input_channels: Vec<Arc<wgpu::BindGroup>>,
-    pub render_target: Arc<Mutex<RenderTarget>>,
+    pub render_targets: Vec<Arc<Mutex<RenderTarget>>>,
+
+    // used if node.chain_mode is enabled
+    pub chain_index: u32,
 
     // uniform group id -> [(element size, buffer size)]
     pub dyn_offset_state: HashMap<Uuid, (Arc<Mutex<u64>>, Vec<(u64, u64)>)>,
@@ -45,8 +48,26 @@ pub struct NodeState {
     pub reporter: SystemReporter,
 }
 
+impl NodeState {
+    pub fn get_render_target(&self, index: u32) -> Arc<Mutex<RenderTarget>> {
+        Arc::clone(&self.render_targets[index as usize])
+    }
+
+    pub fn get_chain_target(&mut self) -> Arc<Mutex<RenderTarget>> {
+        let target = Arc::clone(&self.render_targets[self.chain_index as usize]);
+
+        self.chain_index += 1;
+        if self.chain_index >= self.render_targets.len() as u32 {
+            self.chain_index = 0;
+        }
+
+        target
+    }
+}
+
 pub struct RenderGraph {
-    pub channels: Vec<(Uuid, Uuid)>,
+    // (source_node, source_channel, dest_node)
+    pub channels: Vec<(Uuid, u32, Uuid)>,
     pub nodes: HashMap<Uuid, Arc<RenderNode>>,
     pub source_nodes: Vec<Uuid>,
     pub master_node: Uuid,
@@ -60,7 +81,8 @@ pub struct GraphBuilder {
     pub node_builders: HashMap<Uuid, Box<dyn NodeBuilderTrait>>,
     pub source_nodes: Vec<Uuid>,
     pub master_node: Option<Uuid>,
-    pub channels: Vec<(Uuid, Uuid)>,
+
+    pub channels: Vec<(Uuid, u32, Uuid)>,
     pub node_states: HashMap<Uuid, NodeState>,
     pub dest: Option<Arc<RenderGraph>>,
     pub ui_mode: UIMode,
@@ -97,8 +119,8 @@ impl GraphBuilder {
         self.with_node(node)
     }
 
-    pub fn with_channel(mut self, input: Uuid, output: Uuid) -> Self {
-        self.channels.push((input, output));
+    pub fn with_channel(mut self, input: Uuid, input_index: u32, output: Uuid) -> Self {
+        self.channels.push((input, input_index, output));
         self
     }
 
@@ -144,50 +166,69 @@ impl GraphBuilder {
         let targets = nodes
             .iter()
             .map(|(id, node)| {
-                let depth_buffer = match node.depth_buffer {
+                let depth_buffers = match node.depth_buffer {
                     false => None,
                     true => {
                         debug!("building depth buffer for {}", node.name);
-                        Some(Arc::new(DepthBuffer(Texture::depth_buffer(
-                            &format!("{}_depth_target", node.name),
-                            &device,
-                            (screen_size.0, screen_size.1),
-                            wgpu::TextureFormat::Depth32Float,
-                        ))))
+                        Some(
+                            (0..node.render_outputs)
+                                .map(|_| {
+                                    Arc::new(DepthBuffer(Texture::depth_buffer(
+                                        &format!("{}_depth_target", node.name),
+                                        &device,
+                                        (screen_size.0, screen_size.1),
+                                        wgpu::TextureFormat::Depth32Float,
+                                    )))
+                                })
+                                .collect::<Vec<Arc<DepthBuffer>>>(),
+                        )
                     }
                 };
                 Ok((
                     *id,
-                    Arc::new(Mutex::new(match node.master {
+                    match node.master {
                         true => {
                             master = node.id;
-                            RenderTarget::empty_master(depth_buffer)
+                            vec![Arc::new(Mutex::new(RenderTarget::empty_master(
+                                depth_buffers
+                                    .map_or_else(|| None, |bufs| Some(Arc::clone(&bufs[0]))),
+                            )))]
                         }
-                        false => RenderTarget::Texture {
-                            color_buffer: Arc::new(Texture::blank(
-                                // TODO: Make actual config (part of SHIP: EngineBuilder)
-                                (screen_size.0, screen_size.1),
-                                &device,
-                                texture_registry.format,
-                                &texture_registry.bind_layout,
-                                Some(&format!("{}_render_target", node.name)),
-                                true,
-                            )?),
-                            depth_buffer,
-                        },
-                    })),
+                        false => (0..node.render_outputs)
+                            .map(|out_index| {
+                                Arc::new(Mutex::new(RenderTarget::Texture {
+                                    color_buffer: Arc::new(
+                                        Texture::blank(
+                                            // TODO: Make actual config (part of SHIP: EngineBuilder)
+                                            (screen_size.0, screen_size.1),
+                                            &device,
+                                            texture_registry.format,
+                                            &texture_registry.bind_layout,
+                                            Some(&format!("{}_render_target", node.name)),
+                                            true,
+                                        )
+                                        .unwrap(),
+                                    ),
+                                    depth_buffer: match &depth_buffers {
+                                        Some(bufs) => Some(Arc::clone(&bufs[out_index as usize])),
+                                        None => None,
+                                    },
+                                }))
+                            })
+                            .collect::<Vec<Arc<Mutex<RenderTarget>>>>(),
+                    },
                 ))
             })
-            .collect::<Result<HashMap<Uuid, Arc<Mutex<RenderTarget>>>>>()?;
+            .collect::<Result<HashMap<Uuid, Vec<Arc<Mutex<RenderTarget>>>>>>()?;
 
         let target_buffer = TargetBuffer::new(targets, master);
-        let swap_chain_target = Arc::clone(&target_buffer.targets.get(&master).unwrap());
+        let swap_chain_target = target_buffer.master();
 
         // Build UI if enabled
         let ui_target = match &self.ui_mode {
             UIMode::Disabled => Arc::new(Mutex::new(RenderTarget::Empty)),
             UIMode::Master => todo!(), // Arc::clone(&target_buffer.targets.get(id).unwrap()),
-            UIMode::Node(id) => Arc::clone(&target_buffer.targets.get(id).unwrap()),
+            UIMode::Node(id) => Arc::clone(&target_buffer.get_target(id, 0)),
         };
 
         // Build all NodeStates; each render node's system has this internal state,
@@ -202,22 +243,22 @@ impl GraphBuilder {
                     NodeState {
                         node: Arc::clone(node),
                         input_channels: self
-                            .input_nodes_for_node(*node_id)
+                            .input_targets_for_node(*node_id)
                             .iter()
-                            .map(|input_id| {
-                                Arc::clone(
-                                    &target_buffer
-                                        .targets
-                                        .get(input_id)
-                                        .unwrap()
-                                        .lock()
-                                        .unwrap()
-                                        .get_bind_group()
-                                        .unwrap(),
-                                )
+                            .map(|(input_id, input_channel)| {
+                                target_buffer
+                                    .get_target(input_id, *input_channel as usize)
+                                    .lock()
+                                    .unwrap()
+                                    .get_bind_group()
+                                    .unwrap()
                             })
                             .collect::<Vec<Arc<wgpu::BindGroup>>>(),
-                        render_target: Arc::clone(&target_buffer.targets.get(&node_id).unwrap()),
+                        render_targets: target_buffer
+                            .get(&node_id)
+                            .into_iter()
+                            .map(Arc::clone)
+                            .collect(),
                         // Cloned for now
                         // common_buffers: common_buffers.clone(),
                         dyn_offset_state: nodes
@@ -229,6 +270,7 @@ impl GraphBuilder {
                         // Register all node systems with metrics, and
                         // give them a system reporter
                         reporter: metrics_ui.register_system_id(&node.name, *node_id),
+                        chain_index: 0,
                     },
                 )
             })
@@ -297,10 +339,10 @@ impl GraphBuilder {
 
         match master_map {
             Some(mm) => {
-                let mut exec_order: Vec<Uuid> = mm.clone().into_iter().flatten().collect();
+                let mut exec_order: Vec<(Uuid, u32)> = mm.clone().into_iter().flatten().collect();
                 exec_order.reverse();
 
-                for node in exec_order {
+                for (node, out_index) in exec_order {
                     sub_schedule.add_node(
                         Arc::clone(&nodes.get(&node).unwrap().system),
                         node_states.get(&node).unwrap().to_owned(),
@@ -367,17 +409,17 @@ impl GraphBuilder {
     //
     // [[l1, l1], [l2, l2, l2], [l3, l3]] etc. where master = l0 <- l1 <- l2 <- ...
     //
-    fn build_map(&self, current_node: Uuid) -> Option<Vec<Vec<Uuid>>> {
-        let current_inputs: Vec<Uuid> = self.input_nodes_for_node(current_node);
-        let mut dependency_layers: Vec<Vec<Uuid>> = vec![];
+    fn build_map(&self, current_node: Uuid) -> Option<Vec<Vec<(Uuid, u32)>>> {
+        let current_inputs: Vec<(Uuid, u32)> = self.input_targets_for_node(current_node);
+        let mut dependency_layers: Vec<Vec<(Uuid, u32)>> = vec![];
 
         if current_inputs.len() > 0 {
             let current_layer = dependency_layers.len();
             dependency_layers.push(vec![]);
             dependency_layers[current_layer].extend(current_inputs);
 
-            for input in dependency_layers[current_layer].clone() {
-                match self.build_map(input) {
+            for (in_id, in_index) in dependency_layers[current_layer].clone() {
+                match self.build_map(in_id) {
                     Some(input_map) => dependency_layers.extend(input_map),
                     None => (),
                 }
@@ -388,18 +430,18 @@ impl GraphBuilder {
         }
     }
 
-    fn input_nodes_for_node(&self, node_id: Uuid) -> Vec<Uuid> {
+    fn input_targets_for_node(&self, node_id: Uuid) -> Vec<(Uuid, u32)> {
         let mut inputs = self
             .channels
             .iter()
-            .filter_map(|(in_id, out_id)| {
+            .filter_map(|(in_id, in_index, out_id)| {
                 if *out_id == node_id {
-                    Some(*in_id)
+                    Some((*in_id, *in_index))
                 } else {
                     None
                 }
             })
-            .collect::<Vec<Uuid>>();
+            .collect::<Vec<(Uuid, u32)>>();
         inputs.sort_unstable();
         inputs.dedup();
         inputs

@@ -113,11 +113,14 @@ pub fn render(
     let node = Arc::clone(&state.node);
     let mesh_registry = mesh_registry.read().unwrap();
 
-    let render_target = state.render_target.lock().unwrap();
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("render_2d_forward_instance_encoder"),
     });
-    let mut pass = render_target
+
+    let render_target = state.get_render_target(0);
+    let render_target_mut = render_target.lock().unwrap();
+
+    let mut pass = render_target_mut
         .create_render_pass("render_2d_forward_instance_pass", &mut encoder, true)
         .unwrap();
     pass.set_pipeline(&node.pipeline);

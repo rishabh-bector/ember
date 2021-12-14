@@ -561,6 +561,7 @@ impl EngineBuilder {
         let (render_graph, engine_metrics) = GraphBuilder::new()
             .with_channel(
                 node_3d_forward_basic.dest_id.clone(),
+                0,
                 node_channel.dest_id.clone(),
             )
             .with_source_node(node_3d_forward_basic)
@@ -770,6 +771,7 @@ fn build_node_2d_forward_dynamic(
     NodeBuilder::new(
         "render_2d_node".to_owned(),
         0,
+        1,
         ShaderSource::WGSL(include_str!("renderer/shaders/render_2d.wgsl").to_owned()),
     )
     .with_id(ID(FORWARD_2D_NODE_ID))
@@ -788,6 +790,7 @@ fn build_node_2d_forward_instance(
     NodeBuilder::new(
         "render_2d_instance_node".to_owned(),
         0,
+        1,
         ShaderSource::WGSL(include_str!("renderer/shaders/render_2d_instance.wgsl").to_owned()),
     )
     .with_id(ID(INSTANCE_2D_NODE_ID))
@@ -807,6 +810,7 @@ fn build_node_3d_forward_basic(
     NodeBuilder::new(
         "render_3d_basic_node".to_owned(),
         0,
+        1,
         ShaderSource::WGSL(include_str!("renderer/shaders/render_3d.wgsl").to_owned()),
     )
     .with_id(ID(FORWARD_3D_NODE_ID))
@@ -824,7 +828,7 @@ fn build_node_quad(
     camera_3d_group_builder: Arc<Mutex<UniformGroupBuilder<Camera3DUniformGroup>>>,
     shader_source: ShaderSource,
 ) -> NodeBuilder {
-    NodeBuilder::new("render_quad_node".to_owned(), 0, shader_source)
+    NodeBuilder::new("render_quad_node".to_owned(), 0, 1, shader_source)
         .with_id(ID(QUAD_NODE_ID))
         .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
         .with_shared_uniform_group(Arc::clone(&quad_group_builder))
@@ -840,6 +844,7 @@ fn build_node_channel(
     NodeBuilder::new(
         "render_channel_node".to_owned(),
         1,
+        1,
         ShaderSource::WGSL(include_str!("renderer/shaders/channelpass.wgsl").to_owned()),
     )
     .with_id(ID(CHANNEL_NODE_ID))
@@ -848,6 +853,21 @@ fn build_node_channel(
     .with_shared_uniform_group(Arc::clone(&quad_group_builder))
     .with_shared_uniform_group(Arc::clone(&camera_3d_group_builder))
     .with_system(channel::render_system)
+}
+
+// runs two quad shader nodes which loop back into each other several times
+fn build_node_chain(
+    shader_source: ShaderSource,
+    quad_group_builder: Arc<Mutex<UniformGroupBuilder<QuadUniformGroup>>>,
+    camera_3d_group_builder: Arc<Mutex<UniformGroupBuilder<Camera3DUniformGroup>>>,
+) -> NodeBuilder {
+    NodeBuilder::new("render_bounce_node".to_owned(), 1, 1, shader_source.clone())
+        .with_id(ID(BOUNCE_NODE_ID))
+        .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
+        .with_node_input()
+        .with_shared_uniform_group(Arc::clone(&quad_group_builder))
+        .with_shared_uniform_group(Arc::clone(&camera_3d_group_builder))
+        .with_system(bounce::render_system)
 }
 
 pub struct LegionState {

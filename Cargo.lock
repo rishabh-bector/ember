@@ -675,6 +675,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "example5"
+version = "0.1.0"
+dependencies = [
+ "ember",
+ "rand",
+ "uuid",
+]
+
+[[package]]
 name = "external-memory"
 version = "0.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

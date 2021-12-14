@@ -20,6 +20,7 @@ pub const INSTANCE_2D_NODE_ID: &str = "19c32cfe-bccc-42fe-8d05-0860740fa752";
 pub const INSTANCE_3D_NODE_ID: &str = "8e1e1471-650f-4ab3-98f7-0502efa7dff6";
 pub const QUAD_NODE_ID: &str = "eaf2b9f7-1e96-4b6b-964f-29e2da214823";
 pub const CHANNEL_NODE_ID: &str = "36b2546b-cdff-4288-b4a8-f177bc899ed5";
+pub const BOUNCE_NODE_ID: &str = "60b92c2e-d58b-4162-a311-ca56d5a31d21";
 // Engine systems (excluding renderer)
 pub const RENDER_UI_SYSTEM_ID: &str = "7a370e52-053a-46dc-82d6-4fd8d41c1c19";
 // Engine uniform groups

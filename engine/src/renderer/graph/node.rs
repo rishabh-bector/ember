@@ -19,8 +19,25 @@ use super::NodeState;
 pub struct RenderNode {
     pub id: Uuid,
     pub name: String,
-    pub graph_inputs: u32,
     pub master: bool,
+
+    pub graph_inputs: u32,
+
+    // chain_mode: whether or not to enable chain mode
+    // chain_index: next graph_input to use from the RenderTargets in NodeState
+    //
+    // Usually, the node uses all graph inputs (outputs from other nodes, aka textures) per
+    // render pass. However, sometimes it is useful for a node to conditionally select from one of
+    // several inputs, in which case the shader only takes 1 texture in. This allows for the
+    // common "ping-pong" buffer pattern in which a single shader pipeline takes a texture in,
+    // renders to a second texture, and then swaps the two; the net result is to edit in place.
+    // In that case, the chain_index would alternate between 0 and 1 if chain_mode was true.
+    //
+    pub chain_mode: bool,
+    pub chain_index: u32,
+
+    // Number of output textures (RenderTargets)
+    pub render_outputs: u32,
 
     pub pipeline: wgpu::RenderPipeline,
     pub shader_module: wgpu::ShaderModule,
@@ -39,6 +56,7 @@ pub struct PipelineBinder {
     pub dyn_offset_state: HashMap<Uuid, (Arc<Mutex<u64>>, Vec<(u64, u64)>)>,
 }
 
+#[derive(Clone)]
 pub enum ShaderSource {
     WGSL(String),
     _SPIRV(String),
@@ -53,8 +71,13 @@ pub enum BindIndex {
 /// RenderGraph node builder.
 pub struct NodeBuilder {
     pub name: String,
-    pub graph_inputs: u32,
     pub master: bool,
+    pub graph_inputs: u32,
+
+    pub chain_mode: bool,
+    pub chain_index: u32,
+
+    pub render_outputs: u32,
     pub depth_buffer: bool,
 
     pub shader_source: ShaderSource,
@@ -62,6 +85,7 @@ pub struct NodeBuilder {
     pub vertex_buffer_layouts: Vec<wgpu::VertexBufferLayout<'static>>,
     pub uniform_group_builders: Vec<Arc<Mutex<dyn GroupResourceBuilder>>>,
 
+    // The final product, a RenderNode
     pub dest: Option<Arc<RenderNode>>,
     pub dest_name: String,
     pub dest_id: Uuid,
@@ -70,20 +94,23 @@ pub struct NodeBuilder {
 }
 
 impl NodeBuilder {
-    pub fn new(name: String, graph_inputs: u32, shader: ShaderSource) -> Self {
+    pub fn new(name: String, graph_inputs: u32, render_outputs: u32, shader: ShaderSource) -> Self {
         Self {
             name: format!("{}_builder", &name),
-            graph_inputs,
-            master: false,
-            depth_buffer: false,
-            shader_source: shader,
-            bind_groups: vec![],
-            vertex_buffer_layouts: vec![],
-            uniform_group_builders: vec![],
-            dest: None,
-            dest_name: name,
             dest_id: Uuid::new_v4(),
+            depth_buffer: false,
+            master: false,
+            chain_mode: false,
+            chain_index: 0,
+            uniform_group_builders: vec![],
+            vertex_buffer_layouts: vec![],
+            bind_groups: vec![],
             system: None,
+            dest: None,
+            shader_source: shader,
+            dest_name: name,
+            render_outputs,
+            graph_inputs,
         }
     }
 
@@ -312,9 +339,12 @@ impl NodeBuilderTrait for NodeBuilder {
             id: self.dest_id,
             name: self.dest_name.to_owned(),
             graph_inputs: self.graph_inputs,
+            render_outputs: self.render_outputs,
             system: Arc::clone(&self.system.as_ref().unwrap()),
             master: self.master,
             depth_buffer: self.depth_buffer,
+            chain_index: self.chain_index,
+            chain_mode: self.chain_mode,
             binder,
             pipeline,
             shader_module,
