@@ -156,7 +156,7 @@ pub fn render(
         label: Some("Render3D Encoder"),
     });
 
-    let render_target = state.get_render_target(0);
+    let render_target = state.render_target();
     let render_target_mut = render_target.lock().unwrap();
 
     let pass_res = render_target_mut.create_render_pass("forward_render_3d", &mut encoder, true);

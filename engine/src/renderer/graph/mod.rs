@@ -20,7 +20,7 @@ use crate::{
 use super::{buffer::target::TargetBuffer, systems::graph::*};
 
 use self::{
-    node::{NodeBuilder, NodeBuilderTrait, RenderNode},
+    node::{NodeBuilder, NodeBuilderTrait, NodeInput, RenderNode},
     target::RenderTarget,
 };
 
@@ -36,10 +36,15 @@ pub enum UIMode {
 #[derive(Clone)]
 pub struct NodeState {
     pub node: Arc<RenderNode>,
-    pub input_channels: Vec<Arc<wgpu::BindGroup>>,
+    pub inputs: Vec<NodeInput>,
+
+    // Currently, render_targets is a vector, allowing a node to have multiple render targets.
+    // However, a single render target can already have multiple color attachments.
+    // Therefore, multiple render targets is only useful if node outputs need to change within frame.
+    // This is currently not the case, and so the Vec<> is redundant.
     pub render_targets: Vec<Arc<Mutex<RenderTarget>>>,
 
-    // used if node.chain_mode is enabled
+    // If chain_mode is enabled, chain_index will be greater than 0.
     pub chain_index: u32,
 
     // uniform group id -> [(element size, buffer size)]
@@ -49,20 +54,24 @@ pub struct NodeState {
 }
 
 impl NodeState {
-    pub fn get_render_target(&self, index: u32) -> Arc<Mutex<RenderTarget>> {
-        Arc::clone(&self.render_targets[index as usize])
+    pub fn render_target(&self) -> Arc<Mutex<RenderTarget>> {
+        Arc::clone(&self.render_targets[0])
     }
 
-    pub fn get_chain_target(&mut self) -> Arc<Mutex<RenderTarget>> {
-        let target = Arc::clone(&self.render_targets[self.chain_index as usize]);
+    // pub fn get_render_target(&self, index: u32) -> Arc<Mutex<RenderTarget>> {
+    //     Arc::clone(&self.render_targets[index as usize])
+    // }
 
-        self.chain_index += 1;
-        if self.chain_index >= self.render_targets.len() as u32 {
-            self.chain_index = 0;
-        }
+    // pub fn get_chain_target(&mut self) -> Arc<Mutex<RenderTarget>> {
+    //     let target = Arc::clone(&self.render_targets[self.chain_index as usize]);
 
-        target
-    }
+    //     self.chain_index += 1;
+    //     if self.chain_index >= self.render_targets.len() as u32 {
+    //         self.chain_index = 0;
+    //     }
+
+    //     target
+    // }
 }
 
 pub struct RenderGraph {
@@ -194,28 +203,65 @@ impl GraphBuilder {
                                     .map_or_else(|| None, |bufs| Some(Arc::clone(&bufs[0]))),
                             )))]
                         }
-                        false => (0..node.render_outputs)
-                            .map(|out_index| {
-                                Arc::new(Mutex::new(RenderTarget::Texture {
-                                    color_buffer: Arc::new(
-                                        Texture::blank(
-                                            // TODO: Make actual config (part of SHIP: EngineBuilder)
-                                            (screen_size.0, screen_size.1),
-                                            &device,
-                                            texture_registry.format,
-                                            &texture_registry.bind_layout,
-                                            Some(&format!("{}_render_target", node.name)),
-                                            true,
-                                        )
-                                        .unwrap(),
-                                    ),
-                                    depth_buffer: match &depth_buffers {
-                                        Some(bufs) => Some(Arc::clone(&bufs[out_index as usize])),
-                                        None => None,
-                                    },
-                                }))
-                            })
-                            .collect::<Vec<Arc<Mutex<RenderTarget>>>>(),
+                        false => {
+                            //
+                            // Multiple render targets even though render_outputs is 1 (loopback)
+                            if node.loopback {
+                                (0..2)
+                                    .map(|out_index| {
+                                        Arc::new(Mutex::new(RenderTarget::Texture {
+                                            color_buffer: Arc::new(
+                                                Texture::blank(
+                                                    (screen_size.0, screen_size.1),
+                                                    &device,
+                                                    texture_registry.format,
+                                                    &texture_registry.bind_layout,
+                                                    Some(&format!("{}_render_target", node.name)),
+                                                    true,
+                                                )
+                                                .unwrap(),
+                                            ),
+                                            depth_buffer: match &depth_buffers {
+                                                Some(bufs) => {
+                                                    Some(Arc::clone(&bufs[out_index as usize]))
+                                                }
+                                                None => None,
+                                            },
+                                        }))
+                                    })
+                                    .collect::<Vec<Arc<Mutex<RenderTarget>>>>()
+                            //
+                            // Multiple render targets for no reason (UNUSUAL)
+                            } else {
+                                if node.render_outputs > 1 {
+                                    panic!("this will add multiple render TARGETs, but you probably want to add multiple ATTACHMENTS on the same TARGET");
+                                }
+                                (0..node.render_outputs)
+                                    .map(|out_index| {
+                                        Arc::new(Mutex::new(RenderTarget::Texture {
+                                            color_buffer: Arc::new(
+                                                Texture::blank(
+                                                    // TODO: Make actual config (part of SHIP: EngineBuilder)
+                                                    (screen_size.0, screen_size.1),
+                                                    &device,
+                                                    texture_registry.format,
+                                                    &texture_registry.bind_layout,
+                                                    Some(&format!("{}_render_target", node.name)),
+                                                    true,
+                                                )
+                                                .unwrap(),
+                                            ),
+                                            depth_buffer: match &depth_buffers {
+                                                Some(bufs) => {
+                                                    Some(Arc::clone(&bufs[out_index as usize]))
+                                                }
+                                                None => None,
+                                            },
+                                        }))
+                                    })
+                                    .collect::<Vec<Arc<Mutex<RenderTarget>>>>()
+                            }
+                        }
                     },
                 ))
             })
@@ -238,35 +284,52 @@ impl GraphBuilder {
         let node_states: HashMap<Uuid, NodeState> = nodes
             .iter()
             .map(|(node_id, node)| {
+                let mut input_channels = self
+                    .input_targets_for_node(*node_id)
+                    .iter()
+                    .map(|(input_id, input_channel)| {
+                        NodeInput::new_single(
+                            target_buffer
+                                .get_target(input_id, *input_channel as usize)
+                                .lock()
+                                .unwrap()
+                                .get_bind_group()
+                                .unwrap(),
+                        )
+                    })
+                    .collect::<Vec<NodeInput>>();
+
+                // If this is a loopback node, set own outputs as inputs
+                if node.loopback {
+                    input_channels.insert(
+                        0,
+                        NodeInput::new_ring(
+                            target_buffer
+                                .get(node_id)
+                                .into_iter()
+                                .map(|target| target.lock().unwrap().get_bind_group().unwrap())
+                                .collect(),
+                        ),
+                    );
+                }
+
+                let render_targets = target_buffer
+                    .get(&node_id)
+                    .into_iter()
+                    .map(Arc::clone)
+                    .collect();
+
+                let dyn_offset_state = nodes.get(node_id).unwrap().binder.dyn_offset_state.clone();
+
                 (
                     *node_id,
                     NodeState {
                         node: Arc::clone(node),
-                        input_channels: self
-                            .input_targets_for_node(*node_id)
-                            .iter()
-                            .map(|(input_id, input_channel)| {
-                                target_buffer
-                                    .get_target(input_id, *input_channel as usize)
-                                    .lock()
-                                    .unwrap()
-                                    .get_bind_group()
-                                    .unwrap()
-                            })
-                            .collect::<Vec<Arc<wgpu::BindGroup>>>(),
-                        render_targets: target_buffer
-                            .get(&node_id)
-                            .into_iter()
-                            .map(Arc::clone)
-                            .collect(),
+                        inputs: input_channels,
+                        render_targets,
                         // Cloned for now
                         // common_buffers: common_buffers.clone(),
-                        dyn_offset_state: nodes
-                            .get(node_id)
-                            .unwrap()
-                            .binder
-                            .dyn_offset_state
-                            .clone(),
+                        dyn_offset_state,
                         // Register all node systems with metrics, and
                         // give them a system reporter
                         reporter: metrics_ui.register_system_id(&node.name, *node_id),

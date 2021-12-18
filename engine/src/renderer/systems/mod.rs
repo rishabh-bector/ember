@@ -1,4 +1,4 @@
-pub mod bounce;
+pub mod chain;
 pub mod channel;
 pub mod graph;
 pub mod quad;

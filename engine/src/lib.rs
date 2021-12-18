@@ -644,6 +644,129 @@ impl EngineBuilder {
             event_loop,
         ))
     }
+
+    // RENDER GRAPH TEST MODE
+    pub fn test_automata_node(self) -> Result<(Engine, EventLoop<()>)> {
+        warn!("RUNNING EXPERIMENTAL ENGINE MODE: test_automata_node");
+        info!("building engine: test_automata_node");
+
+        let (gpu, window, event_loop, registry, mut resources) = build_engine_common(
+            self.window_size,
+            self.texture_registry_builder,
+            self.mesh_registry_builder,
+        )?;
+        let gpu_mut = gpu.lock().unwrap();
+
+        info!("building uniforms");
+        let quad_group_builder = Arc::new(Mutex::new(QuadUniformGroup::builder()));
+
+        info!("building render graph nodes");
+
+        let node_chain = build_node_chain(
+            ShaderSource::WGSL(include_str!("renderer/shaders/automata.wgsl").to_owned()),
+            2,
+            Arc::clone(&quad_group_builder),
+        );
+
+        let camera_3d_group_builder = Arc::new(Mutex::new(Camera3DUniformGroup::builder()));
+        let node_channel = build_node_channel(
+            Arc::clone(&quad_group_builder),
+            Arc::clone(&camera_3d_group_builder),
+        );
+
+        info!("scheduling systems");
+        let mut schedule = Schedule::builder();
+        schedule
+            // Main engine systems
+            // Uniform loading systems
+            .flush()
+            .add_system(quad::load_system());
+
+        info!("building render graph");
+        let metrics_ui = EngineMetrics::new();
+        let mut graph_schedule = SubSchedule::new();
+        let (render_graph, engine_metrics) = GraphBuilder::new()
+            .with_channel(node_chain.dest_id.clone(), 0, node_channel.dest_id.clone())
+            .with_node(node_chain)
+            .with_master_node(node_channel)
+            .build(
+                Arc::clone(&gpu_mut.device),
+                Arc::clone(&gpu_mut.queue),
+                &mut resources,
+                &mut graph_schedule,
+                &registry,
+                &window,
+                metrics_ui,
+            )?;
+
+        info!("scheduling render graph");
+        graph_schedule.schedule(&mut schedule);
+        let schedule = schedule.build();
+
+        // resource
+        let input_helper = Arc::new(RwLock::new(WinitInputHelper::new()));
+
+        // resource
+        let frame_metrics = Arc::new(RwLock::new(FrameMetrics::new()));
+
+        // resource
+        let quad = {
+            let quad_group_builder = resources
+                .get::<Arc<Mutex<GroupStateBuilder<QuadUniformGroup>>>>()
+                .unwrap();
+
+            let builder_mut = quad_group_builder.lock().unwrap();
+
+            quad::Quad {
+                mesh: registry
+                    .meshes
+                    .read()
+                    .unwrap()
+                    .clone_mesh(&ID(SCREEN_QUAD_MESH_ID), &ID(PRIMITIVE_MESH_GROUP_ID)),
+                uniforms: Default::default(),
+                uniform_group: builder_mut.single_state(&gpu_mut.device, &gpu_mut.queue)?,
+            }
+        };
+
+        // resource
+        let camera_3d = Arc::new(Mutex::new(Camera3D::default(
+            self.window_size.0 as f32,
+            self.window_size.1 as f32,
+        )));
+
+        drop(gpu_mut);
+        resources.insert(quad);
+        resources.insert(Arc::clone(&gpu));
+        resources.insert(Arc::clone(&window));
+        resources.insert(Arc::clone(&registry.textures));
+        resources.insert(Arc::clone(&registry.meshes));
+        resources.insert(Arc::clone(&input_helper));
+        resources.insert(Arc::clone(&frame_metrics));
+        resources.insert(Arc::clone(&render_graph));
+        // resources.insert(Arc::clone(&render_3d_group_builder)); // what the shit is this?
+        resources.insert(Arc::clone(&camera_3d));
+
+        info!("ready to start!");
+        Ok((
+            Engine {
+                mode: EngineMode::Forward3D,
+                reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
+                input: input_helper,
+                legion: LegionState {
+                    world: World::default(),
+                    schedule,
+                    resources,
+                },
+                graph: render_graph,
+                registry,
+                window,
+                engine_metrics,
+                frame_metrics,
+                gpu,
+            },
+            event_loop,
+        ))
+    }
 }
 
 fn build_engine_common(
@@ -763,6 +886,11 @@ fn load_engine_textures(builder: &mut TextureRegistryBuilder, base_dir: &PathBuf
     );
 }
 
+// --------------------------------------------------
+// Render Graph Node Presets
+// --------------------------------------------------
+
+// pretty sure dynamic nodes are a dumb idea
 fn build_node_2d_forward_dynamic(
     render_2d_dynamic_group_builder: Arc<Mutex<UniformGroupBuilder<Render2DForwardDynamicGroup>>>,
     camera_2d_group_builder: Arc<Mutex<UniformGroupBuilder<Camera2DUniformGroup>>>,
@@ -783,6 +911,7 @@ fn build_node_2d_forward_dynamic(
     .with_system(render_2d::forward_dynamic::render_system)
 }
 
+// generic instanced 2d meshes (with lighting apparently)
 fn build_node_2d_forward_instance(
     camera_2d_group_builder: Arc<Mutex<UniformGroupBuilder<Camera2DUniformGroup>>>,
     lighting_2d_group_builder: Arc<Mutex<UniformGroupBuilder<Lighting2DUniformGroup>>>,
@@ -802,6 +931,7 @@ fn build_node_2d_forward_instance(
     .with_system(render_2d::forward_instance::render_system)
 }
 
+// generic 3d meshes
 fn build_node_3d_forward_basic(
     render_3d_group_builder: Arc<Mutex<UniformGroupBuilder<Render3DForwardUniformGroup>>>,
     camera_3d_group_builder: Arc<Mutex<UniformGroupBuilder<Camera3DUniformGroup>>>,
@@ -822,7 +952,7 @@ fn build_node_3d_forward_basic(
     .with_system(render_3d::forward_basic::render_system)
 }
 
-// similar to channel, but meant for raytracing
+// shader renders onto a flat fullscreen quad, intended for ray-tracing
 fn build_node_quad(
     quad_group_builder: Arc<Mutex<UniformGroupBuilder<QuadUniformGroup>>>,
     camera_3d_group_builder: Arc<Mutex<UniformGroupBuilder<Camera3DUniformGroup>>>,
@@ -836,7 +966,7 @@ fn build_node_quad(
         .with_system(quad::render_system)
 }
 
-// similar to node, but meant for post-processing
+// shader renders onto a flat fullscreen quad, intended for post-processing
 fn build_node_channel(
     quad_group_builder: Arc<Mutex<UniformGroupBuilder<QuadUniformGroup>>>,
     camera_3d_group_builder: Arc<Mutex<UniformGroupBuilder<Camera3DUniformGroup>>>,
@@ -855,20 +985,60 @@ fn build_node_channel(
     .with_system(channel::render_system)
 }
 
-// runs two quad shader nodes which loop back into each other several times
+// node swaps the inputs and render targets to the node each time (ping-pong)
 fn build_node_chain(
     shader_source: ShaderSource,
+    chain_size: u32,
     quad_group_builder: Arc<Mutex<UniformGroupBuilder<QuadUniformGroup>>>,
-    camera_3d_group_builder: Arc<Mutex<UniformGroupBuilder<Camera3DUniformGroup>>>,
 ) -> NodeBuilder {
-    NodeBuilder::new("render_bounce_node".to_owned(), 1, 1, shader_source.clone())
-        .with_id(ID(BOUNCE_NODE_ID))
-        .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
+    //
+    // Notes for Nodes and NodeBuilders
+    //
+    // 1 GRAPH input (node = self), 1 GRAPH output (node = channelmaster)
+    NodeBuilder::new("render_chain_node".to_owned(), 1, 1, shader_source.clone())
+        .with_id(ID(CHAIN_NODE_ID))
+        //
+        // Shader bindgroup 0 is where the single graph input goes
         .with_node_input()
+        //
+        // Alternate between 2 inputs (should have 2 graph inputs)
+        //  - If the chain_mode is 2:
+        //
+        //    Graph will ensure that NodeState has 2 graph inputs, will likely both be Self.
+        //    In this case, the system should alternate between inputs 0 and 1 each frame.
+        //
+        //    So:
+        //    Frame 0:  0 -> node_chain -> 1, 1 -> node_channel -> swap
+        //    Frame 1:  1 -> node_chain -> 0, 0 -> node_channel -> swap
+        //    Frame 2:  Back to 0
+        //
+        //  In this case, the chain node has different inputs and outputs each frame.
+        //  As a result, its parents (node_channel) have different inputs each frame.
+        //
+        // Changes to Graph/Scheduler for nodes with loopback enabled:
+        //  - [X] (startup) Give them multiple output targets even though graph_out is 1
+        //  - [X] (startup) Add their output targets to own input_channels even though graph_in is 1
+        //  - [ ] (runtime) For loopbacks, NodeState alternates render_targets and input_channels
+        //
+        //  - [ ] (startup) input_channels of node_channel are 2 even though graph_in is 1
+        //  - [ ] (runtime) NodeState of node_channel alternates input_channels
+        //
+        .with_loopback()
+        //
+        // Regular setup, vertex layout + uniform groups + system
+        .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
         .with_shared_uniform_group(Arc::clone(&quad_group_builder))
-        .with_shared_uniform_group(Arc::clone(&camera_3d_group_builder))
-        .with_system(bounce::render_system)
+        .with_system(chain::render_system)
+    //
+    // Eventually:
+    //  - Replace one-function-per-node with something cleaner?
+    //  - Make builder more intelligent
+    //  - Both of the above should probably happen along with RSL
 }
+
+// --------------------------------------------------
+//
+// --------------------------------------------------
 
 pub struct LegionState {
     pub schedule: Schedule,

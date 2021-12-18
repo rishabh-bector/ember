@@ -12,20 +12,20 @@ pub fn render(
     #[resource] device: &Arc<wgpu::Device>,
     #[resource] queue: &Arc<wgpu::Queue>,
 ) {
-    debug!("running system render_bounce (graph node)");
+    debug!("running system render_chain (graph node)");
     let start_time = Instant::now();
     let node = Arc::clone(&state.node);
 
-    let render_target = state.get_chain_target();
+    let render_target = state.render_target();
     let render_target_mut = render_target.lock().unwrap();
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("Bounce Encoder"),
+        label: Some("chain Encoder"),
     });
 
-    let pass_res = render_target_mut.create_render_pass("bounce_render", &mut encoder, true);
+    let pass_res = render_target_mut.create_render_pass("chain_render", &mut encoder, true);
     if pass_res.is_err() {
-        warn!("no target, aborting render pass: bounce_channel");
+        warn!("no target, aborting render pass: chain_channel");
         return;
     }
 
@@ -33,14 +33,9 @@ pub fn render(
     pass.set_pipeline(&node.pipeline);
 
     pass.set_bind_group(1, &quad.uniform_group.bind_group, &[]);
-    pass.set_bind_group(
-        2,
-        &node.binder.uniform_groups[&ID(CAMERA_3D_BIND_GROUP_ID)],
-        &[],
-    );
 
     // NODE INPUT
-    pass.set_bind_group(0, &state.input_channels[0], &[]);
+    pass.set_bind_group(0, &state.inputs[0].bind_group_ref(), &[]);
 
     pass.set_vertex_buffer(0, quad.mesh.vertex_buffer.buffer.0.slice(..));
     pass.set_index_buffer(
@@ -53,6 +48,6 @@ pub fn render(
     drop(pass);
     queue.submit(std::iter::once(encoder.finish()));
 
-    debug!("bounce_render pass submitted");
+    debug!("chain_render pass submitted");
     state.reporter.update(start_time.elapsed().as_secs_f64());
 }

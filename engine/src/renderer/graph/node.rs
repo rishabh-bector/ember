@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use uuid::Uuid;
+use wgpu::BindGroup;
 
 use crate::{
     renderer::uniform::group::GroupResourceBuilder,
@@ -22,19 +23,7 @@ pub struct RenderNode {
     pub master: bool,
 
     pub graph_inputs: u32,
-
-    // chain_mode: whether or not to enable chain mode
-    // chain_index: next graph_input to use from the RenderTargets in NodeState
-    //
-    // Usually, the node uses all graph inputs (outputs from other nodes, aka textures) per
-    // render pass. However, sometimes it is useful for a node to conditionally select from one of
-    // several inputs, in which case the shader only takes 1 texture in. This allows for the
-    // common "ping-pong" buffer pattern in which a single shader pipeline takes a texture in,
-    // renders to a second texture, and then swaps the two; the net result is to edit in place.
-    // In that case, the chain_index would alternate between 0 and 1 if chain_mode was true.
-    //
-    pub chain_mode: bool,
-    pub chain_index: u32,
+    pub loopback: bool,
 
     // Number of output textures (RenderTargets)
     pub render_outputs: u32,
@@ -45,6 +34,82 @@ pub struct RenderNode {
     pub depth_buffer: bool,
 
     pub system: Arc<Box<dyn SubSchedulable>>,
+}
+
+// If the input node renders to different targets per-frame,
+// it will be represented as a "Ring" (increments every frame).
+pub enum NodeInput {
+    Single {
+        target: Arc<BindGroup>,
+    },
+    Ring {
+        targets: Vec<Arc<BindGroup>>,
+        last: usize,
+    },
+}
+
+impl NodeInput {
+    pub fn new_single(target: Arc<BindGroup>) -> Self {
+        Self::Single { target }
+    }
+
+    pub fn new_ring(targets: Vec<Arc<BindGroup>>) -> Self {
+        Self::Ring {
+            last: targets.len(),
+            targets,
+        }
+    }
+
+    pub fn bind_group_ref(&mut self) -> &BindGroup {
+        match self {
+            NodeInput::Single { target } => target,
+            NodeInput::Ring { targets, last } => {
+                *last += 1;
+                if *last >= targets.len() {
+                    *last = 0;
+                }
+                &targets[*last]
+            }
+        }
+    }
+
+    // pub fn bind_group(&mut self) -> Option<Arc<BindGroup>> {
+    //     match self {
+    //         NodeInput::Single { target } => Some(Arc::clone(target)),
+    //         NodeInput::Ring { .. } => self.pick_from_ring(),
+    //     }
+    // }
+
+    // pub fn pick_from_ring(&mut self) -> Option<Arc<BindGroup>> {
+    //     match self {
+    //         NodeInput::Ring { targets, last } => {
+    //             *last += 1;
+    //             if *last >= targets.len() {
+    //                 *last = 0;
+    //             }
+    //             Some(Arc::clone(&targets[*last]))
+    //         }
+    //         _ => None,
+    //     }
+    // }
+
+    pub fn arc(&self) -> Self {
+        match self {
+            NodeInput::Single { target } => NodeInput::Single {
+                target: Arc::clone(target),
+            },
+            NodeInput::Ring { targets, last } => NodeInput::Ring {
+                targets: targets.into_iter().map(Arc::clone).collect(),
+                last: *last,
+            },
+        }
+    }
+}
+
+impl Clone for NodeInput {
+    fn clone(&self) -> Self {
+        self.arc()
+    }
 }
 
 pub struct PipelineBinder {
@@ -72,10 +137,9 @@ pub enum BindIndex {
 pub struct NodeBuilder {
     pub name: String,
     pub master: bool,
-    pub graph_inputs: u32,
 
-    pub chain_mode: bool,
-    pub chain_index: u32,
+    pub graph_inputs: u32,
+    pub loopback: bool,
 
     pub render_outputs: u32,
     pub depth_buffer: bool,
@@ -100,8 +164,7 @@ impl NodeBuilder {
             dest_id: Uuid::new_v4(),
             depth_buffer: false,
             master: false,
-            chain_mode: false,
-            chain_index: 0,
+            loopback: false,
             uniform_group_builders: vec![],
             vertex_buffer_layouts: vec![],
             bind_groups: vec![],
@@ -170,6 +233,11 @@ impl NodeBuilder {
 
     pub fn with_depth_buffer(mut self) -> Self {
         self.depth_buffer = true;
+        self
+    }
+
+    pub fn with_loopback(mut self) -> Self {
+        self.loopback = true;
         self
     }
 }
@@ -343,8 +411,7 @@ impl NodeBuilderTrait for NodeBuilder {
             system: Arc::clone(&self.system.as_ref().unwrap()),
             master: self.master,
             depth_buffer: self.depth_buffer,
-            chain_index: self.chain_index,
-            chain_mode: self.chain_mode,
+            loopback: self.loopback,
             binder,
             pipeline,
             shader_module,

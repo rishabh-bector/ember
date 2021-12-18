@@ -16,7 +16,7 @@ pub fn render(
     let start_time = Instant::now();
     let node = Arc::clone(&state.node);
 
-    let render_target = state.get_render_target(0);
+    let render_target = state.render_target();
     let render_target_mut = render_target.lock().unwrap();
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -40,7 +40,7 @@ pub fn render(
     );
 
     // NODE INPUT
-    pass.set_bind_group(0, &state.input_channels[0], &[]);
+    pass.set_bind_group(0, state.inputs[0].bind_group_ref(), &[]);
 
     pass.set_vertex_buffer(0, quad.mesh.vertex_buffer.buffer.0.slice(..));
     pass.set_index_buffer(

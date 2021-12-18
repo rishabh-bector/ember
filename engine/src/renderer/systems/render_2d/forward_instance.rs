@@ -117,7 +117,7 @@ pub fn render(
         label: Some("render_2d_forward_instance_encoder"),
     });
 
-    let render_target = state.get_render_target(0);
+    let render_target = state.render_target();
     let render_target_mut = render_target.lock().unwrap();
 
     let mut pass = render_target_mut
