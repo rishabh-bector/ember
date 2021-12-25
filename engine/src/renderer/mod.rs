@@ -120,7 +120,7 @@ impl GpuState {
     pub fn resize(&mut self, new_size: (u32, u32)) {
         let current_size = SCREEN_SIZE.read().unwrap();
         if current_size.0 == new_size.0 && current_size.1 == new_size.1 {
-            warn!(
+            debug!(
                 "gpu_state resize() called but new_size the same: {:?}",
                 new_size
             );

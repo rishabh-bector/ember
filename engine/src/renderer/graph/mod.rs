@@ -4,6 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use uuid::Uuid;
+use wgpu::BindGroup;
 
 use crate::{
     constants::{ID, METRICS_UI_IMGUI_ID},
@@ -44,8 +45,7 @@ pub struct NodeState {
     // This is currently not the case, and so the Vec<> is redundant.
     pub render_targets: Vec<Arc<Mutex<RenderTarget>>>,
 
-    // If chain_mode is enabled, chain_index will be greater than 0.
-    pub chain_index: u32,
+    pub last_target: u32,
 
     // uniform group id -> [(element size, buffer size)]
     pub dyn_offset_state: HashMap<Uuid, (Arc<Mutex<u64>>, Vec<(u64, u64)>)>,
@@ -56,6 +56,14 @@ pub struct NodeState {
 impl NodeState {
     pub fn render_target(&self) -> Arc<Mutex<RenderTarget>> {
         Arc::clone(&self.render_targets[0])
+    }
+
+    pub fn cycle_target(&mut self) -> Arc<Mutex<RenderTarget>> {
+        self.last_target += 1;
+        if self.last_target >= self.render_targets.len() as u32 {
+            self.last_target = 0;
+        }
+        Arc::clone(&self.render_targets[self.last_target as usize])
     }
 
     // pub fn get_render_target(&self, index: u32) -> Arc<Mutex<RenderTarget>> {
@@ -69,18 +77,28 @@ impl NodeState {
     //     if self.chain_index >= self.render_targets.len() as u32 {
     //         self.chain_index = 0;
     //     }
-
     //     target
     // }
 }
 
 pub struct RenderGraph {
+    // Channels represent I/O between nodes. The output buffer of source_node
+    // will be used as a texture input to dest_node.
+    //
     // (source_node, source_channel, dest_node)
     pub channels: Vec<(Uuid, u32, Uuid)>,
+
+    // Chains represent shared render targets between nodes. All nodes will
+    // render to the same target in the given order (configurable blending).
+    //
+    pub chains: Vec<Vec<Uuid>>,
+
+    // Nodes
     pub nodes: HashMap<Uuid, Arc<RenderNode>>,
     pub source_nodes: Vec<Uuid>,
     pub master_node: Uuid,
 
+    // Targets
     pub swap_chain_target: Arc<Mutex<RenderTarget>>,
     pub ui_target: Arc<Mutex<RenderTarget>>,
     pub node_targets: TargetBuffer,
@@ -92,6 +110,8 @@ pub struct GraphBuilder {
     pub master_node: Option<Uuid>,
 
     pub channels: Vec<(Uuid, u32, Uuid)>,
+    pub chains: Vec<Vec<Uuid>>,
+
     pub node_states: HashMap<Uuid, NodeState>,
     pub dest: Option<Arc<RenderGraph>>,
     pub ui_mode: UIMode,
@@ -103,11 +123,12 @@ impl GraphBuilder {
     pub fn new() -> GraphBuilder {
         Self {
             node_builders: HashMap::new(),
-            source_nodes: vec![],
-            master_node: None,
-            channels: vec![],
             node_states: HashMap::new(),
+            master_node: None,
             dest: None,
+            source_nodes: vec![],
+            channels: vec![],
+            chains: vec![],
             ui_mode: UIMode::Disabled,
         }
     }
@@ -130,6 +151,11 @@ impl GraphBuilder {
 
     pub fn with_channel(mut self, input: Uuid, input_index: u32, output: Uuid) -> Self {
         self.channels.push((input, input_index, output));
+        self
+    }
+
+    pub fn with_chain(mut self, chain: Vec<Uuid>) -> Self {
+        self.chains.push(chain);
         self
     }
 
@@ -166,12 +192,45 @@ impl GraphBuilder {
         debug!("creating render graph node_targets");
         let screen_size = SCREEN_SIZE.read().unwrap();
         info!(
-            "SCREEN_SIZE AT TARGET BUILD: {}, {}",
+            "screen size at target build: {}, {}",
             screen_size.0, screen_size.1
         );
 
         let texture_registry = registry.textures.read().unwrap();
         let mut master = Uuid::default();
+
+        // --------------------------------------------------
+        //                  Render Targets
+        // --------------------------------------------------
+        
+        let mut chained_nodes: Vec<Uuid> = self.chains.clone().into_iter().flatten().collect();
+        chained_nodes.sort_unstable();
+        chained_nodes.dedup();
+
+        let link_to_leader: HashMap<Uuid, Uuid> = chained_nodes.iter().map(|link| {
+            for chain in &self.chains {
+                if chain.contains(link) {
+                    return (*link, chain[chain.len() - 1])
+                }
+            }
+            panic!("wtf");
+        }).collect();
+
+        // For now, chains can only have 1 render output
+        let chain_targets: HashMap<Uuid, Arc<Mutex<RenderTarget>>> = self.chains.iter().map(|chain| {
+            let leader = chain[chain.len() - 1];
+            let leader_node = Arc::clone(&nodes[&leader]);
+
+            let depth = match leader_node.depth_buffer {
+                true => Some(Arc::new(DepthBuffer::new(&leader_node.name, (screen_size.0, screen_size.1), Arc::clone(&device)))),
+                false => None,
+            };
+            let target = Arc::new(Mutex::new(RenderTarget::new(&leader_node.name, (screen_size.0, screen_size.1), depth, &texture_registry, Arc::clone(&device))));
+
+            (leader, target)
+        }).collect();
+
+
         let targets = nodes
             .iter()
             .map(|(id, node)| {
@@ -182,12 +241,7 @@ impl GraphBuilder {
                         Some(
                             (0..node.render_outputs)
                                 .map(|_| {
-                                    Arc::new(DepthBuffer(Texture::depth_buffer(
-                                        &format!("{}_depth_target", node.name),
-                                        &device,
-                                        (screen_size.0, screen_size.1),
-                                        wgpu::TextureFormat::Depth32Float,
-                                    )))
+                                    Arc::new(DepthBuffer::new(&node.name, (screen_size.0, screen_size.1), Arc::clone(&device))) 
                                 })
                                 .collect::<Vec<Arc<DepthBuffer>>>(),
                         )
@@ -195,74 +249,56 @@ impl GraphBuilder {
                 };
                 Ok((
                     *id,
-                    match node.master {
-                        true => {
-                            master = node.id;
-                            vec![Arc::new(Mutex::new(RenderTarget::empty_master(
-                                depth_buffers
-                                    .map_or_else(|| None, |bufs| Some(Arc::clone(&bufs[0]))),
-                            )))]
-                        }
-                        false => {
-                            //
-                            // Multiple render targets even though render_outputs is 1 (loopback)
-                            if node.loopback {
-                                (0..2)
-                                    .map(|out_index| {
-                                        Arc::new(Mutex::new(RenderTarget::Texture {
-                                            color_buffer: Arc::new(
-                                                Texture::blank(
-                                                    (screen_size.0, screen_size.1),
-                                                    &device,
-                                                    texture_registry.format,
-                                                    &texture_registry.bind_layout,
-                                                    Some(&format!("{}_render_target", node.name)),
-                                                    true,
-                                                )
-                                                .unwrap(),
-                                            ),
-                                            depth_buffer: match &depth_buffers {
-                                                Some(bufs) => {
-                                                    Some(Arc::clone(&bufs[out_index as usize]))
-                                                }
-                                                None => None,
-                                            },
-                                        }))
-                                    })
-                                    .collect::<Vec<Arc<Mutex<RenderTarget>>>>()
+                    if node.master {
+                        master = node.id;
+                        vec![Arc::new(Mutex::new(RenderTarget::empty_master(
+                            depth_buffers
+                                .map_or_else(|| None, |bufs| Some(Arc::clone(&bufs[0]))),
+                        )))]
+                    } else {
+                        //
+                        // Multiple render targets even though render_outputs is 1 (loopback)
+                        if node.loopback && node.render_outputs == 1 {
+                            (0..2)
+                                .map(|out_index| {
+                                    Arc::new(Mutex::new(
+                                        RenderTarget::new(&node.name, (screen_size.0, screen_size.1), match &depth_buffers {
+                                            Some(bufs) => {
+                                                Some(Arc::clone(&bufs[out_index as usize]))
+                                            }
+                                            None => None,
+                                        }, &texture_registry, Arc::clone(&device))
+                                    ))
+                                })
+                                .collect::<Vec<Arc<Mutex<RenderTarget>>>>()
+                        } else {
+
                             //
                             // Multiple render targets for no reason (UNUSUAL)
+                            if node.render_outputs > 1 {
+                                panic!("this will add multiple render TARGETs, but you probably want to add multiple ATTACHMENTS on the same TARGET");
+                            }
+                            //
+                            // Single render target
+                            //
+                            // If this node is part of a chain, arc the target from
+                            // the chain leader instead of creating a new one.
+                            // 
+
+                            if chained_nodes.contains(&node.id) { 
+                                vec![Arc::clone(&chain_targets[&link_to_leader[&node.id]])]
                             } else {
-                                if node.render_outputs > 1 {
-                                    panic!("this will add multiple render TARGETs, but you probably want to add multiple ATTACHMENTS on the same TARGET");
-                                }
-                                (0..node.render_outputs)
-                                    .map(|out_index| {
-                                        Arc::new(Mutex::new(RenderTarget::Texture {
-                                            color_buffer: Arc::new(
-                                                Texture::blank(
-                                                    // TODO: Make actual config (part of SHIP: EngineBuilder)
-                                                    (screen_size.0, screen_size.1),
-                                                    &device,
-                                                    texture_registry.format,
-                                                    &texture_registry.bind_layout,
-                                                    Some(&format!("{}_render_target", node.name)),
-                                                    true,
-                                                )
-                                                .unwrap(),
-                                            ),
-                                            depth_buffer: match &depth_buffers {
-                                                Some(bufs) => {
-                                                    Some(Arc::clone(&bufs[out_index as usize]))
-                                                }
-                                                None => None,
-                                            },
-                                        }))
-                                    })
-                                    .collect::<Vec<Arc<Mutex<RenderTarget>>>>()
+                                vec![Arc::new(Mutex::new(
+                                    RenderTarget::new(&node.name, (screen_size.0, screen_size.1), match &depth_buffers {
+                                        Some(bufs) => {
+                                            Some(Arc::clone(&bufs[0 as usize]))
+                                        }
+                                        None => None,
+                                    }, &texture_registry, Arc::clone(&device))
+                                ))]
                             }
                         }
-                    },
+                    }
                 ))
             })
             .collect::<Result<HashMap<Uuid, Vec<Arc<Mutex<RenderTarget>>>>>>()?;
@@ -277,9 +313,13 @@ impl GraphBuilder {
             UIMode::Node(id) => Arc::clone(&target_buffer.get_target(id, 0)),
         };
 
+        // --------------------------------------------------
+        //                    Node States
+        // --------------------------------------------------
+
         // Build all NodeStates; each render node's system has this internal state,
         // allowing it to access the target bind groups of its inputs
-        // as well as its own target texture
+        // as well as its own target texture.
         debug!("building node states");
         let node_states: HashMap<Uuid, NodeState> = nodes
             .iter()
@@ -288,14 +328,19 @@ impl GraphBuilder {
                     .input_targets_for_node(*node_id)
                     .iter()
                     .map(|(input_id, input_channel)| {
-                        NodeInput::new_single(
-                            target_buffer
-                                .get_target(input_id, *input_channel as usize)
-                                .lock()
-                                .unwrap()
-                                .get_bind_group()
-                                .unwrap(),
-                        )
+                        let bind_groups = target_buffer
+                            .get(input_id)
+                            .into_iter()
+                            .map(|target| target.lock().unwrap().get_bind_group().unwrap())
+                            .collect::<Vec<Arc<BindGroup>>>();
+
+                        // If this out channel of the input_node is a Ring, add all targets
+                        if bind_groups.len() > 1 {
+                            NodeInput::new_ring(bind_groups)
+                        // Otherwise it is a single target
+                        } else {
+                            NodeInput::new_single(Arc::clone(&bind_groups[*input_channel as usize]))
+                        }
                     })
                     .collect::<Vec<NodeInput>>();
 
@@ -333,7 +378,7 @@ impl GraphBuilder {
                         // Register all node systems with metrics, and
                         // give them a system reporter
                         reporter: metrics_ui.register_system_id(&node.name, *node_id),
-                        chain_index: 0,
+                        last_target: 0,
                     },
                 )
             })
@@ -358,11 +403,15 @@ impl GraphBuilder {
             } // _ => (debug!("ui is disabled")),
         }
 
-        debug!("scheduling render systems");
+        // --------------------------------------------------
+        //                  Graph Scheduler
+        // --------------------------------------------------
 
         //////////////////////////////////
         // BEGIN RENDER GRAPH SCHEDULER //
         //////////////////////////////////
+         
+        debug!("scheduling render systems");
 
         // Request target from swap chain, store in graph
         sub_schedule.add_stateless(Arc::new(Box::new(StatelessSystem::new(
@@ -379,20 +428,6 @@ impl GraphBuilder {
 
         // REQUIREMENT: Unique ID per node in the graph.
 
-        // // First, schedule the source nodes
-
-        // for source_id in &self.source_nodes {
-        //     sub_schedule.add_node(
-        //         Arc::clone(&nodes.get(source_id).unwrap().system),
-        //         node_states.get(source_id).unwrap().to_owned(),
-        //     );
-        // }
-
-        // sub_schedule.add_node(
-        //     Arc::clone(&nodes.get(source_id).unwrap().system),
-        //     node_states.get(source_id).unwrap().to_owned(),
-        // );
-
         //
 
         // Schedule the source and channel nodes via the graph.
@@ -401,16 +436,28 @@ impl GraphBuilder {
         let master_map = self.build_map(master);
 
         match master_map {
-            Some(mm) => {
-                let mut exec_order: Vec<(Uuid, u32)> = mm.clone().into_iter().flatten().collect();
-                exec_order.reverse();
-
-                for (node, out_index) in exec_order {
-                    sub_schedule.add_node(
-                        Arc::clone(&nodes.get(&node).unwrap().system),
-                        node_states.get(&node).unwrap().to_owned(),
-                    );
+            Some(mut mm) => {
+                mm.reverse();
+                for mut exec_layer in mm {
+                    exec_layer.reverse();
+                    for (node, _out_index) in exec_layer {
+                        sub_schedule.add_node(
+                            Arc::clone(&nodes.get(&node).unwrap().system),
+                            node_states.get(&node).unwrap().to_owned(),
+                        );
+                    }
+                    sub_schedule.flush();
                 }
+
+                // let mut exec_order: Vec<(Uuid, u32)> = mm.clone().into_iter().flatten().collect();
+                // exec_order.reverse();
+
+                // for (node, _out_index) in exec_order {
+                //     sub_schedule.add_node(
+                //         Arc::clone(&nodes.get(&node).unwrap().system),
+                //         node_states.get(&node).unwrap().to_owned(),
+                //     );
+                // }
             }
             // Single-node graph
             None => {}
@@ -457,6 +504,7 @@ impl GraphBuilder {
             node_targets: target_buffer,
             swap_chain_target,
             channels: self.channels.clone(),
+            chains: self.chains.clone(),
             source_nodes: self.source_nodes.clone(),
             master_node: self
                 .master_node
@@ -481,7 +529,7 @@ impl GraphBuilder {
             dependency_layers.push(vec![]);
             dependency_layers[current_layer].extend(current_inputs);
 
-            for (in_id, in_index) in dependency_layers[current_layer].clone() {
+            for (in_id, _in_index) in dependency_layers[current_layer].clone() {
                 match self.build_map(in_id) {
                     Some(input_map) => dependency_layers.extend(input_map),
                     None => (),

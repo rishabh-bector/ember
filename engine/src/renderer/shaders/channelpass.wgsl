@@ -56,14 +56,6 @@ var node_input_smp: sampler;
 
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-
-    // gamma correction
-    // pixel_color = pow(pixel_color, vec3<f32>(0.4545));
-    var m: f32 = 0.1;
-    // return vec4<f32>(in.screen_pos, 0.0, 1.0);
-    return mix(
-        textureSample(node_input_tex, node_input_smp, in.screen_pos),
-        vec4<f32>(0.0, 1.0, 0.0, 1.0),
-        vec4<f32>(m, m, m, m)
-    );
+   var out: vec4<f32> = textureSample(node_input_tex, node_input_smp, in.screen_pos);
+   return out;
 }

@@ -159,7 +159,7 @@ pub fn render(
     let render_target = state.render_target();
     let render_target_mut = render_target.lock().unwrap();
 
-    let pass_res = render_target_mut.create_render_pass("forward_render_3d", &mut encoder, true);
+    let pass_res = render_target_mut.create_render_pass("forward_render_3d", &mut encoder, false);
     if pass_res.is_err() {
         warn!("no target, aborting render pass: render_3d_forward_basic");
         return;
@@ -173,11 +173,6 @@ pub fn render(
         &node.binder.uniform_groups[&ID(CAMERA_3D_BIND_GROUP_ID)],
         &[],
     );
-    // pass.set_bind_group(
-    //     3,
-    //     &node.binder.uniform_groups[&ID(LIGHTING_2D_BIND_GROUP_ID)],
-    //     &[],
-    // );
 
     let mut query = <(&Render3D, &Mesh, &GroupState)>::query();
     for (render_3d, mesh, group_state) in query.iter(world) {
@@ -190,10 +185,10 @@ pub fn render(
             wgpu::IndexFormat::Uint32,
         );
 
-        info!(
-            "RENDER 3D drawing entity with {} triangles",
-            mesh.indices.len() / 3
-        );
+        // info!(
+        //     "RENDER 3D drawing entity with {} triangles",
+        //     mesh.indices.len() / 3
+        // );
         pass.draw_indexed(0..mesh.index_buffer.buffer.1, 0, 0..1);
     }
 

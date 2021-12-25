@@ -47,7 +47,13 @@ pub fn camera_3d(
     let input = input.read().unwrap();
 
     // Mouse movement
-    let (dx, dy) = input.mouse_diff();
+    let (dx, dy) = if camera.first {
+        camera.first = false;
+        input.mouse().unwrap_or_default()
+    } else {
+        input.mouse_diff()
+    };
+
     camera.yaw += dx * camera.sensitivity;
     camera.pitch -= dy * camera.sensitivity;
     if camera.pitch > 89.0 {

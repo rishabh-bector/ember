@@ -20,20 +20,43 @@ use super::NodeState;
 pub struct RenderNode {
     pub id: Uuid,
     pub name: String,
-    pub master: bool,
 
-    pub graph_inputs: u32,
-    pub loopback: bool,
+    pub master: bool,       //  Is this the master node?
+    pub loopback: bool,     //  Should this node alternate targets and inputs?
+    pub depth_buffer: bool, //  Should this node have a depth buffer attached?
+
+    // Pipeline settings
+    pub reverse_cull: bool, //  Should front faces be culled instead of back faces?
+
+    // pub blend: bool, //  Should this node render/blend into another node's target?
+    //
+    // Currently, each render graph node has its own outputs, because it is assumed
+    // that some later node(s) in the graph will use said outputs as inputs.
+    //
+    // However, source passes often need to render into the same render target with blending.
+    // Example: draw sky, then draw objects with different render nodes but into same target as sky.
+    //
+    // // How should RenderGraph provide this functionality? // //
+    //
+    // Ideas:
+    // - with_channel() specifies "dependency" links while with_chain() specifies shared targets
+    // - nodes which are to share a target are added altogether? e.g. chain(vec![n1, n2, n3])
+    //
 
     // Number of output textures (RenderTargets)
     pub render_outputs: u32,
+    pub graph_inputs: u32,
 
     pub pipeline: wgpu::RenderPipeline,
     pub shader_module: wgpu::ShaderModule,
     pub binder: PipelineBinder,
-    pub depth_buffer: bool,
 
     pub system: Arc<Box<dyn SubSchedulable>>,
+}
+
+pub enum NodeOutput {
+    Single,
+    Ring,
 }
 
 // If the input node renders to different targets per-frame,
@@ -144,6 +167,8 @@ pub struct NodeBuilder {
     pub render_outputs: u32,
     pub depth_buffer: bool,
 
+    pub reverse_cull: bool,
+
     pub shader_source: ShaderSource,
     pub bind_groups: Vec<BindIndex>,
     pub vertex_buffer_layouts: Vec<wgpu::VertexBufferLayout<'static>>,
@@ -165,6 +190,7 @@ impl NodeBuilder {
             depth_buffer: false,
             master: false,
             loopback: false,
+            reverse_cull: false,
             uniform_group_builders: vec![],
             vertex_buffer_layouts: vec![],
             bind_groups: vec![],
@@ -238,6 +264,11 @@ impl NodeBuilder {
 
     pub fn with_loopback(mut self) -> Self {
         self.loopback = true;
+        self
+    }
+
+    pub fn with_reverse_culling(mut self) -> Self {
+        self.reverse_cull = true;
         self
     }
 }
@@ -330,7 +361,10 @@ impl NodeBuilderTrait for NodeBuilder {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
+                cull_mode: Some(match self.reverse_cull {
+                    true => wgpu::Face::Front,
+                    false => wgpu::Face::Back,
+                }),
                 polygon_mode: wgpu::PolygonMode::Fill,
                 clamp_depth: false,
                 conservative: false,
@@ -412,6 +446,7 @@ impl NodeBuilderTrait for NodeBuilder {
             master: self.master,
             depth_buffer: self.depth_buffer,
             loopback: self.loopback,
+            reverse_cull: self.reverse_cull,
             binder,
             pipeline,
             shader_module,

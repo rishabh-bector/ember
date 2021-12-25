@@ -32,7 +32,7 @@ use winit::{
 use winit_input_helper::WinitInputHelper;
 
 use crate::{
-    components::FrameMetrics,
+    components::{FrameMetrics, Transform3D},
     constants::*,
     renderer::{
         buffer::{instance::*, *},
@@ -42,8 +42,10 @@ use crate::{
         },
         mesh::Mesh,
         systems::{
-            quad::QuadUniformGroup, render_2d::forward_dynamic::Render2DForwardDynamicGroup,
-            render_3d::forward_basic::Render3DForwardUniformGroup, *,
+            quad::QuadUniformGroup,
+            render_2d::forward_dynamic::Render2DForwardDynamicGroup,
+            render_3d::forward_basic::{Render3D, Render3DForwardUniformGroup},
+            *,
         },
         uniform::group::{GroupStateBuilder, UniformGroupBuilder, UniformGroupType},
         GpuState, GpuStateBuilder,
@@ -535,12 +537,16 @@ impl EngineBuilder {
         let render_3d_group_builder = Arc::new(Mutex::new(Render3DForwardUniformGroup::builder()));
 
         info!("building render graph nodes");
-        let node_channel = build_node_channel(
-            Arc::clone(&quad_group_builder),
+        let node_sky = build_node_sky(
+            Arc::clone(&render_3d_group_builder),
             Arc::clone(&camera_3d_group_builder),
         );
-        let node_3d_forward_basic = build_node_3d_forward_basic(
+        let node_3d = build_node_3d_forward_basic(
             Arc::clone(&render_3d_group_builder),
+            Arc::clone(&camera_3d_group_builder),
+        );
+        let node_channel = build_node_channel(
+            Arc::clone(&quad_group_builder),
             Arc::clone(&camera_3d_group_builder),
         );
 
@@ -549,6 +555,7 @@ impl EngineBuilder {
         schedule
             // Main engine systems
             .add_system(camera_3d_system())
+            .add_system(sky::update_system())
             // Uniform loading systems
             .flush()
             .add_system(camera_3d_uniform_system())
@@ -558,13 +565,13 @@ impl EngineBuilder {
         info!("building render graph");
         let metrics_ui = EngineMetrics::new();
         let mut graph_schedule = SubSchedule::new();
+
         let (render_graph, engine_metrics) = GraphBuilder::new()
-            .with_channel(
-                node_3d_forward_basic.dest_id.clone(),
-                0,
-                node_channel.dest_id.clone(),
-            )
-            .with_source_node(node_3d_forward_basic)
+            .with_channel(node_sky.dest_id.clone(), 0, node_3d.dest_id.clone())
+            .with_channel(node_3d.dest_id.clone(), 0, node_channel.dest_id.clone())
+            .with_chain(vec![node_sky.dest_id.clone(), node_3d.dest_id.clone()])
+            .with_source_node(node_sky)
+            .with_source_node(node_3d)
             .with_master_node(node_channel)
             .build(
                 Arc::clone(&gpu_mut.device),
@@ -611,8 +618,30 @@ impl EngineBuilder {
             self.window_size.1 as f32,
         )));
 
+        // resource
+        let sky = {
+            // where the fuck is this added into resources?
+            let r3d_group_builder = resources
+                .get::<Arc<Mutex<GroupStateBuilder<Render3DForwardUniformGroup>>>>()
+                .unwrap();
+
+            let builder_mut = r3d_group_builder.lock().unwrap();
+
+            sky::Sky {
+                mesh: registry
+                    .meshes
+                    .read()
+                    .unwrap()
+                    .clone_mesh(&ID(UNIT_CUBE_MESH_ID), &ID(PRIMITIVE_MESH_GROUP_ID)),
+                t3d: Transform3D::origin(),
+                r3d: Render3D::default("sky"),
+                r3d_group: builder_mut.single_state(&gpu_mut.device, &gpu_mut.queue)?,
+            }
+        };
+
         drop(gpu_mut);
         resources.insert(quad);
+        resources.insert(sky);
         resources.insert(Arc::clone(&gpu));
         resources.insert(Arc::clone(&window));
         resources.insert(Arc::clone(&registry.textures));
@@ -952,6 +981,30 @@ fn build_node_3d_forward_basic(
     .with_system(render_3d::forward_basic::render_system)
 }
 
+// skybox transformed to sphere in fragment shader
+fn build_node_sky(
+    render_3d_group_builder: Arc<Mutex<UniformGroupBuilder<Render3DForwardUniformGroup>>>,
+    camera_3d_group_builder: Arc<Mutex<UniformGroupBuilder<Camera3DUniformGroup>>>,
+) -> NodeBuilder {
+    //
+    // The sky node requires a Sky in the legion resources (singleton).
+
+    NodeBuilder::new(
+        "sky_node".to_owned(),
+        0,
+        1,
+        ShaderSource::WGSL(include_str!("renderer/shaders/sky.wgsl").to_owned()),
+    )
+    .with_id(ID(SKY_NODE_ID))
+    .with_vertex_layout(VERTEX3D_BUFFER_LAYOUT)
+    // .with_texture_group(ID(RENDER_3D_TEXTURE_GROUP))
+    .with_shared_uniform_group(Arc::clone(&render_3d_group_builder))
+    .with_shared_uniform_group(Arc::clone(&camera_3d_group_builder))
+    .with_reverse_culling()
+    // .with_depth_buffer()
+    .with_system(sky::render_system)
+}
+
 // shader renders onto a flat fullscreen quad, intended for ray-tracing
 fn build_node_quad(
     quad_group_builder: Arc<Mutex<UniformGroupBuilder<QuadUniformGroup>>>,
@@ -1035,6 +1088,18 @@ fn build_node_chain(
     //  - Make builder more intelligent
     //  - Both of the above should probably happen along with RSL
 }
+
+// Result (temp):
+//
+//  when building the nodes, lib.rs sets loopback to true on node_chain
+//  when building the graph, mod.rs:
+//      for node_chain, input_channels[0] becomes a Ring from its own output targets
+//      for node_channel, input_channels[0] becomes a Ring from the node_chain output targets
+//  when executing:
+//      for chain system, rendering alternates between Ring inputs (constant index) every frame
+//      for channel system, rendering alternates between Ring inputs (constant index) every frame
+//      for chain system, rendering alternates between output targets
+//
 
 // --------------------------------------------------
 //

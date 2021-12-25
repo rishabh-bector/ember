@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Result};
-use std::sync::Arc;
+use std::sync::{Arc, RwLockReadGuard};
+use wgpu::{BindGroupLayout, Device};
 
-use crate::renderer::buffer::texture::Texture;
+use crate::{renderer::buffer::texture::Texture, sources::registry::TextureRegistry};
 
 pub enum RenderTarget {
     Empty,
@@ -17,11 +18,48 @@ pub enum RenderTarget {
 
 pub struct DepthBuffer(pub Texture);
 
+impl DepthBuffer {
+    pub fn new(name: &str, size: (u32, u32), device: Arc<Device>) -> Self {
+        DepthBuffer(Texture::depth_buffer(
+            &format!("{}_depth_target", name),
+            &device,
+            size,
+            wgpu::TextureFormat::Depth32Float,
+        ))
+    }
+}
+
 impl RenderTarget {
     pub fn empty_master(depth_buffer: Option<Arc<DepthBuffer>>) -> Self {
         RenderTarget::Master {
             screen_buffer: None,
             depth_buffer,
+        }
+    }
+
+    pub fn new(
+        name: &str,
+        size: (u32, u32),
+        depth: Option<Arc<DepthBuffer>>,
+        tex_reg: &RwLockReadGuard<TextureRegistry>,
+        device: Arc<Device>,
+    ) -> Self {
+        RenderTarget::Texture {
+            color_buffer: Arc::new(
+                Texture::blank(
+                    size,
+                    &device,
+                    tex_reg.format,
+                    &tex_reg.bind_layout,
+                    Some(&format!("{}_render_target", name)),
+                    true,
+                )
+                .unwrap(),
+            ),
+            depth_buffer: match depth {
+                Some(buf) => Some(Arc::clone(&buf)),
+                None => None,
+            },
         }
     }
 

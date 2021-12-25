@@ -15,8 +15,8 @@ fn main() {
         Render3D::default("test_cube"),
         cube_mesh,
         Transform3D {
-            position: [0.0, 0.0, 0.0],
-            rotation: [-90.0, 0.0, -90.0],
+            position: [-10.0, 0.0, 0.0],
+            rotation: [0.0, 0.0, 0.0],
             scale: [5.0, 5.0, 5.0],
             ..Default::default()
         },

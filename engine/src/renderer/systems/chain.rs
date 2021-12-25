@@ -1,9 +1,6 @@
 use std::{sync::Arc, time::Instant};
 
-use crate::{
-    constants::{CAMERA_3D_BIND_GROUP_ID, ID},
-    renderer::{graph::NodeState, systems::quad::Quad},
-};
+use crate::renderer::{graph::NodeState, systems::quad::Quad};
 
 #[system]
 pub fn render(
@@ -16,7 +13,7 @@ pub fn render(
     let start_time = Instant::now();
     let node = Arc::clone(&state.node);
 
-    let render_target = state.render_target();
+    let render_target = state.cycle_target();
     let render_target_mut = render_target.lock().unwrap();
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
