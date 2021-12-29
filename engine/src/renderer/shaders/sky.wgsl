@@ -56,7 +56,7 @@ fn main(
     out.uvs = in.uvs;
     out.clip_position = camera_space;
 
-    out.world_pos = world_space.xyz;
+    out.world_pos = in.position;
     out.world_normal = normalize(normal_matrix * in.normal);
 
     return out;
@@ -66,12 +66,36 @@ fn main(
 // Fragment shader
 // -------------------------------------------------
 
-// [[group(0), binding(0)]]
-// var texture0: texture_2d<f32>;
-// [[group(0), binding(1)]]
-// var sampler0: sampler;
+[[group(2), binding(0)]]
+var sky_cube: texture_cube<f32>;
+[[group(2), binding(1)]]
+var sky_sampler: sampler;
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {    
-    return vec4<f32>(0.1, 0.1, 0.7, 1.0);
+fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+    let sky_pos = normalize(in.world_pos);
+    let height = sky_pos.y;
+
+    let hdri_dir = sky_pos;
+    let hdri = textureSample(sky_cube, sky_sampler, hdri_dir);
+
+    if (hdri.a == 0.0) {
+        return vec4<f32>(0.1, 0.1, 0.4, 1.0);
+    } else {
+        return hdri;
+    }
+
+    // let sunlight_dir = normalize(vec3<f32>(0.0, -0.3, 1.0));
+    // let sun = dot(sunlight_dir, sky_pos);
+
+    // let sun_color = vec4<f32>(0.9, 0.9, 0.9, 1.0);
+    // let sky = vec4<f32>(height, height, height, 1.0);
+
+    // if (sun < -0.997) {
+    //     return sun_color;
+    // } else {
+    //     return sky;
+    // }
+
+    // return vec4<f32>(0.1, 0.1, 0.7, 1.0);
 }

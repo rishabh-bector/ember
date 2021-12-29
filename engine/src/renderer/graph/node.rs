@@ -152,7 +152,7 @@ pub enum ShaderSource {
 
 pub enum BindIndex {
     Uniform { node_index: usize },
-    Texture { group_id: Uuid },
+    Texture { group_id: Uuid, cubemap: bool },
     NodeInput,
 }
 
@@ -226,8 +226,9 @@ impl NodeBuilder {
         self
     }
 
-    pub fn with_texture_group(mut self, group_id: Uuid) -> Self {
-        self.bind_groups.push(BindIndex::Texture { group_id });
+    pub fn with_texture_group(mut self, group_id: Uuid, cubemap: bool) -> Self {
+        self.bind_groups
+            .push(BindIndex::Texture { group_id, cubemap });
         self
     }
 
@@ -309,7 +310,7 @@ impl NodeBuilderTrait for NodeBuilder {
             .iter()
             .map(|bind_index| {
                 Ok(match *bind_index {
-                    BindIndex::Texture { .. } => (None, false),
+                    BindIndex::Texture { cubemap, .. } => (None, cubemap),
                     BindIndex::Uniform { node_index } => (
                         Some(
                             self.uniform_group_builders[node_index]
@@ -319,7 +320,7 @@ impl NodeBuilderTrait for NodeBuilder {
                         ),
                         false,
                     ),
-                    BindIndex::NodeInput {} => (None, true),
+                    BindIndex::NodeInput {} => (None, false),
                 })
             })
             .collect::<Result<Vec<(Option<wgpu::BindGroupLayout>, bool)>>>()?;
@@ -327,9 +328,15 @@ impl NodeBuilderTrait for NodeBuilder {
         let texture_registry = registry.textures.read().unwrap();
         let layout_refs = bind_group_layouts
             .into_iter()
-            .map(|(opt_uniform, _is_node_input)| match opt_uniform {
+            .map(|(opt_uniform, is_cubemap)| match opt_uniform {
                 Some(u) => &u,
-                None => &texture_registry.bind_layout,
+                None => {
+                    if *is_cubemap {
+                        &texture_registry.cube_bind_layout
+                    } else {
+                        &texture_registry.bind_layout
+                    }
+                }
             })
             .collect::<Vec<&wgpu::BindGroupLayout>>();
 
@@ -398,7 +405,7 @@ impl NodeBuilderTrait for NodeBuilder {
             .bind_groups
             .iter()
             .filter_map(|bind| match bind {
-                &BindIndex::Texture { group_id } => Some(group_id),
+                &BindIndex::Texture { group_id, .. } => Some(group_id),
                 _ => None,
             })
             .collect();

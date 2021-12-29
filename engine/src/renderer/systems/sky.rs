@@ -5,6 +5,7 @@ use std::{
     time::Instant,
 };
 use uuid::Uuid;
+use wgpu::BindGroup;
 
 use crate::{
     components::Transform3D,
@@ -14,6 +15,7 @@ use crate::{
     },
     legion::IntoQuery,
     renderer::{
+        buffer::texture::Texture,
         graph::NodeState,
         mesh::Mesh,
         uniform::{
@@ -36,6 +38,7 @@ pub struct Sky {
     pub r3d: Render3D,
     pub t3d: Transform3D,
     pub r3d_group: GroupState,
+    pub cubemap: Arc<BindGroup>,
 }
 
 #[system]
@@ -82,6 +85,7 @@ pub fn render(
         &node.binder.uniform_groups[&ID(CAMERA_3D_BIND_GROUP_ID)],
         &[],
     );
+    pass.set_bind_group(2, &sky.cubemap, &[]);
 
     pass.set_vertex_buffer(0, sky.mesh.vertex_buffer.buffer.0.slice(..));
     pass.set_index_buffer(

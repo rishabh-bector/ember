@@ -47,6 +47,7 @@ pub const RENDER_3D_TEXTURE_GROUP: &str = "c9ea2067-50f9-43d5-876c-5940a4d191cc"
 // Engine textures
 pub const RENDER_2D_COMMON_TEXTURE_ID: &str = "8a22d465-7935-41e5-9e90-686ef5632c54";
 pub const RENDER_3D_COMMON_TEXTURE_ID: &str = "fb378338-4d98-4b48-bd6d-1ca28515988f";
+pub const RENDER_3D_SKYBOX_TEXTURE_ID: &str = "1aa08d8c-6c4b-48ff-9e8f-9a3bb37f0847";
 
 // Primitive meshes
 pub const PRIMITIVE_MESH_GROUP_ID: &str = "437b63d4-5c7d-49e9-958b-8f68b4931355";

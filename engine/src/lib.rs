@@ -14,6 +14,7 @@ extern crate legion;
 extern crate vertex_layout_derive;
 
 use anyhow::Result;
+use image::{DynamicImage, ImageBuffer, Rgba};
 use legion::{Resources, Schedule, World};
 use std::{
     env,
@@ -35,7 +36,7 @@ use crate::{
     components::{FrameMetrics, Transform3D},
     constants::*,
     renderer::{
-        buffer::{instance::*, *},
+        buffer::{instance::*, texture::Texture, *},
         graph::{
             node::{NodeBuilder, ShaderSource},
             GraphBuilder, RenderGraph,
@@ -628,6 +629,15 @@ impl EngineBuilder {
             let builder_mut = r3d_group_builder.lock().unwrap();
 
             sky::Sky {
+                cubemap: Arc::clone(
+                    registry
+                        .textures
+                        .read()
+                        .unwrap()
+                        .texture_group(&ID(RENDER_3D_TEXTURE_GROUP))
+                        .get(&ID(RENDER_3D_SKYBOX_TEXTURE_ID))
+                        .unwrap(),
+                ),
                 mesh: registry
                     .meshes
                     .read()
@@ -866,9 +876,9 @@ fn build_window(size: (u32, u32), event_loop: &EventLoop<()>) -> Result<Arc<Wind
         WindowBuilder::new()
             .with_title("Ember Engine")
             .with_inner_size(size)
-            .with_min_inner_size(size)
-            .with_max_inner_size(size)
-            .with_resizable(false)
+            // .with_min_inner_size(size)
+            // .with_max_inner_size(size)
+            .with_resizable(true)
             // .with_fullscreen(None)
             .with_fullscreen(Some(Fullscreen::Borderless(None)))
             .build(event_loop)?
@@ -884,6 +894,7 @@ fn build_registry(
     let base_dir = get_crate_directory();
 
     load_engine_textures(&mut tex_reg_builder, &base_dir);
+
     let texture_format = gpu_mut.device_preferred_format();
     Registry::build(
         Arc::clone(&gpu_mut.device),
@@ -896,30 +907,42 @@ fn build_registry(
 
 fn load_engine_textures(builder: &mut TextureRegistryBuilder, base_dir: &PathBuf) {
     builder.load_id(
-        Uuid::from_str(RENDER_2D_COMMON_TEXTURE_ID).unwrap(),
+        ID(RENDER_2D_COMMON_TEXTURE_ID),
         &base_dir
-            .join("src/sources/static/test.png")
+            .join("src/sources/static/textures/test.png")
             .into_os_string()
             .into_string()
             .unwrap(),
         &ID(RENDER_2D_TEXTURE_GROUP),
     );
+
     builder.load_id(
-        Uuid::from_str(RENDER_3D_COMMON_TEXTURE_ID).unwrap(),
+        ID(RENDER_3D_COMMON_TEXTURE_ID),
         &base_dir
-            .join("src/sources/static/arrow.jpg")
+            .join("src/sources/static/textures/arrow.jpg")
             .into_os_string()
             .into_string()
             .unwrap(),
         &ID(RENDER_3D_TEXTURE_GROUP),
     );
+
+    // default skybox
+    builder.load_cube_id(
+        ID(RENDER_3D_SKYBOX_TEXTURE_ID),
+        &base_dir
+            .join("src/sources/static/cubemaps/default")
+            .into_os_string()
+            .into_string()
+            .unwrap(),
+        &ID(RENDER_3D_TEXTURE_GROUP),
+    )
 }
 
 // --------------------------------------------------
 // Render Graph Node Presets
 // --------------------------------------------------
 
-// pretty sure dynamic nodes are a dumb idea
+// pretty sure dynamic nodes are fucking stupid
 fn build_node_2d_forward_dynamic(
     render_2d_dynamic_group_builder: Arc<Mutex<UniformGroupBuilder<Render2DForwardDynamicGroup>>>,
     camera_2d_group_builder: Arc<Mutex<UniformGroupBuilder<Camera2DUniformGroup>>>,
@@ -933,7 +956,7 @@ fn build_node_2d_forward_dynamic(
     )
     .with_id(ID(FORWARD_2D_NODE_ID))
     .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
-    .with_texture_group(ID(RENDER_2D_TEXTURE_GROUP))
+    .with_texture_group(ID(RENDER_2D_TEXTURE_GROUP), false)
     .with_shared_uniform_group(Arc::clone(&render_2d_dynamic_group_builder))
     .with_shared_uniform_group(Arc::clone(&camera_2d_group_builder))
     .with_shared_uniform_group(Arc::clone(&lighting_2d_group_builder))
@@ -954,7 +977,7 @@ fn build_node_2d_forward_instance(
     .with_id(ID(INSTANCE_2D_NODE_ID))
     .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
     .with_vertex_layout(render_2d::forward_instance::RENDER2DINSTANCE_BUFFER_LAYOUT)
-    .with_texture_group(ID(RENDER_2D_TEXTURE_GROUP))
+    .with_texture_group(ID(RENDER_2D_TEXTURE_GROUP), false)
     .with_shared_uniform_group(Arc::clone(&camera_2d_group_builder))
     .with_shared_uniform_group(Arc::clone(&lighting_2d_group_builder))
     .with_system(render_2d::forward_instance::render_system)
@@ -974,7 +997,7 @@ fn build_node_3d_forward_basic(
     )
     .with_id(ID(FORWARD_3D_NODE_ID))
     .with_vertex_layout(VERTEX3D_BUFFER_LAYOUT)
-    .with_texture_group(ID(RENDER_3D_TEXTURE_GROUP))
+    .with_texture_group(ID(RENDER_3D_TEXTURE_GROUP), false)
     .with_shared_uniform_group(Arc::clone(&render_3d_group_builder))
     .with_shared_uniform_group(Arc::clone(&camera_3d_group_builder))
     // .with_depth_buffer()
@@ -997,9 +1020,9 @@ fn build_node_sky(
     )
     .with_id(ID(SKY_NODE_ID))
     .with_vertex_layout(VERTEX3D_BUFFER_LAYOUT)
-    // .with_texture_group(ID(RENDER_3D_TEXTURE_GROUP))
     .with_shared_uniform_group(Arc::clone(&render_3d_group_builder))
     .with_shared_uniform_group(Arc::clone(&camera_3d_group_builder))
+    .with_texture_group(ID(RENDER_3D_TEXTURE_GROUP), true)
     .with_reverse_culling()
     // .with_depth_buffer()
     .with_system(sky::render_system)

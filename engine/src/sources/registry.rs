@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use image::io::Reader as ImageReader;
+use image::{io::Reader as ImageReader, ImageBuffer, Rgba};
 
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::{
@@ -49,6 +49,7 @@ impl Registry {
 pub struct TextureRegistry {
     pub textures: HashMap<Uuid, HashMap<Uuid, Texture>>,
     pub bind_layout: wgpu::BindGroupLayout,
+    pub cube_bind_layout: wgpu::BindGroupLayout,
     pub format: wgpu::TextureFormat,
 }
 
@@ -62,7 +63,10 @@ impl TextureRegistry {
 }
 
 pub struct TextureRegistryBuilder {
+    // group_id -> (tex_id, tex_path)
     pub to_load: HashMap<Uuid, Vec<(Uuid, String)>>,
+    pub to_load_cube: HashMap<Uuid, Vec<(Uuid, String)>>,
+
     pub bind_group_layout: Rc<Option<wgpu::BindGroupLayout>>,
 }
 
@@ -70,18 +74,30 @@ impl TextureRegistryBuilder {
     pub fn new() -> Self {
         Self {
             to_load: HashMap::new(),
+            to_load_cube: HashMap::new(),
             bind_group_layout: Rc::new(None),
+        }
+    }
+
+    pub fn load_cube(&mut self, path: &str, group_id: Uuid) -> Uuid {
+        let id = Uuid::new_v4();
+        self.load_cube_id(id, path, &group_id);
+        id
+    }
+
+    pub fn load_cube_id(&mut self, id: Uuid, path: &str, group_id: &Uuid) {
+        match self.to_load_cube.get_mut(group_id) {
+            Some(paths) => paths.push((id, path.to_owned())),
+            None => {
+                self.to_load_cube
+                    .insert(*group_id, vec![(id, path.to_owned())]);
+            }
         }
     }
 
     pub fn load(&mut self, path: &str, group_id: Uuid) -> Uuid {
         let id = Uuid::new_v4();
-        match self.to_load.get_mut(&group_id) {
-            Some(paths) => paths.push((id, path.to_owned())),
-            None => {
-                self.to_load.insert(group_id, vec![(id, path.to_owned())]);
-            }
-        }
+        self.load_id(id, path, &group_id);
         id
     }
 
@@ -101,14 +117,18 @@ impl TextureRegistryBuilder {
         format: wgpu::TextureFormat,
     ) -> Result<TextureRegistry> {
         let mut num_textures = 0;
-        let _ = &self
-            .to_load
+        let mut num_cubes = 0;
+        self.to_load
             .iter()
             .for_each(|(_, tex)| tex.iter().for_each(|_| num_textures += 1));
+        self.to_load_cube
+            .iter()
+            .for_each(|(_, tex)| tex.iter().for_each(|_| num_cubes += 1));
         debug!(
-            "building texture registry: {} groups, {} textures",
+            "building texture registry: {} groups, {} textures, {} cubes",
             self.to_load.len(),
-            num_textures
+            num_textures,
+            num_cubes
         );
 
         let bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -136,9 +156,34 @@ impl TextureRegistryBuilder {
             label: Some("texture_bind_group_layout"),
         });
 
+        let cube_bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::Cube,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler {
+                        comparison: false,
+                        filtering: true,
+                    },
+                    count: None,
+                },
+            ],
+            label: Some("cube_bind_group_layout"),
+        });
+
         let mut textures: HashMap<Uuid, HashMap<Uuid, Texture>> = HashMap::new();
-        for (group, tex) in &self.to_load {
-            let group_textures = tex
+        for (group_id, group) in &self.to_load {
+            let group_textures = group
                 .into_par_iter()
                 .map(|(id, path)| {
                     let rgba = ImageReader::open(&path)
@@ -151,12 +196,61 @@ impl TextureRegistryBuilder {
                     ))
                 })
                 .collect::<Result<HashMap<Uuid, Texture>>>()?;
-            textures.insert(*group, group_textures);
+            textures.insert(*group_id, group_textures);
+        }
+
+        // CUBEMAPS
+
+        let file_ext = "png";
+        let dirs = vec!["left", "right", "up", "down", "front", "back"];
+        let dirs = vec!["back", "front", "up", "down", "left", "right"];
+
+        for (group_id, group) in &self.to_load_cube {
+            let group_textures = group
+                .into_par_iter()
+                .map(|(id, path)| {
+                    let faces: Vec<ImageBuffer<Rgba<u8>, Vec<u8>>> = dirs
+                        .iter()
+                        .map(|dir| {
+                            // dir is direction not directory
+                            let img_path = format!("{}/{}.{}", path, dir, file_ext);
+                            debug!("loading cubemap at {}", img_path);
+                            image::io::Reader::open(img_path)
+                                .unwrap()
+                                .decode()
+                                .unwrap()
+                                .into_rgba8()
+                        })
+                        .collect();
+
+                    Ok((
+                        *id,
+                        Texture::load_cubemap(
+                            &device,
+                            &queue,
+                            wgpu::TextureFormat::Rgba8UnormSrgb,
+                            &faces,
+                            &cube_bind_layout,
+                            None,
+                        )?,
+                    ))
+                })
+                .collect::<Result<HashMap<Uuid, Texture>>>()?;
+
+            if textures.contains_key(group_id) {
+                let existing = textures.get_mut(group_id).unwrap();
+                for (i, t) in group_textures {
+                    existing.insert(i, t);
+                }
+            } else {
+                textures.insert(*group_id, group_textures);
+            }
         }
 
         Ok(TextureRegistry {
             textures,
             bind_layout,
+            cube_bind_layout,
             format,
         })
     }
