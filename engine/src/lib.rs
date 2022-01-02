@@ -16,6 +16,8 @@ extern crate vertex_layout_derive;
 use anyhow::Result;
 use image::{DynamicImage, ImageBuffer, Rgba};
 use legion::{Resources, Schedule, World};
+use renderer::systems::render_3d::forward_pbr::RenderPBRForwardUniformGroup;
+use sources::registry::TextureType;
 use std::{
     env,
     path::PathBuf,
@@ -182,7 +184,7 @@ impl EngineBuilder {
     pub fn with_texture_group(mut self, group: TextureGroup) -> Self {
         for tex in group.textures {
             self.texture_registry_builder
-                .load_id(tex.0, &tex.1, &group.id);
+                .load_id(tex.0, &tex.1, group.tex_type, &group.id);
         }
         self
     }
@@ -536,14 +538,16 @@ impl EngineBuilder {
         let quad_group_builder = Arc::new(Mutex::new(QuadUniformGroup::builder()));
         let camera_3d_group_builder = Arc::new(Mutex::new(Camera3DUniformGroup::builder()));
         let render_3d_group_builder = Arc::new(Mutex::new(Render3DForwardUniformGroup::builder()));
+        let render_pbr_group_builder =
+            Arc::new(Mutex::new(RenderPBRForwardUniformGroup::builder()));
 
         info!("building render graph nodes");
         let node_sky = build_node_sky(
             Arc::clone(&render_3d_group_builder),
             Arc::clone(&camera_3d_group_builder),
         );
-        let node_3d = build_node_3d_forward_basic(
-            Arc::clone(&render_3d_group_builder),
+        let node_pbr = build_node_forward_pbr(
+            Arc::clone(&render_pbr_group_builder),
             Arc::clone(&camera_3d_group_builder),
         );
         let node_channel = build_node_channel(
@@ -561,6 +565,7 @@ impl EngineBuilder {
             .flush()
             .add_system(camera_3d_uniform_system())
             .add_system(render_3d::forward_basic::load_system())
+            .add_system(render_3d::forward_pbr::load_system())
             .add_system(quad::load_system());
 
         info!("building render graph");
@@ -568,11 +573,11 @@ impl EngineBuilder {
         let mut graph_schedule = SubSchedule::new();
 
         let (render_graph, engine_metrics) = GraphBuilder::new()
-            .with_channel(node_sky.dest_id.clone(), 0, node_3d.dest_id.clone())
-            .with_channel(node_3d.dest_id.clone(), 0, node_channel.dest_id.clone())
-            .with_chain(vec![node_sky.dest_id.clone(), node_3d.dest_id.clone()])
+            .with_channel(node_sky.dest_id.clone(), 0, node_pbr.dest_id.clone())
+            .with_channel(node_pbr.dest_id.clone(), 0, node_channel.dest_id.clone())
+            .with_chain(vec![node_sky.dest_id.clone(), node_pbr.dest_id.clone()])
             .with_source_node(node_sky)
-            .with_source_node(node_3d)
+            .with_source_node(node_pbr)
             .with_master_node(node_channel)
             .build(
                 Arc::clone(&gpu_mut.device),
@@ -638,6 +643,15 @@ impl EngineBuilder {
                         .get(&ID(RENDER_3D_SKYBOX_TEXTURE_ID))
                         .unwrap(),
                 ),
+                cubemap_blur: Some(Arc::clone(
+                    registry
+                        .textures
+                        .read()
+                        .unwrap()
+                        .texture_group(&ID(RENDER_3D_TEXTURE_GROUP))
+                        .get(&ID(RENDER_3D_SKYBOX_BLUR_TEXTURE_ID))
+                        .unwrap(),
+                )),
                 mesh: registry
                     .meshes
                     .read()
@@ -660,6 +674,7 @@ impl EngineBuilder {
         resources.insert(Arc::clone(&frame_metrics));
         resources.insert(Arc::clone(&render_graph));
         resources.insert(Arc::clone(&render_3d_group_builder)); // what the shit is this?
+        resources.insert(Arc::clone(&render_pbr_group_builder)); // what the shit is this?
         resources.insert(Arc::clone(&camera_3d));
 
         info!("ready to start!");
@@ -913,6 +928,7 @@ fn load_engine_textures(builder: &mut TextureRegistryBuilder, base_dir: &PathBuf
             .into_os_string()
             .into_string()
             .unwrap(),
+        TextureType::Image,
         &ID(RENDER_2D_TEXTURE_GROUP),
     );
 
@@ -923,19 +939,32 @@ fn load_engine_textures(builder: &mut TextureRegistryBuilder, base_dir: &PathBuf
             .into_os_string()
             .into_string()
             .unwrap(),
+        TextureType::Image,
         &ID(RENDER_3D_TEXTURE_GROUP),
     );
 
     // default skybox
-    builder.load_cube_id(
+    builder.load_id(
         ID(RENDER_3D_SKYBOX_TEXTURE_ID),
         &base_dir
-            .join("src/sources/static/cubemaps/default")
+            .join("src/sources/static/cubemaps/default_lowres")
             .into_os_string()
             .into_string()
             .unwrap(),
+        TextureType::Cubemap,
         &ID(RENDER_3D_TEXTURE_GROUP),
-    )
+    );
+
+    builder.load_id(
+        ID(RENDER_3D_SKYBOX_BLUR_TEXTURE_ID),
+        &base_dir
+            .join("src/sources/static/cubemaps/default_lowres_blur")
+            .into_os_string()
+            .into_string()
+            .unwrap(),
+        TextureType::Cubemap,
+        &ID(RENDER_3D_TEXTURE_GROUP),
+    );
 }
 
 // --------------------------------------------------
@@ -956,7 +985,7 @@ fn build_node_2d_forward_dynamic(
     )
     .with_id(ID(FORWARD_2D_NODE_ID))
     .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
-    .with_texture_group(ID(RENDER_2D_TEXTURE_GROUP), false)
+    .with_texture_group(ID(RENDER_2D_TEXTURE_GROUP), TextureType::Image)
     .with_shared_uniform_group(Arc::clone(&render_2d_dynamic_group_builder))
     .with_shared_uniform_group(Arc::clone(&camera_2d_group_builder))
     .with_shared_uniform_group(Arc::clone(&lighting_2d_group_builder))
@@ -977,7 +1006,7 @@ fn build_node_2d_forward_instance(
     .with_id(ID(INSTANCE_2D_NODE_ID))
     .with_vertex_layout(VERTEX2D_BUFFER_LAYOUT)
     .with_vertex_layout(render_2d::forward_instance::RENDER2DINSTANCE_BUFFER_LAYOUT)
-    .with_texture_group(ID(RENDER_2D_TEXTURE_GROUP), false)
+    .with_texture_group(ID(RENDER_2D_TEXTURE_GROUP), TextureType::Image)
     .with_shared_uniform_group(Arc::clone(&camera_2d_group_builder))
     .with_shared_uniform_group(Arc::clone(&lighting_2d_group_builder))
     .with_system(render_2d::forward_instance::render_system)
@@ -997,11 +1026,33 @@ fn build_node_3d_forward_basic(
     )
     .with_id(ID(FORWARD_3D_NODE_ID))
     .with_vertex_layout(VERTEX3D_BUFFER_LAYOUT)
-    .with_texture_group(ID(RENDER_3D_TEXTURE_GROUP), false)
+    .with_texture_group(ID(RENDER_3D_TEXTURE_GROUP), TextureType::Image)
     .with_shared_uniform_group(Arc::clone(&render_3d_group_builder))
     .with_shared_uniform_group(Arc::clone(&camera_3d_group_builder))
     // .with_depth_buffer()
     .with_system(render_3d::forward_basic::render_system)
+}
+
+// pbr meshes
+fn build_node_forward_pbr(
+    render_pbr_group_builder: Arc<Mutex<UniformGroupBuilder<RenderPBRForwardUniformGroup>>>,
+    camera_3d_group_builder: Arc<Mutex<UniformGroupBuilder<Camera3DUniformGroup>>>,
+    //lighting_3d_group_builder: Arc<Mutex<UniformGroupBuilder<Lighting3DUniformGroup>>>,
+) -> NodeBuilder {
+    NodeBuilder::new(
+        "render_pbr_node".to_owned(),
+        0,
+        1,
+        ShaderSource::WGSL(include_str!("renderer/shaders/pbr.wgsl").to_owned()),
+    )
+    .with_id(ID(FORWARD_PBR_NODE_ID))
+    .with_vertex_layout(VERTEX3D_BUFFER_LAYOUT)
+    .with_texture_group(ID(RENDER_3D_TEXTURE_GROUP), TextureType::Image)
+    .with_shared_uniform_group(Arc::clone(&render_pbr_group_builder))
+    .with_shared_uniform_group(Arc::clone(&camera_3d_group_builder))
+    .with_texture_group(ID(RENDER_3D_TEXTURE_GROUP), TextureType::CubemapN { n: 2 })
+    // .with_depth_buffer()
+    .with_system(render_3d::forward_pbr::render_system)
 }
 
 // skybox transformed to sphere in fragment shader
@@ -1022,7 +1073,7 @@ fn build_node_sky(
     .with_vertex_layout(VERTEX3D_BUFFER_LAYOUT)
     .with_shared_uniform_group(Arc::clone(&render_3d_group_builder))
     .with_shared_uniform_group(Arc::clone(&camera_3d_group_builder))
-    .with_texture_group(ID(RENDER_3D_TEXTURE_GROUP), true)
+    .with_texture_group(ID(RENDER_3D_TEXTURE_GROUP), TextureType::Cubemap)
     .with_reverse_culling()
     // .with_depth_buffer()
     .with_system(sky::render_system)
@@ -1143,6 +1194,7 @@ impl LegionState {
 pub struct TextureGroup {
     pub id: Uuid,
     pub textures: Vec<(Uuid, String)>,
+    pub tex_type: TextureType,
 }
 
 pub struct MeshGroup {

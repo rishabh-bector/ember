@@ -610,6 +610,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "env_irradiance"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ember",
+ "image",
+ "rand",
+ "uuid",
+]
+
+[[package]]
 name = "env_logger"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

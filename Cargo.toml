@@ -4,5 +4,6 @@ members = [
     "engine",
     "vertex_traits",
     "vertex_layout_derive",
+    "env_irradiance",
     "examples/*",
 ]

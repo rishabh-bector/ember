@@ -10,7 +10,7 @@ use wgpu::BindGroup;
 use crate::{
     renderer::uniform::group::GroupResourceBuilder,
     sources::{
-        registry::Registry,
+        registry::{Registry, TextureType},
         schedule::{NodeSystem, SubSchedulable},
     },
 };
@@ -151,8 +151,13 @@ pub enum ShaderSource {
 }
 
 pub enum BindIndex {
-    Uniform { node_index: usize },
-    Texture { group_id: Uuid, cubemap: bool },
+    Uniform {
+        node_index: usize,
+    },
+    Texture {
+        group_id: Uuid,
+        tex_type: TextureType,
+    },
     NodeInput,
 }
 
@@ -226,9 +231,9 @@ impl NodeBuilder {
         self
     }
 
-    pub fn with_texture_group(mut self, group_id: Uuid, cubemap: bool) -> Self {
+    pub fn with_texture_group(mut self, group_id: Uuid, tex_type: TextureType) -> Self {
         self.bind_groups
-            .push(BindIndex::Texture { group_id, cubemap });
+            .push(BindIndex::Texture { group_id, tex_type });
         self
     }
 
@@ -310,7 +315,7 @@ impl NodeBuilderTrait for NodeBuilder {
             .iter()
             .map(|bind_index| {
                 Ok(match *bind_index {
-                    BindIndex::Texture { cubemap, .. } => (None, cubemap),
+                    BindIndex::Texture { tex_type, .. } => (None, Some(tex_type)),
                     BindIndex::Uniform { node_index } => (
                         Some(
                             self.uniform_group_builders[node_index]
@@ -318,25 +323,19 @@ impl NodeBuilderTrait for NodeBuilder {
                                 .unwrap()
                                 .build(device, resources, Arc::clone(&queue))?,
                         ),
-                        false,
+                        None,
                     ),
-                    BindIndex::NodeInput {} => (None, false),
+                    BindIndex::NodeInput {} => (None, Some(TextureType::Image)),
                 })
             })
-            .collect::<Result<Vec<(Option<wgpu::BindGroupLayout>, bool)>>>()?;
+            .collect::<Result<Vec<(Option<wgpu::BindGroupLayout>, Option<TextureType>)>>>()?;
 
         let texture_registry = registry.textures.read().unwrap();
         let layout_refs = bind_group_layouts
             .into_iter()
-            .map(|(opt_uniform, is_cubemap)| match opt_uniform {
+            .map(|(opt_uniform, tex_type)| match opt_uniform {
                 Some(u) => &u,
-                None => {
-                    if *is_cubemap {
-                        &texture_registry.cube_bind_layout
-                    } else {
-                        &texture_registry.bind_layout
-                    }
-                }
+                None => texture_registry.bind_group_layout(tex_type.unwrap()),
             })
             .collect::<Vec<&wgpu::BindGroupLayout>>();
 
@@ -401,14 +400,7 @@ impl NodeBuilderTrait for NodeBuilder {
             builder.lock().unwrap().build_to_resource(resources);
         }
 
-        let texture_groups_needed: Vec<Uuid> = self
-            .bind_groups
-            .iter()
-            .filter_map(|bind| match bind {
-                &BindIndex::Texture { group_id, .. } => Some(group_id),
-                _ => None,
-            })
-            .collect();
+        // UNIFORM BIND GROUPS
 
         let uniform_groups_needed: Vec<usize> = self
             .bind_groups
@@ -418,11 +410,6 @@ impl NodeBuilderTrait for NodeBuilder {
                 _ => None,
             })
             .collect();
-
-        let mut texture_groups: HashMap<Uuid, Arc<wgpu::BindGroup>> = HashMap::new();
-        for group_id in &texture_groups_needed {
-            texture_groups.extend(registry.textures.read().unwrap().texture_group(group_id));
-        }
 
         let mut uniform_groups: HashMap<Uuid, Arc<wgpu::BindGroup>> = HashMap::new();
         let mut dyn_offset_state: HashMap<Uuid, (Arc<Mutex<u64>>, Vec<(u64, u64)>)> =
@@ -437,6 +424,24 @@ impl NodeBuilderTrait for NodeBuilder {
                 dyn_offset_state.insert(id, dyn_offsets);
             }
         }
+
+        // TEXTURE BIND GROUPS
+
+        let texture_groups_needed: Vec<Uuid> = self
+            .bind_groups
+            .iter()
+            .filter_map(|bind| match bind {
+                &BindIndex::Texture { group_id, .. } => Some(group_id),
+                _ => None,
+            })
+            .collect();
+
+        let mut texture_groups: HashMap<Uuid, Arc<wgpu::BindGroup>> = HashMap::new();
+        for group_id in &texture_groups_needed {
+            texture_groups.extend(registry.textures.read().unwrap().texture_group(group_id));
+        }
+
+        //
 
         let binder = PipelineBinder {
             texture_groups,

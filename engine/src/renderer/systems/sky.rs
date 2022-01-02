@@ -39,6 +39,7 @@ pub struct Sky {
     pub t3d: Transform3D,
     pub r3d_group: GroupState,
     pub cubemap: Arc<BindGroup>,
+    pub cubemap_blur: Option<Arc<BindGroup>>,
 }
 
 #[system]

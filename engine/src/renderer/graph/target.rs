@@ -2,7 +2,10 @@ use anyhow::{anyhow, Result};
 use std::sync::{Arc, RwLockReadGuard};
 use wgpu::{BindGroupLayout, Device};
 
-use crate::{renderer::buffer::texture::Texture, sources::registry::TextureRegistry};
+use crate::{
+    renderer::buffer::texture::Texture,
+    sources::registry::{TextureRegistry, TextureType},
+};
 
 pub enum RenderTarget {
     Empty,
@@ -50,7 +53,7 @@ impl RenderTarget {
                     size,
                     &device,
                     tex_reg.format,
-                    &tex_reg.bind_layout,
+                    &tex_reg.bind_group_layout(TextureType::Image),
                     Some(&format!("{}_render_target", name)),
                     true,
                 )

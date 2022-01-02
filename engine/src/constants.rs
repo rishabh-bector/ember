@@ -18,6 +18,7 @@ pub const DEFAULT_MAX_INSTANCES_PER_BUFFER: u32 = 65536;
 // Engine render nodes
 pub const FORWARD_2D_NODE_ID: &str = "0660ca73-c74c-40b0-afee-8cd9128aa190";
 pub const FORWARD_3D_NODE_ID: &str = "df86532d-e851-4d11-bf5c-17cfd7a94505";
+pub const FORWARD_PBR_NODE_ID: &str = "ed4f311a-f829-42d4-b7d9-ce81cea7118f";
 pub const INSTANCE_2D_NODE_ID: &str = "19c32cfe-bccc-42fe-8d05-0860740fa752";
 pub const INSTANCE_3D_NODE_ID: &str = "8e1e1471-650f-4ab3-98f7-0502efa7dff6";
 pub const SKY_NODE_ID: &str = "39242ebd-a9e7-4690-a318-7e75790facbb";
@@ -48,6 +49,7 @@ pub const RENDER_3D_TEXTURE_GROUP: &str = "c9ea2067-50f9-43d5-876c-5940a4d191cc"
 pub const RENDER_2D_COMMON_TEXTURE_ID: &str = "8a22d465-7935-41e5-9e90-686ef5632c54";
 pub const RENDER_3D_COMMON_TEXTURE_ID: &str = "fb378338-4d98-4b48-bd6d-1ca28515988f";
 pub const RENDER_3D_SKYBOX_TEXTURE_ID: &str = "1aa08d8c-6c4b-48ff-9e8f-9a3bb37f0847";
+pub const RENDER_3D_SKYBOX_BLUR_TEXTURE_ID: &str = "e2e12d22-01b6-40c2-bd4b-e6df96434ea2";
 
 // Primitive meshes
 pub const PRIMITIVE_MESH_GROUP_ID: &str = "437b63d4-5c7d-49e9-958b-8f68b4931355";

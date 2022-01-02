@@ -57,5 +57,8 @@ var node_input_smp: sampler;
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
    var out: vec4<f32> = textureSample(node_input_tex, node_input_smp, in.screen_pos);
+   // let gamma: f32 = 2.2;
+   //let out2: vec3<f32> = pow(out.rgb, vec3<f32>(1.0/gamma, 1.0/gamma, 1.0/gamma));
+   //return vec4<f32>(out2, 1.0);
    return out;
 }
