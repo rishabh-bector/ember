@@ -48,6 +48,7 @@ impl Registry {
 
 pub struct TextureRegistry {
     pub textures: HashMap<Uuid, HashMap<Uuid, Texture>>,
+    pub shared: HashMap<Uuid, Arc<BindGroup>>,
     pub format: wgpu::TextureFormat,
 
     bind_layout: wgpu::BindGroupLayout,
@@ -78,6 +79,22 @@ pub enum TextureType {
     CubemapN { n: usize },
 }
 
+impl TextureType {
+    pub fn is_cubemap(&self) -> bool {
+        match &self {
+            TextureType::Cubemap => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_cubemap_n(&self) -> Option<usize> {
+        match &self {
+            TextureType::CubemapN { n } => Some(*n),
+            _ => None,
+        }
+    }
+}
+
 pub struct TextureDescriptor {
     id: Uuid,
     path: String,
@@ -88,57 +105,44 @@ pub struct TextureDescriptor {
 }
 
 pub struct TextureRegistryBuilder {
-    // group_id -> (tex_id, tex_path)
-    // pub to_load: HashMap<Uuid, Vec<(Uuid, String)>>,
     pub to_load: HashMap<Uuid, Vec<TextureDescriptor>>,
-    // pub to_load_cube: HashMap<Uuid, Vec<(Uuid, String)>>,
+    pub to_share: HashMap<Uuid, Vec<(Uuid, Uuid)>>,
 }
 
 impl TextureRegistryBuilder {
     pub fn new() -> Self {
         Self {
             to_load: HashMap::new(),
-            // to_load_cube: HashMap::new(),
+            to_share: HashMap::new(),
         }
     }
 
-    // pub fn load_cube(&mut self, path: &str, group_id: Uuid) -> Uuid {
-    //     let id = Uuid::new_v4();
-    //     self.load_cube_id(id, path, &group_id);
-    //     id
-    // }
-
-    // pub fn load_cube_id(&mut self, id: Uuid, path: &str, group_id: &Uuid) {
-    //     let descriptor = TextureDescriptor {
-    //         id,
-    //         path: path.to_owned(),
-    //         texture_type: TextureType::Cubemap,
-    //         texture_group: *group_id,
-    //         bind_group: None,
-    //     };
-
-    //     match self.to_load_cube.get_mut(group_id) {
-    //         Some(paths) => paths.push((id, path.to_owned())),
-    //         None => {
-    //             self.to_load_cube
-    //                 .insert(*group_id, vec![(id, path.to_owned())]);
-    //         }
-    //     }
-    // }
-
-    pub fn load(&mut self, path: &str, tex_type: TextureType, group_id: Uuid) -> Uuid {
+    pub fn load(
+        &mut self,
+        path: &str,
+        tex_type: TextureType,
+        group_id: Uuid,
+        shared_group: Option<Uuid>,
+    ) -> Uuid {
         let id = Uuid::new_v4();
-        self.load_id(id, path, tex_type, &group_id);
+        self.load_id(id, path, tex_type, &group_id, shared_group);
         id
     }
 
-    pub fn load_id(&mut self, id: Uuid, path: &str, tex_type: TextureType, group_id: &Uuid) {
+    pub fn load_id(
+        &mut self,
+        id: Uuid,
+        path: &str,
+        tex_type: TextureType,
+        group_id: &Uuid,
+        shared_group: Option<Uuid>,
+    ) {
         let descriptor = TextureDescriptor {
             id,
             path: path.to_owned(),
             texture_type: tex_type,
             texture_group: *group_id,
-            bind_group: None,
+            bind_group: shared_group,
         };
 
         match self.to_load.get_mut(group_id) {
@@ -149,66 +153,24 @@ impl TextureRegistryBuilder {
         }
     }
 
+    pub fn with_shared_group(&mut self, shared_group_id: Uuid, textures: Vec<(Uuid, Uuid)>) {
+        self.to_share.insert(shared_group_id, textures);
+    }
+
     pub fn build(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
     ) -> Result<TextureRegistry> {
-        let bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler {
-                        comparison: false,
-                        filtering: true,
-                    },
-                    count: None,
-                },
-            ],
-            label: Some("texture_bind_group_layout"),
-        });
-
-        let cube_bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::Cube,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler {
-                        comparison: false,
-                        filtering: true,
-                    },
-                    count: None,
-                },
-            ],
-            label: Some("cube_bind_group_layout"),
-        });
+        let bind_layout = image_bind_group_layout(device, "texture_bind_group_layout");
+        let cube_bind_layout = cube_bind_group_layout(device, "cube_bind_group_layout");
 
         let mut cubemap_Ns: Vec<usize> = vec![0];
         let mut cube_bind_layouts: HashMap<usize, wgpu::BindGroupLayout> = HashMap::new();
-        for (group_id, group) in &self.to_load {
-            let group_textures = group.iter().for_each(|desc| match desc.texture_type {
+
+        for (_group_id, group) in &self.to_load {
+            group.iter().for_each(|desc| match desc.texture_type {
                 TextureType::CubemapN { n } => {
                     if n != 0 {
                         if !cubemap_Ns.contains(&n) {
@@ -221,50 +183,7 @@ impl TextureRegistryBuilder {
         }
 
         // two cubemaps, one bind group
-        let cube_2_bind_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::Cube,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            comparison: false,
-                            filtering: true,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::Cube,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            comparison: false,
-                            filtering: true,
-                        },
-                        count: None,
-                    },
-                ],
-                label: Some("cube_2_bind_group_layout"),
-            });
+        let cube_2_bind_layout = cube_2_bind_group_layout(device, "cube_2_bind_group_layout");
 
         cube_bind_layouts.insert(1usize, cube_bind_layout);
         cube_bind_layouts.insert(2usize, cube_2_bind_layout);
@@ -381,8 +300,81 @@ impl TextureRegistryBuilder {
         //     }
         // }
 
+        // SHARED BIND GROUPS
+        let mut shared_textures: HashMap<Uuid, Vec<&Texture>> = HashMap::new();
+        for (group_id, group) in &self.to_load {
+            for tex in group {
+                if let Some(id) = tex.bind_group {
+                    if shared_textures.get(&id).is_none() {
+                        shared_textures.insert(id, vec![&textures[&group_id][&id]]);
+                    } else {
+                        shared_textures
+                            .get_mut(&id)
+                            .unwrap()
+                            .push(&textures[&group_id][&id]);
+                    }
+                }
+            }
+        }
+        for (group_id, uuids) in &self.to_share {
+            if let Some(group) = shared_textures.get_mut(group_id) {
+                for (tex_group_id, tex_id) in uuids {
+                    group.push(&textures[tex_group_id][tex_id])
+                }
+            } else {
+                let mut group_vec: Vec<&Texture> = vec![];
+                for (tex_group_id, tex_id) in uuids {
+                    group_vec.push(&textures[tex_group_id][tex_id])
+                }
+                shared_textures.insert(*group_id, group_vec);
+            }
+        }
+
+        let mut shared_groups: HashMap<Uuid, Arc<BindGroup>> = HashMap::new();
+        for (id, group_textures) in shared_textures {
+            if group_textures.len() == 2 {
+                if group_textures[0].texture_type.is_cubemap() {
+                    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        layout: &cube_2_bind_group_layout(device, &format!("cube2_layout_{}", id)),
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: wgpu::BindingResource::TextureView(
+                                    &group_textures[0].view,
+                                ),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: wgpu::BindingResource::Sampler(
+                                    &group_textures[0].sampler,
+                                ),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: wgpu::BindingResource::TextureView(
+                                    &group_textures[1].view,
+                                ),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 3,
+                                resource: wgpu::BindingResource::Sampler(
+                                    &group_textures[1].sampler,
+                                ),
+                            },
+                        ],
+                        label: Some("texture_bind_group"),
+                    });
+
+                    shared_groups.insert(id, Arc::new(bind_group));
+                } else {
+                    panic!("brudda");
+                }
+            }
+        }
+
         Ok(TextureRegistry {
             textures,
+            shared: shared_groups,
             bind_layout,
             cube_bind_layouts,
             format,
@@ -509,4 +501,104 @@ impl MeshRegistryBuilder {
             device: Arc::clone(&device),
         }
     }
+}
+
+fn image_bind_group_layout(device: &wgpu::Device, label: &str) -> wgpu::BindGroupLayout {
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStage::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStage::FRAGMENT,
+                ty: wgpu::BindingType::Sampler {
+                    comparison: false,
+                    filtering: true,
+                },
+                count: None,
+            },
+        ],
+        label: Some(label),
+    })
+}
+
+fn cube_bind_group_layout(device: &wgpu::Device, label: &str) -> wgpu::BindGroupLayout {
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStage::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::Cube,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStage::FRAGMENT,
+                ty: wgpu::BindingType::Sampler {
+                    comparison: false,
+                    filtering: true,
+                },
+                count: None,
+            },
+        ],
+        label: Some(label),
+    })
+}
+
+fn cube_2_bind_group_layout(device: &wgpu::Device, label: &str) -> wgpu::BindGroupLayout {
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStage::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::Cube,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStage::FRAGMENT,
+                ty: wgpu::BindingType::Sampler {
+                    comparison: false,
+                    filtering: true,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStage::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::Cube,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStage::FRAGMENT,
+                ty: wgpu::BindingType::Sampler {
+                    comparison: false,
+                    filtering: true,
+                },
+                count: None,
+            },
+        ],
+        label: Some(label),
+    })
 }

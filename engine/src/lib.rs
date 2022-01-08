@@ -184,7 +184,7 @@ impl EngineBuilder {
     pub fn with_texture_group(mut self, group: TextureGroup) -> Self {
         for tex in group.textures {
             self.texture_registry_builder
-                .load_id(tex.0, &tex.1, group.tex_type, &group.id);
+                .load_id(tex.0, &tex.1, group.tex_type, &group.id, None);
         }
         self
     }
@@ -561,6 +561,7 @@ impl EngineBuilder {
             // Main engine systems
             .add_system(camera_3d_system())
             .add_system(sky::update_system())
+            .add_system(physics_3d_system())
             // Uniform loading systems
             .flush()
             .add_system(camera_3d_uniform_system())
@@ -651,6 +652,9 @@ impl EngineBuilder {
                         .texture_group(&ID(RENDER_3D_TEXTURE_GROUP))
                         .get(&ID(RENDER_3D_SKYBOX_BLUR_TEXTURE_ID))
                         .unwrap(),
+                )),
+                shared_group: Some(Arc::clone(
+                    &registry.textures.read().unwrap().shared[&ID(SKYBOX_SHARED_GROUP)],
                 )),
                 mesh: registry
                     .meshes
@@ -930,6 +934,7 @@ fn load_engine_textures(builder: &mut TextureRegistryBuilder, base_dir: &PathBuf
             .unwrap(),
         TextureType::Image,
         &ID(RENDER_2D_TEXTURE_GROUP),
+        None,
     );
 
     builder.load_id(
@@ -941,6 +946,7 @@ fn load_engine_textures(builder: &mut TextureRegistryBuilder, base_dir: &PathBuf
             .unwrap(),
         TextureType::Image,
         &ID(RENDER_3D_TEXTURE_GROUP),
+        None,
     );
 
     // default skybox
@@ -953,6 +959,7 @@ fn load_engine_textures(builder: &mut TextureRegistryBuilder, base_dir: &PathBuf
             .unwrap(),
         TextureType::Cubemap,
         &ID(RENDER_3D_TEXTURE_GROUP),
+        None,
     );
 
     builder.load_id(
@@ -964,6 +971,18 @@ fn load_engine_textures(builder: &mut TextureRegistryBuilder, base_dir: &PathBuf
             .unwrap(),
         TextureType::Cubemap,
         &ID(RENDER_3D_TEXTURE_GROUP),
+        None,
+    );
+
+    builder.with_shared_group(
+        ID(SKYBOX_SHARED_GROUP),
+        vec![
+            (ID(RENDER_3D_TEXTURE_GROUP), ID(RENDER_3D_SKYBOX_TEXTURE_ID)),
+            (
+                ID(RENDER_3D_TEXTURE_GROUP),
+                ID(RENDER_3D_SKYBOX_BLUR_TEXTURE_ID),
+            ),
+        ],
     );
 }
 

@@ -40,6 +40,7 @@ pub struct Sky {
     pub r3d_group: GroupState,
     pub cubemap: Arc<BindGroup>,
     pub cubemap_blur: Option<Arc<BindGroup>>,
+    pub shared_group: Option<Arc<BindGroup>>,
 }
 
 #[system]

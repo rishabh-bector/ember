@@ -185,10 +185,7 @@ pub fn render(
         &node.binder.uniform_groups[&ID(CAMERA_3D_BIND_GROUP_ID)],
         &[],
     );
-    pass.set_bind_group(3, &sky.cubemap, &[]);
-
-    let cubemap_blur = sky.cubemap_blur.as_ref().unwrap();
-    pass.set_bind_group(4, cubemap_blur, &[]);
+    pass.set_bind_group(3, sky.shared_group.as_ref().unwrap(), &[]);
 
     let mut query = <(&RenderPBR, &Mesh, &GroupState)>::query();
     for (render_pbr, mesh, group_state) in query.iter(world) {

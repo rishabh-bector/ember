@@ -51,6 +51,9 @@ pub const RENDER_3D_COMMON_TEXTURE_ID: &str = "fb378338-4d98-4b48-bd6d-1ca285159
 pub const RENDER_3D_SKYBOX_TEXTURE_ID: &str = "1aa08d8c-6c4b-48ff-9e8f-9a3bb37f0847";
 pub const RENDER_3D_SKYBOX_BLUR_TEXTURE_ID: &str = "e2e12d22-01b6-40c2-bd4b-e6df96434ea2";
 
+// Engine shared texture groups
+pub const SKYBOX_SHARED_GROUP: &str = "26787b7e-de9b-4010-93bf-a56fe6b3b6b5";
+
 // Primitive meshes
 pub const PRIMITIVE_MESH_GROUP_ID: &str = "437b63d4-5c7d-49e9-958b-8f68b4931355";
 pub const UNIT_SQUARE_MESH_ID: &str = "6fd0eeb3-9847-4a26-9eec-370e9839cbd3";

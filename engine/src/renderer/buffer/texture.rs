@@ -2,11 +2,14 @@ use anyhow::*;
 use std::{num::NonZeroU32, sync::Arc};
 use wgpu::TextureViewDimension;
 
+use crate::sources::registry::TextureType;
+
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
     pub bind_group: Option<Arc<wgpu::BindGroup>>,
+    pub texture_type: TextureType,
 }
 
 impl Texture {
@@ -131,6 +134,7 @@ impl Texture {
             texture,
             view,
             sampler,
+            texture_type: TextureType::Image,
             bind_group: Some(Arc::new(bind_group)),
         })
     }
@@ -176,6 +180,7 @@ impl Texture {
             texture,
             view,
             sampler,
+            texture_type: TextureType::Image,
             bind_group: None,
         }
     }
@@ -239,6 +244,7 @@ impl Texture {
             texture,
             view,
             sampler,
+            texture_type: TextureType::Cubemap,
             bind_group: Some(Arc::new(bind_group)),
         })
     }

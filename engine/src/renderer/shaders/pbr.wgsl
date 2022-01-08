@@ -89,9 +89,9 @@ var sky_cube: texture_cube<f32>;
 [[group(3), binding(1)]]
 var sky_sampler: sampler;
 
-[[group(4), binding(0)]]
+[[group(3), binding(2)]]
 var sky_cube_blur: texture_cube<f32>;
-[[group(4), binding(1)]]
+[[group(3), binding(3)]]
 var sky_sampler_blur: sampler;
 
 // ----- HIGH-PERFORMANCE IRRADIANCE (IBL) -----
@@ -172,7 +172,7 @@ fn distribution_term(roughness: f32, ndoth: f32) -> f32 {
 }
 
 fn fresnel_term(specular_color: vec3<f32>, vdoth: f32) -> vec3<f32> {
-	let fresnel = specular_color + (1.0 - specular_color) * pow((1.0 - vdoth), 5.0);
+	let fresnel = specular_color + (1.0 - specular_color) * pow((1.0 - vdoth), 8.0);
 	return fresnel;
 }
 
@@ -197,11 +197,13 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     var sample_texture: vec4<f32> = textureSample(texture0, sampler0, in.uvs);
     var sample_final: vec4<f32> = (render_pbr_uniforms.color * (1.0 - render_pbr_uniforms.mix)) + (render_pbr_uniforms.mix * sample_texture);
 
-    let light_color = vec3<f32>(0.65, 0.65, 0.6);
+    let light_color = vec3<f32>(0.9);
     let light_dir = vec3<f32>(0.0, 0.3, 1.0);
 
-    let base_color = pow(sample_final.rgb, vec3<f32>(2.0, 2.0, 2.0));
-    let metal = false;
+    let TEMPBASE = vec3<f32>(0.8, 0.5, 0.5);
+
+    let base_color = pow(TEMPBASE, vec3<f32>(2.2, 2.2, 2.2));
+    let metal = true;
 
     var diffuse_color: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
     if (!metal) {
@@ -213,13 +215,13 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
         specular_color = vec3<f32>(0.02, 0.02, 0.02);
     }
 
-    let roughness = 0.3;
+    let roughness = 0.2;
 
     let roughnessE = roughness * roughness;
 	let roughnessL = max(0.01, roughnessE);
 
     let normal = normalize(in.world_normal);
-    let view_dir = normalize(in.world_pos - camera_uniforms.view_pos.xyz);
+    let view_dir = normalize(camera_uniforms.view_pos.xyz - in.world_pos);
     let half_vec = normalize(view_dir + light_dir);
     
     let vdoth = clampf(dot(view_dir, half_vec));
@@ -230,8 +232,8 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let env_specular_color = env_brdf_approx(specular_color, roughnessE, ndotv);
     let refl = normalize(reflect(view_dir, normal));
 
-    let env_sample_clear = textureSample(sky_cube, sky_sampler, refl).xyz;
-    let env_sample_blur = textureSample(sky_cube_blur, sky_sampler_blur, refl).xyz;
+    let env_sample_clear = remap(textureSample(sky_cube, sky_sampler, refl).xyz);
+    let env_sample_blur = remap(textureSample(sky_cube, sky_sampler, refl).xyz);
     let env_refl_irrad = remap(sh_irradiance(refl));
     var env: vec3<f32> = mix(env_sample_clear, env_sample_blur, vec3<f32>(clampf(roughnessE * 4.0)));
     env = mix(env, env_refl_irrad, vec3<f32>(clampf((roughnessE - 0.25) / 0.75)));
@@ -244,7 +246,7 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let light_fresnel: vec3<f32> = fresnel_term(specular_color, vdoth);
     let light_distribution: f32 = distribution_term(roughnessL, ndoth);
     let light_visibility: f32 = visibility_term(roughnessL, ndotv, ndotl);
-    let specular_light = light_color * light_fresnel * (light_distribution * light_visibility * ndotl * 0.01);
+    let specular_light = light_color * light_fresnel * (light_distribution * light_visibility * ndotl * 2.0);
 
     //
     // FINAL COLOR = DIFFUSE (light scattered from environment) + SPECULAR (light reflected at definite angle)
@@ -265,5 +267,9 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let color = diffuse + specular;
     let gamma_corrected = pow(color * 0.4, vec3<f32>(1.0 / 2.2));
 
-    return vec4<f32>(color, 1.0);
+    // let thot = light_distribution * light_visibility;
+    let thot = light_distribution;
+    let fin = vec3<f32>(thot, thot, thot);
+
+    return vec4<f32>(fin, 1.0);
 }
