@@ -1,6 +1,6 @@
 // Vertex shader
 
-[[block]]
+
 struct Render2DUniforms {
     // [x, y, width, height]
     model: vec4<f32>;
@@ -12,13 +12,13 @@ struct Render2DUniforms {
     mix: f32;
 };
 
-[[block]]
+
 struct Camera2DUniforms {
     // [x, y, width, height]
     view: vec4<f32>;
 };
 
-[[block]]
+
 struct Light2DUniforms {
     // [x, y, linear, quadratic]
     light_0: vec4<f32>;
@@ -60,7 +60,7 @@ fn snap2grid(in: vec2<f32>, grid_size: i32) -> vec2<f32> {
 }
 
 [[stage(vertex)]]
-fn main(
+fn vs_main(
     in: VertexInput,
 ) -> VertexOutput {
     var world_space: vec2<f32> = in.position * render_2d_uniforms.model.zw + render_2d_uniforms.model.xy;
@@ -89,7 +89,7 @@ fn point_light_2d(pos: vec2<f32>, light: vec4<f32>) -> f32 {
 }
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     var world_pos: vec2<f32> = in.world_pos;
     
     var sample_texture: vec4<f32> = textureSample(texture0, sampler0, in.uvs);

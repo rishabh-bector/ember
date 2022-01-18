@@ -279,7 +279,7 @@ where
 
                 wgpu::BindGroupLayoutEntry {
                     binding: i as u32,
-                    visibility: wgpu::ShaderStage::VERTEX_FRAGMENT,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset,

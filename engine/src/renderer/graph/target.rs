@@ -1,5 +1,8 @@
 use anyhow::{anyhow, Result};
-use std::sync::{Arc, RwLockReadGuard};
+use std::{
+    borrow::BorrowMut,
+    sync::{Arc, RwLockReadGuard},
+};
 use wgpu::{BindGroupLayout, Device};
 
 use crate::{
@@ -14,7 +17,8 @@ pub enum RenderTarget {
         depth_buffer: Option<Arc<DepthBuffer>>,
     },
     Master {
-        screen_buffer: Option<Arc<wgpu::SwapChainTexture>>,
+        screen_buffer: Option<Arc<wgpu::SurfaceTexture>>,
+        screen_view: Option<Arc<wgpu::TextureView>>,
         depth_buffer: Option<Arc<DepthBuffer>>,
     },
 }
@@ -36,6 +40,7 @@ impl RenderTarget {
     pub fn empty_master(depth_buffer: Option<Arc<DepthBuffer>>) -> Self {
         RenderTarget::Master {
             screen_buffer: None,
+            screen_view: None,
             depth_buffer,
         }
     }
@@ -86,11 +91,12 @@ impl RenderTarget {
             )),
             RenderTarget::Master {
                 screen_buffer,
+                screen_view,
                 depth_buffer,
             } => match screen_buffer {
                 Some(buf) => Ok(create_render_pass(
                     name,
-                    &buf.view,
+                    screen_view.as_ref().unwrap(),
                     depth_buffer.as_ref().map(|tex| &tex.0.view),
                     encoder,
                     clear,
@@ -100,14 +106,30 @@ impl RenderTarget {
         }
     }
 
-    pub fn borrow_if_master(&self) -> Option<Arc<wgpu::SwapChainTexture>> {
+    pub fn borrow_if_master(&self) -> Option<Arc<wgpu::SurfaceTexture>> {
         match self {
             RenderTarget::Empty => None,
             RenderTarget::Texture { .. } => None,
             RenderTarget::Master {
                 screen_buffer,
+                screen_view: _,
                 depth_buffer: _,
             } => Some(Arc::clone(screen_buffer.as_ref().unwrap())),
+        }
+    }
+
+    pub fn get_view(&self) -> &wgpu::TextureView {
+        match self {
+            RenderTarget::Empty => todo!(),
+            RenderTarget::Texture {
+                color_buffer,
+                depth_buffer: _,
+            } => &color_buffer.view,
+            RenderTarget::Master {
+                screen_view,
+                screen_buffer: _,
+                depth_buffer: _,
+            } => screen_view.as_ref().unwrap(),
         }
     }
 
@@ -129,6 +151,7 @@ impl RenderTarget {
             RenderTarget::Texture { .. } => None,
             RenderTarget::Master {
                 screen_buffer: _,
+                screen_view: _,
                 depth_buffer,
             } => depth_buffer.as_ref().map(Arc::clone),
         }
@@ -143,17 +166,24 @@ impl RenderTarget {
             } => *depth_buffer = Some(buffer),
             RenderTarget::Master {
                 screen_buffer: _,
+                screen_view: _,
                 depth_buffer,
             } => *depth_buffer = Some(buffer),
         }
     }
 
-    pub fn set_swap_chain(&mut self, buffer: Arc<wgpu::SwapChainTexture>) {
+    pub fn set_swap_chain(&mut self, buffer: Arc<wgpu::SurfaceTexture>) {
         if let RenderTarget::Master {
             screen_buffer,
+            screen_view,
             depth_buffer: _,
         } = self
         {
+            *screen_view = Some(Arc::new(
+                buffer
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default()),
+            ));
             *screen_buffer = Some(buffer);
         }
     }
@@ -163,10 +193,13 @@ impl RenderTarget {
     pub fn release_swap_chain(&mut self) {
         if let RenderTarget::Master {
             screen_buffer,
+            screen_view: _,
             depth_buffer: _,
         } = self
         {
-            *screen_buffer = None;
+            let screen_buffer = screen_buffer.borrow_mut();
+            let released = std::mem::replace(screen_buffer, None).unwrap();
+            Arc::try_unwrap(released).unwrap().present();
         }
     }
 
@@ -182,9 +215,11 @@ impl RenderTarget {
             },
             RenderTarget::Master {
                 screen_buffer,
+                screen_view,
                 depth_buffer,
             } => RenderTarget::Master {
                 screen_buffer: Some(Arc::clone(screen_buffer.as_ref().unwrap())),
+                screen_view: Some(Arc::clone(screen_view.as_ref().unwrap())),
                 depth_buffer: depth_buffer.as_ref().map(Arc::clone),
             },
         }

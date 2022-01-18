@@ -61,6 +61,7 @@ impl Texture {
                 texture: &texture.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
             },
             rgba,
             wgpu::ImageDataLayout {
@@ -92,11 +93,11 @@ impl Texture {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             usage: match is_render_target {
-                false => wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+                false => wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                 true => {
-                    wgpu::TextureUsage::SAMPLED
-                        | wgpu::TextureUsage::COPY_DST
-                        | wgpu::TextureUsage::RENDER_ATTACHMENT
+                    wgpu::TextureUsages::TEXTURE_BINDING
+                        | wgpu::TextureUsages::COPY_DST
+                        | wgpu::TextureUsages::RENDER_ATTACHMENT
                 }
             },
             label,
@@ -158,7 +159,7 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
         };
         let texture = device.create_texture(&desc);
 
@@ -202,7 +203,7 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             label,
             size,
             format,
@@ -281,6 +282,7 @@ impl Texture {
                 texture: &texture.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
             },
             &combo,
             wgpu::ImageDataLayout {

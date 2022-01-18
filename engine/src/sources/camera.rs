@@ -22,6 +22,7 @@ pub struct Camera3D {
     pub z_far: f32,
 
     pub first: bool,
+    pub right_click_move: bool,
 }
 
 impl Camera3D {
@@ -40,6 +41,7 @@ impl Camera3D {
             z_near: 0.01,
             z_far: 10000.0,
             first: true,
+            right_click_move: false,
         }
     }
 

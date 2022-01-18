@@ -2,14 +2,14 @@
 // Common
 // -------------------------------------------------
 
-[[block]]
+
 struct QuadUniforms {
     dimensions: vec2<f32>;
     time: f32;
     delta: f32;
 };
 
-[[block]]
+
 struct CameraUniforms {
     origin: vec4<f32>;
     view_proj: mat4x4<f32>;
@@ -40,7 +40,7 @@ struct VertexOutput {
 };
 
 [[stage(vertex)]]
-fn main(in: VertexInput) -> VertexOutput {
+fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
 
     out.position = vec4<f32>(in.position, 0.0, 1.0);
@@ -365,7 +365,7 @@ fn render(ray_src: vec3<f32>, ray_dir: vec3<f32>, ray_del: RayDelta) -> vec3<f32
 // var sampler0: sampler;
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let ray_src = in.ray_origin;
     let ray_dir = normalize(in.ray);
     let ray_del = ray_delta(in.screen_pos*quad.dimensions, quad.dimensions, camera.inv_view_proj, camera.clip.y - camera.clip.x);

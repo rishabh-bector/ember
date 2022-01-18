@@ -300,7 +300,7 @@ impl NodeBuilderTrait for NodeBuilder {
 
         if self.vertex_buffer_layouts.len() == 0 {
             return Err(anyhow!(
-                "{}: render nodes require at least one vertex buffer"
+                "{{}}: render nodes require at least one vertex buffer"
             ));
         }
 
@@ -351,16 +351,16 @@ impl NodeBuilderTrait for NodeBuilder {
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader_module,
-                entry_point: "main",
+                entry_point: "vs_main",
                 buffers: self.vertex_buffer_layouts.as_slice(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader_module,
-                entry_point: "main",
+                entry_point: "fs_main",
                 targets: &[wgpu::ColorTargetState {
                     format: registry.textures.read().unwrap().format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrite::ALL,
+                    write_mask: wgpu::ColorWrites::ALL,
                 }],
             }),
             primitive: wgpu::PrimitiveState {
@@ -372,8 +372,8 @@ impl NodeBuilderTrait for NodeBuilder {
                     false => wgpu::Face::Back,
                 }),
                 polygon_mode: wgpu::PolygonMode::Fill,
-                clamp_depth: false,
                 conservative: false,
+                unclipped_depth: false,
             },
             depth_stencil: match self.depth_buffer {
                 false => None,
@@ -393,6 +393,7 @@ impl NodeBuilderTrait for NodeBuilder {
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
+            multiview: None,
         });
 
         // Move registered uniform groups and sources into system resources
@@ -482,7 +483,6 @@ pub trait NodeBuilderTrait {
 fn build_shader(source: &ShaderSource, label: &str, device: &wgpu::Device) -> wgpu::ShaderModule {
     device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: Some(label),
-        flags: wgpu::ShaderFlags::all(),
         source: match source {
             ShaderSource::WGSL(src) => wgpu::ShaderSource::Wgsl(src.clone().into()),
             _ => panic!(

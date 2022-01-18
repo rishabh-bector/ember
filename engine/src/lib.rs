@@ -14,10 +14,17 @@ extern crate legion;
 extern crate vertex_layout_derive;
 
 use anyhow::Result;
+use iced::Size;
+use iced_wgpu::Viewport;
+use iced_winit::{
+    conversion,
+    winit::{self, event::WindowEvent},
+    Clipboard, Debug,
+};
 use image::{DynamicImage, ImageBuffer, Rgba};
 use legion::{Resources, Schedule, World};
 use renderer::systems::render_3d::forward_pbr::RenderPBRForwardUniformGroup;
-use sources::registry::TextureType;
+use sources::{registry::TextureType, ui::iced::IcedWinitHelper};
 use std::{
     env,
     path::PathBuf,
@@ -26,13 +33,14 @@ use std::{
     time::{Duration, Instant},
 };
 use uuid::Uuid;
+use winit_input_helper::WinitInputHelper;
+
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
     event_loop::{ControlFlow, EventLoop},
     window::{Fullscreen, Window, WindowBuilder},
 };
-use winit_input_helper::WinitInputHelper;
 
 use crate::{
     components::{FrameMetrics, Transform3D},
@@ -58,7 +66,6 @@ use crate::{
         metrics::{EngineMetrics, EngineReporter},
         registry::{MeshRegistryBuilder, Registry, TextureRegistryBuilder},
         schedule::{Schedulable, SubSchedule},
-        ui::UI,
         WindowSize,
     },
     systems::{
@@ -86,12 +93,15 @@ pub struct Engine {
     gpu: Arc<Mutex<GpuState>>,
     graph: Arc<RenderGraph>,
     window: Arc<Window>,
+    helper: Arc<Mutex<IcedWinitHelper>>,
     input: Arc<RwLock<WinitInputHelper>>,
+    clipboard: Clipboard,
     registry: Registry,
     legion: LegionState,
     reporter: EngineReporter,
     engine_metrics: Arc<EngineMetrics>,
     frame_metrics: Arc<RwLock<FrameMetrics>>,
+    cursor_state: CursorState,
     mode: EngineMode,
 }
 
@@ -99,6 +109,25 @@ enum EngineMode {
     Forward2D,
     Forward3D,
     Quad,
+}
+
+enum CursorMode {
+    Edit,
+    Grab,
+}
+
+struct CursorState {
+    pub mode: CursorMode,
+    pub changed: bool,
+}
+
+impl CursorState {
+    pub fn default() -> Self {
+        Self {
+            mode: CursorMode::Edit,
+            changed: true,
+        }
+    }
 }
 
 impl Engine {
@@ -122,47 +151,130 @@ impl Engine {
         // top-level event loop; hijacks thread
         let metrics_last_updated = Arc::new(Mutex::new(Instant::now()));
         event_loop.run(move |event, _, control_flow| {
-            if let Event::RedrawRequested(_) = event {
-                debug!("executing all systems");
-                self.frame_metrics.write().unwrap().begin_frame();
-                self.legion.execute();
-                self.reporter.update();
-                self.frame_metrics.write().unwrap().end_frame();
+            *control_flow = ControlFlow::Poll;
 
-                if metrics_last_updated.lock().unwrap().elapsed() >= Duration::from_secs(1) {
-                    self.engine_metrics.calculate();
-                    *metrics_last_updated.lock().unwrap() = Instant::now();
+            let mut ui_debug = self.graph.debug.lock().unwrap();
+
+            self.input.write().unwrap().update(&event);
+
+            match event {
+                Event::WindowEvent { event, .. } => {
+                    let mut helper = self.helper.lock().unwrap();
+                    match event {
+                        WindowEvent::CursorMoved { position, .. } => {
+                            helper.cursor_position = position;
+                        }
+                        WindowEvent::ModifiersChanged(new_modifiers) => {
+                            helper.modifiers = new_modifiers;
+                        }
+                        WindowEvent::Resized(new_size) => {
+                            helper.viewport = Viewport::with_physical_size(
+                                Size::new(new_size.width, new_size.height),
+                                self.window.scale_factor(),
+                            );
+
+                            // resized = true;
+                        }
+                        WindowEvent::CloseRequested => {
+                            *control_flow = ControlFlow::Exit;
+                        }
+                        _ => {}
+                    }
+
+                    // Map window event to iced event
+                    if let Some(event) = iced_winit::conversion::window_event(
+                        &event,
+                        self.window.scale_factor(),
+                        helper.modifiers,
+                    ) {
+                        self.graph.ui.lock().unwrap().state.queue_event(event);
+                    }
                 }
+                Event::MainEventsCleared => {
+                    // If there are events pending
+                    let mut ui = self.graph.ui.lock().unwrap();
+
+                    if !ui.state.is_queue_empty() {
+                        let helper = self.helper.lock().unwrap();
+                        ui.update(&mut self.clipboard, &helper, &mut ui_debug);
+
+                        self.window
+                            .set_cursor_icon(iced_winit::conversion::mouse_interaction(
+                                ui.state.mouse_interaction(),
+                            ));
+
+                        let input = self.input.read().unwrap();
+                        if input.mouse_pressed(1) {
+                            self.cursor_state.mode = CursorMode::Grab;
+                            self.cursor_state.changed = true;
+                        }
+                        if input.mouse_released(1) {
+                            self.cursor_state.mode = CursorMode::Edit;
+                            self.cursor_state.changed = true;
+                        }
+
+                        if self.cursor_state.changed {
+                            match self.cursor_state.mode {
+                                CursorMode::Edit => {
+                                    self.window.set_cursor_visible(true);
+                                    let _ = self.window.set_cursor_grab(false);
+                                }
+                                CursorMode::Grab => {
+                                    self.window.set_cursor_visible(false);
+                                    let _ = self.window.set_cursor_grab(true);
+                                }
+                            }
+                            self.cursor_state.changed = false;
+                        }
+                    }
+
+                    self.window.request_redraw();
+                }
+                Event::RedrawRequested(_) => {
+                    debug!("executing all systems");
+                    self.frame_metrics.write().unwrap().begin_frame();
+                    self.legion.execute();
+                    self.reporter.update();
+                    self.frame_metrics.write().unwrap().end_frame();
+
+                    if metrics_last_updated.lock().unwrap().elapsed() >= Duration::from_secs(1) {
+                        self.engine_metrics.calculate();
+                        *metrics_last_updated.lock().unwrap() = Instant::now();
+                    }
+
+                    self.window.request_redraw();
+                }
+                _ => {}
             }
 
-            let ui = self.legion.resources.get_mut::<Arc<UI>>().unwrap();
-            let mut context = ui.context.lock().unwrap();
-            ui.platform
-                .lock()
-                .unwrap()
-                .handle_event(context.io_mut(), &self.window, &event);
+            // let ui = self.legion.resources.get_mut::<Arc<UI>>().unwrap();
+            // let mut context = ui.context.lock().unwrap();
+            // ui.platform
+            //     .lock()
+            //     .unwrap()
+            //     .handle_event(context.io_mut(), &self.window, &event);
 
-            if self.input.write().unwrap().update(&event) {
-                let input = self.input.read().unwrap();
-                if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
-                    debug!("shutting down");
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                }
+            // if self.input.write().unwrap().update(&event) {
+            //     let input = self.input.read().unwrap();
+            //     if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
+            //         debug!("shutting down");
+            //         *control_flow = ControlFlow::Exit;
+            //         return;
+            //     }
 
-                if let Some(physical_size) = input.resolution() {
-                    self.gpu.lock().unwrap().resize(physical_size);
-                }
-                self.window.request_redraw();
-            }
+            //     if let Some(physical_size) = input.resolution() {
+            //         self.gpu.lock().unwrap().resize(physical_size);
+            //     }
+            //     self.window.request_redraw();
+            // }
         });
     }
 
     fn init(&mut self) {
         match &self.mode {
             EngineMode::Forward3D | EngineMode::Quad => {
-                self.window.set_cursor_visible(false);
-                let _ = self.window.set_cursor_grab(true);
+                // self.window.set_cursor_visible(false);
+                // let _ = self.window.set_cursor_grab(true);
             }
             _ => {}
         }
@@ -201,7 +313,7 @@ impl EngineBuilder {
     pub fn default_2d(self) -> Result<(Engine, EventLoop<()>)> {
         info!("building engine: default_2d");
 
-        let (gpu, window, event_loop, registry, mut resources) = build_engine_common(
+        let (gpu, window, event_loop, registry, mut resources, helper) = build_engine_common(
             self.window_size,
             self.texture_registry_builder,
             self.mesh_registry_builder,
@@ -254,7 +366,7 @@ impl EngineBuilder {
         let mut graph_schedule = SubSchedule::new();
         let (render_graph, engine_metrics) = GraphBuilder::new()
             .with_master_node(node_2d_forward_instance)
-            .with_ui_master()
+            .with_ui_imgui()
             .build(
                 Arc::clone(&gpu_mut.device),
                 Arc::clone(&gpu_mut.queue),
@@ -263,6 +375,7 @@ impl EngineBuilder {
                 &registry,
                 &window,
                 metrics_ui,
+                &helper,
             )?;
 
         info!("scheduling render graph");
@@ -276,27 +389,32 @@ impl EngineBuilder {
         )));
 
         // resource
-        let input_helper = Arc::new(RwLock::new(WinitInputHelper::new()));
+        let frame_metrics = Arc::new(RwLock::new(FrameMetrics::new()));
 
         // resource
-        let frame_metrics = Arc::new(RwLock::new(FrameMetrics::new()));
+        let helper = Arc::new(Mutex::new(helper));
+        let input = Arc::new(RwLock::new(WinitInputHelper::new()));
 
         drop(gpu_mut);
         resources.insert(Arc::clone(&gpu));
         resources.insert(Arc::clone(&window));
         resources.insert(Arc::clone(&registry.textures));
         resources.insert(Arc::clone(&registry.meshes));
-        resources.insert(Arc::clone(&input_helper));
         resources.insert(Arc::clone(&frame_metrics));
         resources.insert(Arc::clone(&render_graph));
         resources.insert(Arc::clone(&camera_2d));
+        resources.insert(Arc::clone(&helper));
+        resources.insert(Arc::clone(&input));
+
+        let clipboard = Clipboard::connect(&window);
 
         info!("ready to start!");
         Ok((
             Engine {
                 mode: EngineMode::Forward2D,
                 reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
-                input: input_helper,
+                helper,
+                input,
                 legion: LegionState {
                     world: World::default(),
                     schedule,
@@ -307,6 +425,8 @@ impl EngineBuilder {
                 window,
                 engine_metrics,
                 frame_metrics,
+                clipboard,
+                cursor_state: CursorState::default(),
                 gpu,
             },
             event_loop,
@@ -316,7 +436,7 @@ impl EngineBuilder {
     pub fn default_3d(self) -> Result<(Engine, EventLoop<()>)> {
         info!("building engine: default_3d");
 
-        let (gpu, window, event_loop, registry, mut resources) = build_engine_common(
+        let (gpu, window, event_loop, registry, mut resources, helper) = build_engine_common(
             self.window_size,
             self.texture_registry_builder,
             self.mesh_registry_builder,
@@ -358,6 +478,7 @@ impl EngineBuilder {
                 &registry,
                 &window,
                 metrics_ui,
+                &helper,
             )?;
 
         info!("scheduling render graph");
@@ -371,7 +492,8 @@ impl EngineBuilder {
         )));
 
         // resource
-        let input_helper = Arc::new(RwLock::new(WinitInputHelper::new()));
+        let helper = Arc::new(Mutex::new(helper));
+        let input = Arc::new(RwLock::new(WinitInputHelper::new()));
 
         // resource
         let frame_metrics = Arc::new(RwLock::new(FrameMetrics::new()));
@@ -381,18 +503,22 @@ impl EngineBuilder {
         resources.insert(Arc::clone(&window));
         resources.insert(Arc::clone(&registry.textures));
         resources.insert(Arc::clone(&registry.meshes));
-        resources.insert(Arc::clone(&input_helper));
+        resources.insert(Arc::clone(&helper));
+        resources.insert(Arc::clone(&input));
         resources.insert(Arc::clone(&frame_metrics));
         resources.insert(Arc::clone(&render_graph));
         resources.insert(Arc::clone(&render_3d_group_builder));
         resources.insert(Arc::clone(&camera_3d));
+
+        let clipboard = Clipboard::connect(&window);
 
         info!("ready to start!");
         Ok((
             Engine {
                 mode: EngineMode::Forward3D,
                 reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
-                input: input_helper,
+                helper,
+                input,
                 legion: LegionState {
                     world: World::default(),
                     schedule,
@@ -403,7 +529,9 @@ impl EngineBuilder {
                 window,
                 engine_metrics,
                 frame_metrics,
+                cursor_state: CursorState::default(),
                 gpu,
+                clipboard,
             },
             event_loop,
         ))
@@ -412,7 +540,7 @@ impl EngineBuilder {
     pub fn default_quad(self, shader_source: ShaderSource) -> Result<(Engine, EventLoop<()>)> {
         info!("building engine: default_shader");
 
-        let (gpu, window, event_loop, registry, mut resources) = build_engine_common(
+        let (gpu, window, event_loop, registry, mut resources, helper) = build_engine_common(
             self.window_size,
             self.texture_registry_builder,
             self.mesh_registry_builder,
@@ -452,6 +580,7 @@ impl EngineBuilder {
                 &registry,
                 &window,
                 metrics_ui,
+                &helper,
             )?;
 
         info!("scheduling render graph");
@@ -459,7 +588,8 @@ impl EngineBuilder {
         let schedule = schedule.build();
 
         // resource
-        let input_helper = Arc::new(RwLock::new(WinitInputHelper::new()));
+        let helper = Arc::new(Mutex::new(helper));
+        let input = Arc::new(RwLock::new(WinitInputHelper::new()));
 
         // resource
         let frame_metrics = Arc::new(RwLock::new(FrameMetrics::new()));
@@ -495,28 +625,34 @@ impl EngineBuilder {
         resources.insert(Arc::clone(&window));
         resources.insert(Arc::clone(&registry.textures));
         resources.insert(Arc::clone(&registry.meshes));
-        resources.insert(Arc::clone(&input_helper));
+        resources.insert(Arc::clone(&helper));
+        resources.insert(Arc::clone(&input));
         resources.insert(Arc::clone(&frame_metrics));
         resources.insert(Arc::clone(&render_graph));
         resources.insert(Arc::clone(&camera_3d));
+
+        let clipboard = Clipboard::connect(&window);
 
         info!("ready to start!");
         Ok((
             Engine {
                 mode: EngineMode::Quad,
                 reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
-                input: input_helper,
+                helper,
+                input,
                 legion: LegionState {
                     world: World::default(),
                     schedule,
                     resources,
                 },
                 graph: render_graph,
+                cursor_state: CursorState::default(),
                 registry,
                 window,
                 engine_metrics,
                 frame_metrics,
                 gpu,
+                clipboard,
             },
             event_loop,
         ))
@@ -527,7 +663,7 @@ impl EngineBuilder {
         warn!("RUNNING EXPERIMENTAL ENGINE MODE: test_channel_node");
         info!("building engine: test_channel_node");
 
-        let (gpu, window, event_loop, registry, mut resources) = build_engine_common(
+        let (gpu, window, event_loop, registry, mut resources, helper) = build_engine_common(
             self.window_size,
             self.texture_registry_builder,
             self.mesh_registry_builder,
@@ -560,8 +696,9 @@ impl EngineBuilder {
         schedule
             // Main engine systems
             .add_system(camera_3d_system())
+            .flush()
             .add_system(sky::update_system())
-            .add_system(physics_3d_system())
+            // .add_system(physics_3d_system())
             // Uniform loading systems
             .flush()
             .add_system(camera_3d_uniform_system())
@@ -580,6 +717,7 @@ impl EngineBuilder {
             .with_source_node(node_sky)
             .with_source_node(node_pbr)
             .with_master_node(node_channel)
+            .with_ui_iced()
             .build(
                 Arc::clone(&gpu_mut.device),
                 Arc::clone(&gpu_mut.queue),
@@ -588,6 +726,7 @@ impl EngineBuilder {
                 &registry,
                 &window,
                 metrics_ui,
+                &helper,
             )?;
 
         info!("scheduling render graph");
@@ -595,7 +734,8 @@ impl EngineBuilder {
         let schedule = schedule.build();
 
         // resource
-        let input_helper = Arc::new(RwLock::new(WinitInputHelper::new()));
+        let helper = Arc::new(Mutex::new(helper));
+        let input = Arc::new(RwLock::new(WinitInputHelper::new()));
 
         // resource
         let frame_metrics = Arc::new(RwLock::new(FrameMetrics::new()));
@@ -624,6 +764,7 @@ impl EngineBuilder {
             self.window_size.0 as f32,
             self.window_size.1 as f32,
         )));
+        camera_3d.lock().unwrap().right_click_move = true;
 
         // resource
         let sky = {
@@ -674,30 +815,36 @@ impl EngineBuilder {
         resources.insert(Arc::clone(&window));
         resources.insert(Arc::clone(&registry.textures));
         resources.insert(Arc::clone(&registry.meshes));
-        resources.insert(Arc::clone(&input_helper));
+        resources.insert(Arc::clone(&helper));
+        resources.insert(Arc::clone(&input));
         resources.insert(Arc::clone(&frame_metrics));
         resources.insert(Arc::clone(&render_graph));
         resources.insert(Arc::clone(&render_3d_group_builder)); // what the shit is this?
         resources.insert(Arc::clone(&render_pbr_group_builder)); // what the shit is this?
         resources.insert(Arc::clone(&camera_3d));
 
+        let clipboard = Clipboard::connect(&window);
+
         info!("ready to start!");
         Ok((
             Engine {
                 mode: EngineMode::Forward3D,
                 reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
-                input: input_helper,
+                helper,
+                input,
                 legion: LegionState {
                     world: World::default(),
                     schedule,
                     resources,
                 },
                 graph: render_graph,
+                cursor_state: CursorState::default(),
                 registry,
                 window,
                 engine_metrics,
                 frame_metrics,
                 gpu,
+                clipboard,
             },
             event_loop,
         ))
@@ -708,7 +855,7 @@ impl EngineBuilder {
         warn!("RUNNING EXPERIMENTAL ENGINE MODE: test_automata_node");
         info!("building engine: test_automata_node");
 
-        let (gpu, window, event_loop, registry, mut resources) = build_engine_common(
+        let (gpu, window, event_loop, registry, mut resources, helper) = build_engine_common(
             self.window_size,
             self.texture_registry_builder,
             self.mesh_registry_builder,
@@ -755,6 +902,7 @@ impl EngineBuilder {
                 &registry,
                 &window,
                 metrics_ui,
+                &helper,
             )?;
 
         info!("scheduling render graph");
@@ -762,7 +910,8 @@ impl EngineBuilder {
         let schedule = schedule.build();
 
         // resource
-        let input_helper = Arc::new(RwLock::new(WinitInputHelper::new()));
+        let helper = Arc::new(Mutex::new(helper));
+        let input = Arc::new(RwLock::new(WinitInputHelper::new()));
 
         // resource
         let frame_metrics = Arc::new(RwLock::new(FrameMetrics::new()));
@@ -798,29 +947,35 @@ impl EngineBuilder {
         resources.insert(Arc::clone(&window));
         resources.insert(Arc::clone(&registry.textures));
         resources.insert(Arc::clone(&registry.meshes));
-        resources.insert(Arc::clone(&input_helper));
+        resources.insert(Arc::clone(&helper));
+        resources.insert(Arc::clone(&input));
         resources.insert(Arc::clone(&frame_metrics));
         resources.insert(Arc::clone(&render_graph));
         // resources.insert(Arc::clone(&render_3d_group_builder)); // what the shit is this?
         resources.insert(Arc::clone(&camera_3d));
+
+        let clipboard = Clipboard::connect(&window);
 
         info!("ready to start!");
         Ok((
             Engine {
                 mode: EngineMode::Forward3D,
                 reporter: EngineReporter::new(Arc::clone(&engine_metrics.fps)),
-                input: input_helper,
+                helper,
+                input,
                 legion: LegionState {
                     world: World::default(),
                     schedule,
                     resources,
                 },
                 graph: render_graph,
+                cursor_state: CursorState::default(),
                 registry,
                 window,
                 engine_metrics,
                 frame_metrics,
                 gpu,
+                clipboard,
             },
             event_loop,
         ))
@@ -837,6 +992,7 @@ fn build_engine_common(
     EventLoop<()>,
     Registry,
     Resources,
+    IcedWinitHelper,
 )> {
     let mut resources = Resources::default();
     resources.insert(RwLock::new(FrameMetrics::new()));
@@ -853,7 +1009,9 @@ fn build_engine_common(
     };
     resources.insert(Arc::new(window_size));
 
-    Ok((gpu, window, event_loop, registry, resources))
+    let helper = IcedWinitHelper::new(&window);
+
+    Ok((gpu, window, event_loop, registry, resources, helper))
 }
 
 // Dimension-agnostic init logic
@@ -897,9 +1055,9 @@ fn build_window(size: (u32, u32), event_loop: &EventLoop<()>) -> Result<Arc<Wind
             .with_inner_size(size)
             // .with_min_inner_size(size)
             // .with_max_inner_size(size)
-            .with_resizable(true)
-            // .with_fullscreen(None)
-            .with_fullscreen(Some(Fullscreen::Borderless(None)))
+            .with_resizable(false)
+            .with_fullscreen(None)
+            // .with_fullscreen(Some(Fullscreen::Borderless(None)))
             .build(event_loop)?
     }))
 }

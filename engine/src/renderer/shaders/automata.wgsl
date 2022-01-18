@@ -2,7 +2,7 @@
 // Common
 // -------------------------------------------------
 
-[[block]]
+
 struct QuadUniforms {
     dimensions: vec2<f32>;
     time: f32;
@@ -27,7 +27,7 @@ struct VertexOutput {
 };
 
 [[stage(vertex)]]
-fn main(in: VertexInput) -> VertexOutput {
+fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
 
     out.position = vec4<f32>(in.position, 0.0, 1.0);
@@ -103,7 +103,7 @@ fn n_square_cnt(cell_pos: vec2<f32>, rad: f32) -> u32 {
 }
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let frag_uvs: vec2<f32> = in.screen_pos;
     let previous: vec4<f32> = textureSample(node_input_tex, node_input_smp, frag_uvs);
     let state: bool = sample(frag_uvs);

@@ -1,4 +1,4 @@
-use imgui::im_str;
+// use imgui::im_str;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, MutexGuard},
@@ -6,7 +6,7 @@ use std::{
 };
 use uuid::Uuid;
 
-use super::ui::ImguiWindow;
+// use super::ui::imgui::ImguiWindow;
 
 pub struct EngineMetrics {
     pub systems: HashMap<Uuid, Arc<Mutex<SystemMetrics>>>,
@@ -77,15 +77,15 @@ impl EngineMetrics {
     }
 }
 
-impl ImguiWindow for EngineMetrics {
-    fn build(&self, frame: &imgui::Ui) {
-        self.ui.lock().unwrap().build(frame);
-    }
+// impl ImguiWindow for EngineMetrics {
+//     fn build(&self, frame: &imgui::Ui) {
+//         self.ui.lock().unwrap().build(frame);
+//     }
 
-    fn impl_imgui(self: Arc<Self>) -> Arc<dyn ImguiWindow> {
-        self
-    }
-}
+//     fn impl_imgui(self: Arc<Self>) -> Arc<dyn ImguiWindow> {
+//         self
+//     }
+// }
 
 #[derive(Default)]
 pub struct EngineMetricsUI {
@@ -94,40 +94,40 @@ pub struct EngineMetricsUI {
     pub avg_execution_time: f64,
 }
 
-impl ImguiWindow for EngineMetricsUI {
-    fn build(&self, frame: &imgui::Ui) {
-        imgui::Window::new(im_str!("Ember Engine Debugger"))
-            .size([225.0, 200.0], imgui::Condition::FirstUseEver)
-            .build(&frame, || {
-                if imgui::CollapsingHeader::new(im_str!("General"))
-                    .default_open(true)
-                    .build(&frame)
-                {
-                    frame.text(format!("fps: {}", self.avg_fps));
-                }
+// impl ImguiWindow for EngineMetricsUI {
+//     fn build(&self, frame: &imgui::Ui) {
+//         imgui::Window::new(im_str!("Ember Engine Debugger"))
+//             .size([225.0, 200.0], imgui::Condition::FirstUseEver)
+//             .build(&frame, || {
+//                 if imgui::CollapsingHeader::new(im_str!("General"))
+//                     .default_open(true)
+//                     .build(&frame)
+//                 {
+//                     frame.text(format!("fps: {}", self.avg_fps));
+//                 }
 
-                frame.spacing();
-                if imgui::CollapsingHeader::new(im_str!("Render Graph")).build(&frame) {
-                    frame.text("Frame Time");
-                    frame.separator();
-                    for (_, (system_name, usage)) in &self.percent_system_shares {
-                        frame.text(format!("{}: {}%", system_name, usage));
-                    }
-                }
+//                 frame.spacing();
+//                 if imgui::CollapsingHeader::new(im_str!("Render Graph")).build(&frame) {
+//                     frame.text("Frame Time");
+//                     frame.separator();
+//                     for (_, (system_name, usage)) in &self.percent_system_shares {
+//                         frame.text(format!("{}: {}%", system_name, usage));
+//                     }
+//                 }
 
-                frame.separator();
-                let mouse_pos = frame.io().mouse_pos;
-                frame.text(format!(
-                    "Mouse Position: ({:.1},{:.1})",
-                    mouse_pos[0], mouse_pos[1]
-                ));
-            });
-    }
+//                 frame.separator();
+//                 let mouse_pos = frame.io().mouse_pos;
+//                 frame.text(format!(
+//                     "Mouse Position: ({:.1},{:.1})",
+//                     mouse_pos[0], mouse_pos[1]
+//                 ));
+//             });
+//     }
 
-    fn impl_imgui(self: Arc<Self>) -> Arc<dyn ImguiWindow> {
-        self
-    }
-}
+//     fn impl_imgui(self: Arc<Self>) -> Arc<dyn ImguiWindow> {
+//         self
+//     }
+// }
 
 pub struct EngineReporter {
     target: Arc<Mutex<u32>>,

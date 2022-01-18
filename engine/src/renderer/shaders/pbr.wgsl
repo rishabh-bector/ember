@@ -2,21 +2,19 @@
 // Common
 // -------------------------------------------------
 
-[[block]]
 struct RenderPBRUniforms {
     model_mat: mat4x4<f32>;
     normal_mat: mat4x4<f32>;
     color: vec4<f32>;
-    mix: f32;
+    params: vec4<f32>;
 };
 
-[[block]]
 struct Camera3DUniforms {
     view_pos: vec4<f32>;
     view_proj: mat4x4<f32>;
 };
 
-// [[block]]
+// 
 // struct Light3DUniforms {
 //     // [x, y, linear, quadratic]
 //     light_0: vec4<f32>;
@@ -53,7 +51,7 @@ struct VertexOutput {
 };
 
 [[stage(vertex)]]
-fn main(
+fn vs_main(
     in: VertexInput,
 ) -> VertexOutput {
     var world_space: vec4<f32> = render_pbr_uniforms.model_mat * vec4<f32>(in.position, 1.0);
@@ -193,14 +191,15 @@ fn remap(in: vec3<f32>) -> vec3<f32> {
 }
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {    
+fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {    
     var sample_texture: vec4<f32> = textureSample(texture0, sampler0, in.uvs);
-    var sample_final: vec4<f32> = (render_pbr_uniforms.color * (1.0 - render_pbr_uniforms.mix)) + (render_pbr_uniforms.mix * sample_texture);
+    var sample_final: vec4<f32> = (render_pbr_uniforms.color * (1.0 - render_pbr_uniforms.params.x)) + (render_pbr_uniforms.params.x * sample_texture);
 
-    let light_color = vec3<f32>(0.9);
-    let light_dir = vec3<f32>(0.0, 0.3, 1.0);
+    let light_color = vec3<f32>(0.3);
+    let light_dir = normalize(vec3<f32>(0.7, 0.9, 0.2));
+    let world_light = vec3<f32>(0.001);
 
-    let TEMPBASE = vec3<f32>(0.8, 0.5, 0.5);
+    let TEMPBASE = vec3<f32>(0.5, 0.5, 0.5);
 
     let base_color = pow(TEMPBASE, vec3<f32>(2.2, 2.2, 2.2));
     let metal = true;
@@ -215,13 +214,14 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
         specular_color = vec3<f32>(0.02, 0.02, 0.02);
     }
 
-    let roughness = 0.2;
+    let roughness = render_pbr_uniforms.params.y;
 
     let roughnessE = roughness * roughness;
 	let roughnessL = max(0.01, roughnessE);
 
     let normal = normalize(in.world_normal);
-    let view_dir = normalize(camera_uniforms.view_pos.xyz - in.world_pos);
+    let ray_dir = normalize(normalize(in.world_pos - camera_uniforms.view_pos.xyz));
+    let view_dir = -ray_dir;
     let half_vec = normalize(view_dir + light_dir);
     
     let vdoth = clampf(dot(view_dir, half_vec));
@@ -230,10 +230,10 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let ndotl = clampf(dot(normal, light_dir));
 
     let env_specular_color = env_brdf_approx(specular_color, roughnessE, ndotv);
-    let refl = normalize(reflect(view_dir, normal));
+    let refl = normalize(reflect(ray_dir, normal));
 
     let env_sample_clear = remap(textureSample(sky_cube, sky_sampler, refl).xyz);
-    let env_sample_blur = remap(textureSample(sky_cube, sky_sampler, refl).xyz);
+    let env_sample_blur = remap(textureSample(sky_cube_blur, sky_sampler_blur, refl).xyz);
     let env_refl_irrad = remap(sh_irradiance(refl));
     var env: vec3<f32> = mix(env_sample_clear, env_sample_blur, vec3<f32>(clampf(roughnessE * 4.0)));
     env = mix(env, env_refl_irrad, vec3<f32>(clampf((roughnessE - 0.25) / 0.75)));
@@ -259,7 +259,7 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     //
 
     // [(material color)(environment irradiance via normal irradiance) + (material color)(light color)(light angle)][ambient occlusion]
-    let diffuse: vec3<f32> = (diffuse_color * irradiance + diffuse_color * light_color * clampf(dot(normal, light_dir))) * ao;
+    let diffuse: vec3<f32> =  (diffuse_color * irradiance + diffuse_color * light_color * clampf(dot(normal, light_dir))) * ao;
 
     // [(material color via BRDF)(environment irradiance via blur lerping and reflected irradiance) + (light color via fresnel lighting)][ambient occlusion]
     let specular: vec3<f32> = (env_specular_color * env + specular_light) * clampf(pow(ndotv + ao, roughnessE) - 1.0 + ao);
@@ -268,8 +268,8 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let gamma_corrected = pow(color * 0.4, vec3<f32>(1.0 / 2.2));
 
     // let thot = light_distribution * light_visibility;
-    let thot = light_distribution;
-    let fin = vec3<f32>(thot, thot, thot);
+    // let thot = light_distribution * light_visibility * ndotl * 4.0;
+    // let fin = vec3<f32>(thot, thot, thot);
 
-    return vec4<f32>(fin, 1.0);
+    return vec4<f32>(gamma_corrected, 1.0);
 }

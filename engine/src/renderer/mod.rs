@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Result};
+use iced_winit::winit::window::Window;
 use once_cell::sync::Lazy;
+use raw_window_handle::HasRawWindowHandle;
 use std::sync::{Arc, RwLock};
-use winit::window::Window;
 
 use crate::constants::{
     DEFAULT_SCREEN_HEIGHT, DEFAULT_SCREEN_WIDTH, DEFAULT_TEXTURE_BUFFER_FORMAT,
@@ -23,16 +24,27 @@ pub struct GpuState {
     pub adapter: Arc<wgpu::Adapter>,
 
     pub surface: wgpu::Surface,
-    pub chain_descriptor: wgpu::SwapChainDescriptor,
-    pub swap_chain: wgpu::SwapChain,
+    pub surface_config: wgpu::SurfaceConfiguration,
+    // pub chain_descriptor: wgpu::SwapChainDescriptor,
+    // pub swap_chain: wgpu::SwapChain,
     pub first_resize: bool,
 }
 
 pub struct GpuStateBuilder {
-    pub window: Arc<Window>,
+    pub window: Arc<WindowWrapper>,
     pub screen_size: (u32, u32),
     pub instance: Option<wgpu::Instance>,
     pub surface: Option<wgpu::Surface>,
+}
+
+pub struct WindowWrapper {
+    pub window: Arc<Window>,
+}
+
+unsafe impl HasRawWindowHandle for WindowWrapper {
+    fn raw_window_handle(&self) -> raw_window_handle::RawWindowHandle {
+        self.window.as_ref().raw_window_handle()
+    }
 }
 
 impl GpuStateBuilder {
@@ -41,13 +53,14 @@ impl GpuStateBuilder {
 
         // Instance is a handle to the GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
-        let instance = wgpu::Instance::new(wgpu::BackendBit::VULKAN | wgpu::BackendBit::METAL);
+        let instance = wgpu::Instance::new(wgpu::Backends::VULKAN | wgpu::Backends::METAL);
 
         // Surface is used to create a swap chain
-        let surface = unsafe { instance.create_surface(window.as_ref()) };
+        let window_wrapper = WindowWrapper { window };
+        let surface = unsafe { instance.create_surface(&window_wrapper) };
 
         Self {
-            window,
+            window: Arc::new(window_wrapper),
             screen_size: (size.width, size.height),
             instance: Some(instance),
             surface: Some(surface),
@@ -68,6 +81,7 @@ impl GpuStateBuilder {
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
             })
             .await
             .ok_or(anyhow!("GpuStateBuilder: failed to request adapter"))?;
@@ -93,24 +107,36 @@ impl GpuStateBuilder {
 
         // Swap chain is used to store rendered textures which
         // are synced with the display
-        let chain_descriptor = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-            format: adapter
-                .get_swap_chain_preferred_format(&surface)
-                .ok_or(anyhow!("failed to get preferred swap chain format"))?,
-            width: self.screen_size.0,
-            height: self.screen_size.1,
+
+        let size = self.window.window.inner_size();
+        let surface_config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface.get_preferred_format(&adapter).unwrap(),
+            width: size.width,
+            height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
         };
-        let swap_chain = device.create_swap_chain(&surface, &chain_descriptor);
+        surface.configure(&device, &surface_config);
+
+        // let chain_descriptor = wgpu::SwapChainDescriptor {
+        //     usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+        //     format: adapter
+        //         .get_swap_chain_preferred_format(&surface)
+        //         .ok_or(anyhow!("failed to get preferred swap chain format"))?,
+        //     width: self.screen_size.0,
+        //     height: self.screen_size.1,
+        //     present_mode: wgpu::PresentMode::Fifo,
+        // };
+        // let swap_chain = device.create_swap_chain(&surface, &chain_descriptor);
 
         Ok(GpuState {
             adapter: Arc::new(adapter),
             surface,
             device,
             queue,
-            chain_descriptor,
-            swap_chain,
+            surface_config,
+            // chain_descriptor,
+            // swap_chain,
             first_resize: false,
         })
     }
@@ -134,19 +160,21 @@ impl GpuState {
         drop(current_size);
 
         *SCREEN_SIZE.write().unwrap() = new_size;
-        self.chain_descriptor.width = new_size.0;
-        self.chain_descriptor.height = new_size.1;
 
-        self.swap_chain = self
-            .device
-            .create_swap_chain(&self.surface, &self.chain_descriptor);
+        self.surface_config.width = new_size.0;
+        self.surface_config.height = new_size.1;
+        self.surface.configure(&self.device, &self.surface_config);
+
+        // self.swap_chain = self
+        //     .device
+        //     .create_swap_chain(&self.surface, &self.chain_descriptor);
 
         info!("SCREEN_SIZE CHANGED TO: {}, {}", new_size.0, new_size.1);
     }
 
     pub fn force_new_swap_chain(&mut self) {
         warn!("running force_new_swap_chain; something might be wrong");
-        warn!("> chain descriptor: {:?}", self.chain_descriptor);
+        // warn!("> chain descriptor: {:?}", self.chain_descriptor);
 
         let current_size = SCREEN_SIZE.read().unwrap();
         warn!(
@@ -155,16 +183,18 @@ impl GpuState {
         );
         drop(current_size);
 
-        self.swap_chain = self
-            .device
-            .create_swap_chain(&self.surface, &self.chain_descriptor);
+        self.surface.configure(&self.device, &self.surface_config);
+        // self.swap_chain = self
+        //     .device
+        //     .create_swap_chain(&self.surface, &self.chain_descriptor);
     }
 
     pub fn device_preferred_format(&mut self) -> wgpu::TextureFormat {
         let fmt = self
-            .adapter
-            .get_swap_chain_preferred_format(&self.surface)
+            .surface
+            .get_preferred_format(&self.adapter)
             .unwrap_or(DEFAULT_TEXTURE_BUFFER_FORMAT);
+
         debug!("device preferred texture format: {:?}", fmt);
         fmt
     }

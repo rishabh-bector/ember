@@ -2,14 +2,14 @@
 // Common
 // -------------------------------------------------
 
-[[block]]
+
 struct QuadUniforms {
     dimensions: vec2<f32>;
     time: f32;
     delta: f32;
 };
 
-[[block]]
+
 struct Camera3DUniforms {
     view_pos: vec4<f32>;
     view_proj: mat4x4<f32>;
@@ -36,7 +36,7 @@ struct VertexOutput {
 };
 
 [[stage(vertex)]]
-fn main(in: VertexInput) -> VertexOutput {
+fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
 
     out.position = vec4<f32>(in.position, 0.0, 1.0);
@@ -55,7 +55,7 @@ var node_input_tex: texture_2d<f32>;
 var node_input_smp: sampler;
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
    var out: vec4<f32> = textureSample(node_input_tex, node_input_smp, in.screen_pos);
    // let gamma: f32 = 2.2;
    //let out2: vec3<f32> = pow(out.rgb, vec3<f32>(1.0/gamma, 1.0/gamma, 1.0/gamma));

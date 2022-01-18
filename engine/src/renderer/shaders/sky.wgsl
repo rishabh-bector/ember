@@ -2,7 +2,7 @@
 // Common
 // -------------------------------------------------
 
-[[block]]
+
 struct Render3DUniforms {
     model_mat: mat4x4<f32>;
     normal_mat: mat4x4<f32>;
@@ -10,7 +10,6 @@ struct Render3DUniforms {
     mix: f32;
 };
 
-[[block]]
 struct Camera3DUniforms {
     view_pos: vec4<f32>;
     view_proj: mat4x4<f32>;
@@ -40,7 +39,7 @@ struct VertexOutput {
 };
 
 [[stage(vertex)]]
-fn main(
+fn vs_main(
     in: VertexInput,
 ) -> VertexOutput {
     var world_space: vec4<f32> = render_3d_uniforms.model_mat * vec4<f32>(in.position, 1.0);
@@ -72,7 +71,7 @@ var sky_cube: texture_cube<f32>;
 var sky_sampler: sampler;
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let sky_pos = normalize(in.world_pos);
     let height = sky_pos.y;
 

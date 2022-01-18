@@ -49,7 +49,7 @@ impl VertexBuffer {
                 device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some(&format!("2D Vertex Buffer: {}", name)),
                     contents: bytemuck::cast_slice(vertices),
-                    usage: wgpu::BufferUsage::VERTEX,
+                    usage: wgpu::BufferUsages::VERTEX,
                 }),
                 vertices.len() as u32,
             )),
@@ -63,7 +63,7 @@ impl VertexBuffer {
                 device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some(&format!("3D Vertex Buffer: {}", name)),
                     contents: bytemuck::cast_slice(vertices),
-                    usage: wgpu::BufferUsage::VERTEX,
+                    usage: wgpu::BufferUsages::VERTEX,
                 }),
                 vertices.len() as u32,
             )),
@@ -77,7 +77,7 @@ impl VertexBuffer {
                 device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some(&format!("Raw Vertex Buffer: {}", name)),
                     contents: bytemuck::cast_slice(data),
-                    usage: wgpu::BufferUsage::VERTEX,
+                    usage: wgpu::BufferUsages::VERTEX,
                 }),
                 num_vertices,
             )),
@@ -116,7 +116,7 @@ impl VertexBuffer {
                     device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                         label: Some(&format!("3D Vertex Buffer: {}", name)),
                         contents: bytemuck::cast_slice(buf.as_slice()),
-                        usage: wgpu::BufferUsage::VERTEX,
+                        usage: wgpu::BufferUsages::VERTEX,
                     }),
                     buf.len() as u32,
                 )),
@@ -139,7 +139,7 @@ impl IndexBuffer {
                 device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Index Buffer"),
                     contents: bytemuck::cast_slice(indices),
-                    usage: wgpu::BufferUsage::INDEX,
+                    usage: wgpu::BufferUsages::INDEX,
                 }),
                 indices.len() as u32,
             )),

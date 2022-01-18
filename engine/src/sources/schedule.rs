@@ -84,6 +84,16 @@ impl Schedulable for SubSchedule {
     }
 }
 
+// --------------------------------------------------
+// Ember Legion System Interfaces
+// --------------------------------------------------
+
+// Node systems which must be threadsafe
+
+pub trait SubSchedulable: Send + Sync {
+    fn schedule(&self, schedule: &mut ScheduleBuilder, state: NodeState);
+}
+
 pub struct NodeSystem<F, S>
 where
     F: Fn(NodeState) -> S + Send + Sync,
@@ -106,10 +116,6 @@ where
     }
 }
 
-pub trait SubSchedulable: Send + Sync {
-    fn schedule(&self, schedule: &mut ScheduleBuilder, state: NodeState);
-}
-
 impl<F, S> SubSchedulable for NodeSystem<F, S>
 where
     F: Fn(NodeState) -> S + Send + Sync,
@@ -120,12 +126,12 @@ where
     }
 }
 
-// For async systems with no state
+// Systems which must be threadsafe but are stateless
 
 pub struct StatelessSystem<F, S>
 where
-    F: Fn() -> S + Send + Sync,
-    S: ParallelRunnable + 'static,
+    F: Fn() -> S,
+    S: Runnable + 'static,
 {
     builder: F,
     _marker: PhantomData<S>,
@@ -133,8 +139,8 @@ where
 
 impl<F, S> StatelessSystem<F, S>
 where
-    F: Fn() -> S + Send + Sync,
-    S: ParallelRunnable + 'static,
+    F: Fn() -> S,
+    S: Runnable + 'static,
 {
     pub fn new(system_builder: F) -> Self {
         Self {
@@ -146,13 +152,15 @@ where
 
 impl<F, S> Schedulable for StatelessSystem<F, S>
 where
-    F: Fn() -> S + Send + Sync,
-    S: ParallelRunnable + 'static,
+    F: Fn() -> S,
+    S: Runnable + 'static,
 {
     fn schedule(&self, schedule: &mut ScheduleBuilder) {
-        schedule.add_system((self.builder)());
+        schedule.add_thread_local((self.builder)());
     }
 }
+
+// Systems which are not threadsafe and are stateless
 
 pub trait LocalSchedulable {
     fn schedule(&self, schedule: &mut ScheduleBuilder);
@@ -189,6 +197,9 @@ where
         schedule.add_thread_local((self.builder)());
     }
 }
+
+// Systems which are not threadsafe and require SystemReporters for metrics
+// (this is basically only used to monitor the UI system)
 
 pub struct LocalReporterSystem<F, S>
 where

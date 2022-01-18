@@ -47,7 +47,7 @@ where
                 buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some(&format!("Instance Buffer: {}", type_name::<I>())),
                     contents: &source_bytes,
-                    usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 }),
                 element_size: source_size as u64,
                 mode: BufferMode::Dynamic(max_elements),

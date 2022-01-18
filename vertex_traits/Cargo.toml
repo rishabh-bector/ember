@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
-wgpu = "0.9"
+wgpu = "0.12"

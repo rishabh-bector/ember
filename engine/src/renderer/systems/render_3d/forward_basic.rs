@@ -55,7 +55,7 @@ pub struct Render3DUniforms {
     pub model_mat: [[f32; 4]; 4],
     pub normal_mat: [[f32; 4]; 4],
     pub color: [f32; 4],
-    pub mix: f32,
+    pub mix: [f32; 4],
 }
 
 impl From<(&Render3D, &Transform3D)> for Render3DUniforms {
@@ -82,7 +82,7 @@ impl From<(&Render3D, &Transform3D)> for Render3DUniforms {
             model_mat: matrix2array_4d(model_mat),
             normal_mat: matrix2array_4d(normal_mat),
             color: entity.0.color,
-            mix: entity.0.mix,
+            mix: [entity.0.mix, 0.0, 0.0, 0.0],
         }
     }
 }
@@ -96,7 +96,7 @@ impl UniformGroupType<Self> for Render3DForwardUniformGroup {
                 model_mat: IDENTITY_MATRIX_4,
                 normal_mat: IDENTITY_MATRIX_4,
                 color: [1.0, 1.0, 1.0, 1.0],
-                mix: 1.0,
+                mix: [1.0, 0.0, 0.0, 0.0],
             }))
             .with_id(ID(RENDER_3D_BIND_GROUP_ID))
     }

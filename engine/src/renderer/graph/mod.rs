@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use iced_winit::Debug;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -7,13 +8,13 @@ use uuid::Uuid;
 use wgpu::BindGroup;
 
 use crate::{
-    constants::{ID, METRICS_UI_IMGUI_ID},
-    renderer::{graph::target::DepthBuffer, SCREEN_SIZE},
+    constants::{ID, METRICS_UI_IMGUI_ID, RENDER_UI_SYSTEM_ID},
+    renderer::{graph::target::DepthBuffer, SCREEN_SIZE, systems::ui},
     sources::{
         metrics::{EngineMetrics, SystemReporter},
         registry::Registry,
-        schedule::{StatelessSystem, SubSchedule},
-        ui::{ImguiWindow, UIBuilder},
+        schedule::{StatelessSystem, SubSchedule, LocalReporterSystem},
+        ui::{iced::{IcedUI, IcedWinitHelper}},
     },
     texture::Texture,
 };
@@ -30,8 +31,8 @@ pub mod target;
 
 pub enum UIMode {
     Disabled,
-    Node(Uuid),
-    Master,
+    Imgui,
+    Iced,
 }
 
 #[derive(Clone)]
@@ -102,6 +103,11 @@ pub struct RenderGraph {
     pub swap_chain_target: Arc<Mutex<RenderTarget>>,
     pub ui_target: Arc<Mutex<RenderTarget>>,
     pub node_targets: TargetBuffer,
+
+    pub metrics: bool,
+
+    pub ui: Arc<Mutex<IcedUI>>,
+    pub debug: Mutex<Debug>,
 }
 
 pub struct GraphBuilder {
@@ -115,6 +121,7 @@ pub struct GraphBuilder {
     pub node_states: HashMap<Uuid, NodeState>,
     pub dest: Option<Arc<RenderGraph>>,
     pub ui_mode: UIMode,
+    pub metrics: bool,
 }
 
 pub struct MasterDepthBuffer(DepthBuffer);
@@ -130,6 +137,7 @@ impl GraphBuilder {
             channels: vec![],
             chains: vec![],
             ui_mode: UIMode::Disabled,
+            metrics: false,
         }
     }
 
@@ -159,8 +167,18 @@ impl GraphBuilder {
         self
     }
 
-    pub fn with_ui_master(mut self) -> Self {
-        self.ui_mode = UIMode::Master;
+    pub fn with_ui_imgui(mut self) -> Self {
+        self.ui_mode = UIMode::Imgui;
+        self
+    }
+
+    pub fn with_ui_iced(mut self) -> Self {
+        self.ui_mode = UIMode::Iced;
+        self
+    }
+
+    pub fn enable_renderer_metrics(mut self) -> Self {
+        self.metrics = true;
         self
     }
 
@@ -172,8 +190,9 @@ impl GraphBuilder {
         resources: &mut legion::Resources,
         sub_schedule: &mut SubSchedule,
         registry: &Registry,
-        window: &winit::window::Window,
+        window: &iced_winit::winit::window::Window,
         mut metrics_ui: EngineMetrics,
+        helper: &IcedWinitHelper,
     ) -> Result<(Arc<RenderGraph>, Arc<EngineMetrics>)> {
         if self.master_node.is_none() {
             return Err(anyhow!("render graph requires a master node"));
@@ -309,8 +328,9 @@ impl GraphBuilder {
         // Build UI if enabled
         let ui_target = match &self.ui_mode {
             UIMode::Disabled => Arc::new(Mutex::new(RenderTarget::Empty)),
-            UIMode::Master => todo!(), // Arc::clone(&target_buffer.targets.get(id).unwrap()),
-            UIMode::Node(id) => Arc::clone(&target_buffer.get_target(id, 0)),
+            UIMode::Imgui => Arc::clone(&swap_chain_target),
+            UIMode::Iced => Arc::clone(&swap_chain_target),
+            // UIMode::Node(id) => Arc::clone(&target_buffer.get_target(id, 0)),
         };
 
         // --------------------------------------------------
@@ -384,24 +404,38 @@ impl GraphBuilder {
             })
             .collect();
 
-        // let ui_reporter = metrics_ui.register_system_id("render_ui", ID(RENDER_UI_SYSTEM_ID));
+        let ui_reporter = metrics_ui.register_system_id("render_ui", ID(RENDER_UI_SYSTEM_ID));
         let metrics_ui = Arc::new(metrics_ui);
         let metrics_arc = Arc::clone(&metrics_ui);
         resources.insert(Arc::clone(&metrics_ui));
-        let ui_builder =
-            UIBuilder::new().with_imgui_window(metrics_ui.impl_imgui(), ID(METRICS_UI_IMGUI_ID));
+        // let ui_builder = if self.metrics {
+        //     UIBuilder::new().with_imgui_window(metrics_ui.impl_imgui(), ID(METRICS_UI_IMGUI_ID))
+        // } else {
+        //     UIBuilder::new()
+        // };
 
-        match self.ui_mode {
-            UIMode::Node(_) | UIMode::Master | UIMode::Disabled => {
-                ui_builder.build_to_resources(
-                    resources,
-                    Arc::clone(&ui_target),
-                    window,
-                    &device,
-                    &queue,
-                );
-            } // _ => (debug!("ui is disabled")),
-        }
+        let mut ui_debug = Debug::new();
+        let (iced_ui, staging_belt) = IcedUI::new(Arc::clone(&ui_target), &device, window, texture_registry.format, helper, &mut ui_debug);
+        let iced_ui = Arc::new(Mutex::new(iced_ui));
+        resources.insert(Arc::clone(&iced_ui));
+        resources.insert(staging_belt);
+
+        // match self.ui_mode {
+        //     UIMode::Imgui => {
+        //         panic!("IMGUI IS DISABLED RN")
+        //         // ui_builder.build_to_resources(
+        //         //     resources,
+        //         //     Arc::clone(&ui_target),
+        //         //     window,
+        //         //     &device,
+        //         //     &queue,
+        //         // );
+        //     },
+        //     UIMode::Iced => {
+                
+        //     },
+        //     UIMode::Disabled => {},
+        // }
 
         // --------------------------------------------------
         //                  Graph Scheduler
@@ -476,15 +510,22 @@ impl GraphBuilder {
         );
 
         // --------------------------------------------------
-        // sub_schedule.flush();
-        //
+        sub_schedule.flush();
+        
         // Run ui system
-        // if let UIMode::Master = self.ui_mode {
-        //     sub_schedule.add_single_threaded_reporter(
-        //         Arc::new(Box::new(LocalReporterSystem::new(render_ui_system))),
-        //         ui_reporter,
-        //     );
-        // }
+        match self.ui_mode {
+            UIMode::Imgui => panic!("IMGUI IS DISABLED RN"),
+            // UIMode::Imgui => sub_schedule.add_single_threaded_reporter(
+            //     Arc::new(Box::new(LocalReporterSystem::new(ui::imgui::render_system))),
+            //     ui_reporter,
+            // ),
+            UIMode::Iced => sub_schedule.add_single_threaded_reporter(
+                Arc::new(Box::new(LocalReporterSystem::new(ui::iced::render_system))),
+                ui_reporter,
+            ),
+            UIMode::Disabled => {}
+        };
+   
 
         // --------------------------------------------------
         sub_schedule.flush();
@@ -492,10 +533,10 @@ impl GraphBuilder {
         // Release lock on swap chain, end of frame
 
         sub_schedule.add_stateless(Arc::new(Box::new(StatelessSystem::new(
-            end_render_graph_system,
+            end_render_graph_system, 
         ))));
 
-        ////////////////////////////////
+        //////////////////////////////// 
         // END RENDER GRAPH SCHEDULER //
         ////////////////////////////////
 
@@ -510,6 +551,9 @@ impl GraphBuilder {
                 .master_node
                 .expect("RenderGraphBuilder: master node required"),
             ui_target,
+            metrics: self.metrics,
+            ui: iced_ui,
+            debug: Mutex::new(ui_debug),
         }));
 
         debug!("done building render graph!");

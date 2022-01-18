@@ -1,12 +1,12 @@
 // Vertex shader
 
-[[block]]
+
 struct Camera2DUniforms {
     // [x, y, width, height]
     view: vec4<f32>;
 };
 
-[[block]]
+
 struct Light2DUniforms {
     // [x, y, linear, quadratic]
     light_0: vec4<f32>;
@@ -59,7 +59,7 @@ struct VertexOutput {
 };
 
 [[stage(vertex)]]
-fn main( 
+fn vs_main( 
     vertex: VertexInput,
     instance: InstanceInput,
 ) -> VertexOutput {
@@ -94,7 +94,7 @@ fn point_light_2d(pos: vec2<f32>, light: vec4<f32>) -> f32 {
 }
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     var world_pos: vec2<f32> = in.world_pos;
     
     var sample_texture: vec4<f32> = textureSample(texture0, sampler0, in.uvs);

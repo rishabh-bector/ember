@@ -2,7 +2,7 @@
 // Common
 // -------------------------------------------------
 
-[[block]]
+
 struct QuadUniforms {
     dimensions: vec2<f32>;
     time: f32;
@@ -27,7 +27,7 @@ struct VertexOutput {
 };
 
 [[stage(vertex)]]
-fn main(in: VertexInput) -> VertexOutput {
+fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
 
     // Convert from quad space to discrete space so quad texture can be sampled in fragment stage.
@@ -47,6 +47,6 @@ var node_input_tex: texture_2d<f32>;
 var node_input_smp: sampler;
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     return textureSample(node_input_tex, node_input_smp, in.screen_pos);
 }

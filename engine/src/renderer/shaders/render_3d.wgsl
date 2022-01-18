@@ -2,7 +2,7 @@
 // Common
 // -------------------------------------------------
 
-[[block]]
+
 struct Render3DUniforms {
     model_mat: mat4x4<f32>;
     normal_mat: mat4x4<f32>;
@@ -10,13 +10,13 @@ struct Render3DUniforms {
     mix: f32;
 };
 
-[[block]]
+
 struct Camera3DUniforms {
     view_pos: vec4<f32>;
     view_proj: mat4x4<f32>;
 };
 
-// [[block]]
+// 
 // struct Light3DUniforms {
 //     // [x, y, linear, quadratic]
 //     light_0: vec4<f32>;
@@ -53,7 +53,7 @@ struct VertexOutput {
 };
 
 [[stage(vertex)]]
-fn main(
+fn vs_main(
     in: VertexInput,
 ) -> VertexOutput {
     var world_space: vec4<f32> = render_3d_uniforms.model_mat * vec4<f32>(in.position, 1.0);
@@ -103,7 +103,7 @@ fn directed_diffuse_specular(light_dir: vec3<f32>, light_color: vec3<f32>, frag_
 }
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {    
+fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {    
     var sample_texture: vec4<f32> = textureSample(texture0, sampler0, in.uvs);
     var sample_final: vec4<f32> = (render_3d_uniforms.color * (1.0 - render_3d_uniforms.mix)) + (render_3d_uniforms.mix * sample_texture);
 

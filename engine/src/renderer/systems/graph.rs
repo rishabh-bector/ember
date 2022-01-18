@@ -9,12 +9,13 @@ pub fn begin_render_graph(
 ) {
     debug!("running system begin_render_graph");
     let gpu = gpu.lock().unwrap();
-    match gpu.swap_chain.get_current_frame() {
+
+    match gpu.surface.get_current_texture() {
         Ok(frame) => graph
             .swap_chain_target
             .lock()
             .unwrap()
-            .set_swap_chain(Arc::new(frame.output)),
+            .set_swap_chain(Arc::new(frame)),
         Err(err) => {
             warn!("failed to get swapchain frame: {}", err);
             warn!("cannot draw to any windows, attempting to recreate swapchain");

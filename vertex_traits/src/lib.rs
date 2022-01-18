@@ -14,7 +14,7 @@ impl VertexLayoutBuilder {
     pub fn build<'a>(&'a self, array_stride: u64) -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
             array_stride,
-            step_mode: wgpu::InputStepMode::Vertex,
+            step_mode: wgpu::VertexStepMode::Vertex,
             attributes: self.attributes.as_slice(),
         }
     }

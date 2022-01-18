@@ -2,6 +2,8 @@ use cgmath::{Angle, Deg, EuclideanSpace, Matrix2, Matrix3, Matrix4, SquareMatrix
 use std::sync::{Arc, Mutex, RwLock};
 use winit_input_helper::WinitInputHelper;
 
+use iced_winit::winit;
+
 use crate::{
     constants::{CAMERA_3D_BIND_GROUP_ID, ID},
     renderer::uniform::{
@@ -9,7 +11,7 @@ use crate::{
         group::{UniformGroup, UniformGroupBuilder, UniformGroupType},
         Uniform,
     },
-    sources::camera::Camera3D,
+    sources::{camera::Camera3D, ui::iced::IcedWinitHelper},
 };
 
 pub struct Camera3DUniformGroup {}
@@ -46,44 +48,50 @@ pub fn camera_3d(
     let mut camera_uniforms = camera_uniform.lock().unwrap();
     let input = input.read().unwrap();
 
-    // Mouse movement
-    let (dx, dy) = if camera.first {
-        camera.first = false;
-        input.mouse().unwrap_or_default()
-    } else {
-        input.mouse_diff()
-    };
+    info!("{}", input.mouse_held(1));
 
-    camera.yaw += dx * camera.sensitivity;
-    camera.pitch -= dy * camera.sensitivity;
-    if camera.pitch > 89.0 {
-        camera.pitch = 89.0;
-    } else if camera.pitch < -89.9 {
-        camera.pitch = -89.9;
+    if (camera.right_click_move && input.mouse_held(1)) || (!camera.right_click_move) {
+        // Mouse movement
+
+        let (dx, dy) = if camera.first {
+            camera.first = false;
+            input.mouse().unwrap_or_default()
+        } else {
+            input.mouse_diff()
+        };
+
+        camera.yaw += dx * camera.sensitivity;
+        camera.pitch -= dy * camera.sensitivity;
+        if camera.pitch > 89.0 {
+            camera.pitch = 89.0;
+        } else if camera.pitch < -89.9 {
+            camera.pitch = -89.9;
+        }
+
+        camera.dir.x = Angle::cos(Deg(camera.yaw)) * Angle::cos(Deg(camera.pitch));
+        camera.dir.y = Angle::sin(Deg(camera.pitch));
+        camera.dir.z = Angle::sin(Deg(camera.yaw)) * Angle::cos(Deg(camera.pitch));
+
+        // WASD movement
+
+        if input.key_held(winit::event::VirtualKeyCode::W) {
+            let delta = (camera.dir * camera.speed).to_vec();
+            camera.pos += delta;
+        } else if input.key_held(winit::event::VirtualKeyCode::S) {
+            let delta = -(camera.dir * camera.speed).to_vec();
+            camera.pos += delta;
+        }
+        if input.key_held(winit::event::VirtualKeyCode::D) {
+            let delta = camera.dir.to_vec().cross(camera.up) * camera.speed;
+            camera.pos += delta;
+        } else if input.key_held(winit::event::VirtualKeyCode::A) {
+            let delta = -(camera.dir.to_vec().cross(camera.up) * camera.speed);
+            camera.pos += delta;
+        }
+
+        // Scroll altitude
+        camera.pos.y += input.scroll_diff() * camera.scroll_sensitivity;
     }
-
-    camera.dir.x = Angle::cos(Deg(camera.yaw)) * Angle::cos(Deg(camera.pitch));
-    camera.dir.y = Angle::sin(Deg(camera.pitch));
-    camera.dir.z = Angle::sin(Deg(camera.yaw)) * Angle::cos(Deg(camera.pitch));
-
-    // WASD movement
-    if input.key_held(winit::event::VirtualKeyCode::W) {
-        let delta = (camera.dir * camera.speed).to_vec();
-        camera.pos += delta;
-    } else if input.key_held(winit::event::VirtualKeyCode::S) {
-        let delta = -(camera.dir * camera.speed).to_vec();
-        camera.pos += delta;
-    }
-    if input.key_held(winit::event::VirtualKeyCode::D) {
-        let delta = camera.dir.to_vec().cross(camera.up) * camera.speed;
-        camera.pos += delta;
-    } else if input.key_held(winit::event::VirtualKeyCode::A) {
-        let delta = -(camera.dir.to_vec().cross(camera.up) * camera.speed);
-        camera.pos += delta;
-    }
-
-    // Scroll altitude
-    camera.pos.y += input.scroll_diff() * camera.scroll_sensitivity;
 
     // Camera matrices
     let view_proj = camera.build_view_proj();

@@ -65,7 +65,7 @@ where
                     buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                         label: Some(&format!("Single Uniform Buffer: {}", type_name::<U>())),
                         contents: source_bytes,
-                        usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                     }),
                     element_size: source_size as u64,
                     mode: BufferMode::Single,
@@ -80,7 +80,7 @@ where
                     buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                         label: Some(&format!("Dynamic Uniform Buffer: {}", type_name::<U>())),
                         contents: &source_bytes,
-                        usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                     }),
                     element_size: source_size as u64,
                     mode: BufferMode::Dynamic(max_elements),
@@ -110,7 +110,7 @@ where
             buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("Single Uniform Buffer: {}", type_name::<U>())),
                 contents: source_bytes,
-                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             }),
             element_size: source_size as u64,
             mode: BufferMode::Single,

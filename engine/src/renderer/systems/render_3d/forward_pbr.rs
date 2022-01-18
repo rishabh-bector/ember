@@ -37,6 +37,9 @@ pub struct RenderPBR {
     pub color: [f32; 4],
     pub texture: Uuid,
     pub mix: f32,
+
+    // pbr
+    pub roughness: f32,
 }
 
 impl RenderPBR {
@@ -46,6 +49,7 @@ impl RenderPBR {
             color: [1.0, 1.0, 1.0, 1.0],
             texture: ID(RENDER_3D_COMMON_TEXTURE_ID),
             mix: 0.0,
+            roughness: 0.3,
         }
     }
 
@@ -55,6 +59,7 @@ impl RenderPBR {
             color,
             texture: ID(RENDER_3D_COMMON_TEXTURE_ID),
             mix: 0.0,
+            roughness: 0.3,
         }
     }
 }
@@ -65,7 +70,7 @@ pub struct RenderPBRUniforms {
     pub model_mat: [[f32; 4]; 4],
     pub normal_mat: [[f32; 4]; 4],
     pub color: [f32; 4],
-    pub mix: f32,
+    pub params: [f32; 4], // [mix, roughness, ]
 }
 
 impl From<(&RenderPBR, &Transform3D)> for RenderPBRUniforms {
@@ -92,7 +97,7 @@ impl From<(&RenderPBR, &Transform3D)> for RenderPBRUniforms {
             model_mat: matrix2array_4d(model_mat),
             normal_mat: matrix2array_4d(normal_mat),
             color: entity.0.color,
-            mix: entity.0.mix,
+            params: [entity.0.mix, entity.0.roughness, 0.0, 0.0],
         }
     }
 }
@@ -106,7 +111,7 @@ impl UniformGroupType<Self> for RenderPBRForwardUniformGroup {
                 model_mat: IDENTITY_MATRIX_4,
                 normal_mat: IDENTITY_MATRIX_4,
                 color: [1.0, 1.0, 1.0, 1.0],
-                mix: 1.0,
+                params: [1.0, 0.5, 0.0, 0.0],
             }))
             .with_id(ID(RENDER_3D_BIND_GROUP_ID))
     }

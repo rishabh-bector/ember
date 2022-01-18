@@ -2,8 +2,8 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 // Engine
-pub const DEFAULT_SCREEN_WIDTH: u32 = 3840;
-pub const DEFAULT_SCREEN_HEIGHT: u32 = 2160;
+pub const DEFAULT_SCREEN_WIDTH: u32 = 1920;
+pub const DEFAULT_SCREEN_HEIGHT: u32 = 1080;
 
 // Buffers
 pub const DEFAULT_TEXTURE_BUFFER_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
@@ -25,6 +25,7 @@ pub const SKY_NODE_ID: &str = "39242ebd-a9e7-4690-a318-7e75790facbb";
 pub const QUAD_NODE_ID: &str = "eaf2b9f7-1e96-4b6b-964f-29e2da214823";
 pub const CHANNEL_NODE_ID: &str = "36b2546b-cdff-4288-b4a8-f177bc899ed5";
 pub const CHAIN_NODE_ID: &str = "60b92c2e-d58b-4162-a311-ca56d5a31d21";
+pub const ICED_NODE_ID: &str = "7f3e5b5a-aeb9-4f2d-83c2-ac2ea7688b77";
 
 // Engine systems (excluding renderer)
 pub const RENDER_UI_SYSTEM_ID: &str = "7a370e52-053a-46dc-82d6-4fd8d41c1c19";

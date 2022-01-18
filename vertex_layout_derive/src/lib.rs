@@ -12,7 +12,7 @@ pub fn instance(start_location: TokenStream, item: TokenStream) -> TokenStream {
     layout(
         start_location,
         item,
-        quote!(wgpu::InputStepMode::Instance).into(),
+        quote!(wgpu::VertexStepMode::Instance).into(),
     )
 }
 
@@ -21,7 +21,7 @@ pub fn vertex(start_location: TokenStream, item: TokenStream) -> TokenStream {
     layout(
         start_location,
         item,
-        quote!(wgpu::InputStepMode::Vertex).into(),
+        quote!(wgpu::VertexStepMode::Vertex).into(),
     )
 }
 
